@@ -1,0 +1,30 @@
+[package]
+name = "someday"
+version = "0.0.0"
+edition = "2021"
+authors = ["hinto.janai <hinto.janai@protonmail.com>"]
+description = "Someday"
+documentation = "https://docs.rs/someday"
+repository = "https://github.com/hinto-janai/someday"
+readme = "README.md"
+keywords = ["someday"]
+license = "MIT"
+
+[profile.release]
+debug = false
+strip = "symbols"
+codegen-units = 1
+lto = true
+
+# Run tests in `--release` mode.
+#[profile.test]
+#debug = false
+#strip = "symbols"
+#codegen-units = 1
+#lto = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+
