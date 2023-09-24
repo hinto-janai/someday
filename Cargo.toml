@@ -3,28 +3,17 @@ name = "someday"
 version = "0.0.0"
 edition = "2021"
 authors = ["hinto.janai <hinto.janai@protonmail.com>"]
-description = "Someday"
+description = "Eventually consistent, multi version concurrency"
 documentation = "https://docs.rs/someday"
 repository = "https://github.com/hinto-janai/someday"
 readme = "README.md"
-keywords = ["someday"]
+keywords = ["mvcc", "lock-free", "atomic", "multi-version", "concurrency"]
 license = "MIT"
-
-[profile.release]
-debug = false
-strip = "symbols"
-codegen-units = 1
-lto = true
-
-# Run tests in `--release` mode.
-#[profile.test]
-#debug = false
-#strip = "symbols"
-#codegen-units = 1
-#lto = true
 
 [package.metadata.docs.rs]
 all-features = true
+rustc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-
+arc-swap = { version = "1.6.0", default-features = false }
+paste = "1.0.14"

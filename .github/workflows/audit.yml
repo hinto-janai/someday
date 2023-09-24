@@ -4,15 +4,15 @@ name: Audit
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  audit:
 
     runs-on: ubuntu-latest
 
@@ -24,11 +24,10 @@ jobs:
           ~/.cargo
           target
         key: audit
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
     - name: Install dependencies
-      run: |
-        cargo install cargo-audit
+      run: cargo install cargo-audit
     - name: Audit
       run: cargo audit

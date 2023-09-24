@@ -1,0 +1,44 @@
+# This clippys, docs, tests, builds.
+
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "full"
+  RUST_MIN_STACK: 8000000
+
+jobs:
+  ci:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-2019, macos-11, ubuntu-20.04]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Cache
+      uses: actions/cache@v3
+      with:
+        path: target
+        key: ${{ matrix.os }}
+
+    - name: Clippy
+      run: cargo clippy
+
+    - name: Test
+      shell: bash
+      run: cargo test
+
+    - name: Build
+      run: cargo build
