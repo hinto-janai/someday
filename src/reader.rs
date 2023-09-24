@@ -1,14 +1,12 @@
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
-use crate::snapshot::{
-	Snapshot,SnapshotOwned
-};
+use crate::snapshot::{Snapshot,SnapshotOwned};
 
 //---------------------------------------------------------------------------------------------------- Reader
 ///
 #[derive(Clone,Debug)]
 pub struct Reader<T> {
-	pub(super) arc: Arc<arc_swap::ArcSwap<SnapshotOwned<T>>>,
+	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<SnapshotOwned<T>>>>,
 }
 
 impl<T> Reader<T> {

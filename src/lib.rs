@@ -47,8 +47,6 @@ mod writer;
 /// Operations.
 pub mod ops;
 
-use std::collections::VecDeque;
-
 pub use reader::Reader;
 pub use snapshot::{Snapshot,SnapshotOwned};
 pub use writer::Writer;
@@ -56,27 +54,60 @@ pub use ops::Operation;
 
 //---------------------------------------------------------------------------------------------------- Free functions
 #[inline]
+/// Create a new [`Writer`] & [`Reader`] pair
 ///
-pub fn new<T, O>(data: T) -> (Writer<T, O>, Reader<T>)
+/// See their documentation for writing and reading functions.
+///
+/// This pre-allocates `24` capacity for the internal
+/// [`Vec`] holding onto [`Operation`]'s that haven't been
+/// [`Writer::commit()`]'ed yet.
+///
+/// Use [`with_capacity()`] to set a custom capacity.
+pub fn new<T, O>(data: T) -> (Reader<T>, Writer<T, O>)
+where
+	T: Clone + Operation<O>,
+{
+	new_internal::<24, T, O>(data)
+}
+
+#[inline]
+/// Create a new [`Writer`] & [`Reader`] pair with a specified [`Operation`] capacity
+///
+/// This is the same as [`new()`] although the
+/// generic constant `N` determines how much capacity the
+/// [`Operation`] vector will start out with.
+///
+/// Use this if you are planning to [`Writer::apply()`]
+/// many operations before [`Writer::commit()`]'ing, so that
+/// the internal [`Vec`] doesn't need to reallocate so often.
+pub fn with_capacity<const N: usize, T, O>(data: T) -> (Reader<T>, Writer<T, O>)
+where
+	T: Clone + Operation<O>,
+{
+	new_internal::<N, T, O>(data)
+}
+
+pub(crate) fn new_internal<const N: usize, T, O>(data: T) -> (Reader<T>, Writer<T, O>)
 where
 	T: Clone + Operation<O>,
 {
 	use std::sync::Arc;
 
 	let local = SnapshotOwned { timestamp: 0, data };
+	// let dummy = SnapshotOwned { timestamp: 0, data: dummy };
 	let now   = Arc::new(local.clone());
-	let arc   = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&now)));
+	let arc   = Arc::new(arc_swap::ArcSwapAny::new(Arc::clone(&now)));
 
 	let reader = Reader {
 		arc: Arc::clone(&arc),
 	};
 
 	let writer = Writer {
-		local,
+		local: Some(local),
 		arc,
 		now,
-		ops: vec![],
+		ops: Vec::with_capacity(N),
 	};
 
-	(writer, reader)
+	(reader, writer)
 }

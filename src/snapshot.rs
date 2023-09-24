@@ -3,11 +3,15 @@ use std::sync::Arc;
 
 //---------------------------------------------------------------------------------------------------- SnapshotOwned
 #[derive(Clone)]
+#[repr(C)]
 /// Container for the timestamp and data.
 ///
 /// Could just be (u64, T) as well
 /// but the fields make it more clear.
-pub struct SnapshotOwned<T> {
+pub struct SnapshotOwned<T>
+where
+	T: Sized,
+{
 	/// Timestamp.
 	/// Increments by 1 every time
 	/// a writer's `update()` is called.
@@ -122,7 +126,7 @@ impl<T> Snapshot<T> {
 	}
 
 	///
-	pub fn strong_count(&self) -> usize {
+	pub fn count(&self) -> usize {
 		Arc::strong_count(&self.inner)
 	}
 
@@ -156,10 +160,7 @@ impl<T> std::ops::Deref for Snapshot<T> {
 
 impl<T> PartialEq for Snapshot<T> {
 	fn eq(&self, other: &Self) -> bool {
-		// INVARIANT: We always update the timestamp
-		// if the data is different, so if the timestamp
-		// is the same, the data should be the same.
-		self.inner.timestamp == other.inner.timestamp
+		self.inner == other.inner
 	}
 }
 
@@ -174,8 +175,7 @@ where
 
 impl<T> PartialOrd for Snapshot<T> {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		// INVARIANT: same as PartialEq.
-		self.inner.timestamp.partial_cmp(&self.inner.timestamp)
+		self.inner.partial_cmp(&other.inner)
 	}
 }
 
@@ -184,7 +184,6 @@ where
 	T: PartialOrd<T>,
 {
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		// INVARIANT: same as PartialEq.
 		self.inner.data.partial_cmp(&other)
 	}
 }
