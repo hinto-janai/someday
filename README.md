@@ -13,17 +13,22 @@ The "publish" operation ([`commit()`](https://docs.rs/someday/struct.Writer.html
 
 Readers who are holding onto old copies of data will be able to continue to do so indefinitely. If needed, they can always acquire a "fresh" copy of the data ([`snapshot()`](https://docs.rs/someday/struct.Reader.html#method.snapshot)) but them holding onto the old copies will not block the writer from continuing.
 
+
+
 ## Example
+<img src="https://github.com/hinto-janai/someday/assets/101352116/b6404356-410a-493c-a101-dc5a189de537" width="50%"/>
+
 This example shows the typical use case where the [`Writer`](https://docs.rs/someday/struct.Writer.html):
 1. Applies some changes
-2. Maybe waits a while
+2. Reads their local changes
 3. Applies some more changes
-4. Finally "commits" those changes
+4. Finally "commits" those changes publically
 
 and the [`Reader`](https://docs.rs/someday/struct.Reader.html):
 1. Continually reads "snapshots" of the current data
-2. Eventually catches up with the writer and sees the new data
+2. Eventually catches up with the writer and sees the new data when `commit()` is called
 
+The code:
 ```rust
 use someday::ops::{OperationVec,Operation};
 use someday::{Writer,Reader,Snapshot};
@@ -70,7 +75,7 @@ Readers are [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Loc
 The writer is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom), but may block for a bit in worst case scenarios.
 
 When the writer wants to "publish" updates to readers, it must:
-1. Atomically update a pointer, at which point all _future_ readers, will see the new data
+1. Atomically update a pointer, at which point all _future_ readers will see the new data
 2. Re-apply the operations that created the new data, _to the old data_
 
 The "old" data _can_ be cheaply reclaimed and re-used by the writer if there are no dangling readers.
