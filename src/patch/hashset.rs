@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 //---------------------------------------------------------------------------------------------------- PatchHashSet
 #[non_exhaustive]
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 /// Common operations for [`HashSet`]
 pub enum PatchHashSet<T> {
 	///
@@ -34,7 +34,7 @@ where
 	T: Clone + std::cmp::Eq + PartialEq + std::hash::Hash,
 {
 	fn apply(
-		patch: &PatchHashSet<T>,
+		patch: &mut PatchHashSet<T>,
 		writer: &mut Self,
 		reader: &Self,
 	) {

@@ -45,7 +45,7 @@ and the [`Reader`](https://docs.rs/someday/struct.Reader.html):
 The code:
 ```rust
 use someday::patch::PatchVec;
-use someday::{Writer,Reader,Commit,Apply};
+use someday::{Writer,Reader,CommitRef,Commit,Apply};
 
 // Create a vector.
 let v = vec!["a"];
@@ -54,7 +54,7 @@ let v = vec!["a"];
 let (r, mut w) = someday::new(v);
 
 // The readers see the data.
-let commit: Commit<Vec<&str>> = r.head();
+let commit: CommitRef<Vec<&str>> = r.head();
 assert_eq!(commit, vec!["a"]);
 assert_eq!(commit.timestamp(), 0);
 
@@ -64,7 +64,7 @@ w.add(PatchVec::Push("b"));
 let data: &Vec<&str> = w.data();
 assert_eq!(*data, vec!["a"]);
 // Patches not yet commit:
-assert_eq!(w.patches().len(), 1);
+assert_eq!(w.staged().len(), 1);
 
 // Readers still see old data.
 assert_eq!(r.head(), vec!["a"]);
@@ -89,7 +89,7 @@ let commits_pushed = w.push();
 assert_eq!(commits_pushed, 1);
 
 // Now readers see updates.
-let commit: Commit<Vec<&str>> = r.head();
+let commit: CommitRef<Vec<&str>> = r.head();
 assert_eq!(commit, vec!["a", "b", "c"]);
 // Each call to `.commit()` added 1 to the timestamp.
 assert_eq!(commit.timestamp(), 1);
@@ -102,7 +102,7 @@ The writer is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#L
 
 When the writer wants to [`push()`](https://docs.rs/someday/struct.Writer.html#method.push) updates to readers, it must:
 1. Atomically update a pointer, at which point all _future_ readers will see the new data
-2. Re-apply the patches that to the old reclaimed data
+2. Re-apply the patches to the old reclaimed data
 
 The old data _can_ be cheaply reclaimed and re-used by the [`Writer`](https://docs.rs/someday/struct.Writer.html) if there are no [`Reader`](https://docs.rs/someday/struct.Reader.html)'s hanging onto old [`Commit`](https://docs.rs/someday/struct.Commit.html)'s
 
@@ -150,7 +150,7 @@ As the same with `left_right`, `someday` retains all the same downsides:
 `someday` is useful in situations where:
 
 Your data:
-- Is relatively cheap to clone
+- Is relatively cheap to clone (or de-duplicated)
 
 and if you have readers who:
 - Want to acquire the latest copy of data, lock-free
@@ -159,4 +159,4 @@ and if you have readers who:
 and a writer that:
 - Wants to make changes to data, lock-free
 - Wants to "publish" those changes ASAP to new readers, lock-free
-- Doesn't "publish" data at an extremely fast rate (e.g, 100,000 times a second)
+- Doesn't need to "publish" data at an extremely fast rate (e.g, 100,000 times a second)

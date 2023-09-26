@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 //---------------------------------------------------------------------------------------------------- PatchBTreeSet
 #[non_exhaustive]
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 /// Common operations for [`BTreeSet`]
 pub enum PatchBTreeSet<T> {
 	///
@@ -26,7 +26,7 @@ where
 	T: Clone + Ord,
 {
 	fn apply(
-		patch: &PatchBTreeSet<T>,
+		patch: &mut PatchBTreeSet<T>,
 		writer: &mut Self,
 		reader: &Self,
 	) {

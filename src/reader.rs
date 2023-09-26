@@ -1,21 +1,29 @@
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
 use crate::{
-	commit::{Commit,CommitOwned},
+	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
+	Writer,
+	Apply,
 };
 
 //---------------------------------------------------------------------------------------------------- Reader
 /// Reader(s) who can atomically read some data `T`
 #[derive(Clone,Debug)]
-pub struct Reader<T> {
+pub struct Reader<T>
+where
+	T: Clone,
+{
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
 }
 
-impl<T> Reader<T> {
+impl<T> Reader<T>
+where
+	T: Clone,
+{
 	#[inline]
 	///
-	pub fn head(&self) -> Commit<T> {
+	pub fn head(&self) -> CommitRef<T> {
 		// May be slower for readers,
 		// although, more maybe better
 		// to prevent writer starvation.
@@ -26,15 +34,21 @@ impl<T> Reader<T> {
 		// (writer will clone all the
 		// time because there are always
 		// strong arc references).
-		Commit {
+		CommitRef {
 			inner: arc_swap::Guard::into_inner(self.arc.load()),
 		}
 	}
 
 	#[inline]
 	///
-	pub fn is_ahead_of(&self, commit: Commit<T>) -> bool {
-		self.head().timestamp() > commit.timestamp()
+	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
+		self.head().ahead(commit)
+	}
+
+	#[inline]
+	///
+	pub fn behind_of(&self, commit: &impl Commit<T>) -> bool {
+		self.head().behind(commit)
 	}
 
 	#[inline]
@@ -44,14 +58,13 @@ impl<T> Reader<T> {
 	}
 
 	///
-	pub fn head_owned(&self) -> CommitOwned<T> where T: Clone {
-		let arc = arc_swap::Guard::into_inner(self.arc.load());
-		match Arc::try_unwrap(arc) {
-			Ok(i) => i,
-			Err(arc) => CommitOwned {
-				timestamp: arc.timestamp,
-				data: arc.data.clone()
-			},
-		}
+	pub fn head_owned(&self) -> CommitOwned<T> {
+		self.head().into_owned()
+	}
+}
+
+impl<T: Apply<Patch>, Patch> From<&Writer<T, Patch>> for Reader<T> {
+	fn from(value: &Writer<T, Patch>) -> Self {
+		value.reader()
 	}
 }

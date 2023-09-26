@@ -48,7 +48,7 @@ mod apply;
 #[cfg(feature = "patch")]
 /// Objects implementing [`Apply`] on common data structures
 ///
-/// These are very basic, common operations that can be done to common objects.
+/// These are very basic common operations that can be done to common objects.
 ///
 /// Anything with trait bounds or complicated returned values is not enumerated.
 ///
@@ -65,7 +65,7 @@ mod apply;
 pub mod patch;
 
 pub use reader::Reader;
-pub use commit::{Commit,CommitOwned};
+pub use commit::{Commit,CommitRef,CommitOwned};
 pub use writer::Writer;
 pub use apply::Apply;
 
@@ -80,8 +80,13 @@ pub use apply::Apply;
 /// This is just an incrementing [`usize`].
 ///
 /// Every time the [`Writer`] calls a commit operation like [`Writer::commit()`],
-/// the data's [`Timestamp`] is incremented by `1`, thus the timestamp is also
-/// how many commits there are.
+/// or [`Writer::overwrite()`] the data's [`Timestamp`] is incremented by `1`, thus
+/// the timestamp is also how many commits there are.
+///
+/// An invariant that can be relied upon is that the [`Writer`] can
+/// never "rebase", as in, go back in time with their [`Commit`]'s.
+/// This means the [`Writer`]'s timestamp will _always_ be greater than or
+/// equal to the [`Reader`]'s timestamp.
 ///
 /// ## Example
 /// ```rust
@@ -120,7 +125,7 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 /// See their documentation for writing and reading functions.
 ///
 /// This pre-allocates `16` capacity for the internal
-/// [`Vec`] holding onto the `Patch`'s that haven't
+/// [`Vec`]'s holding onto the `Patch`'s that haven't
 /// been [`Apply`]'ed yet to the (potentially reclaimed)
 /// old data.
 ///
@@ -144,7 +149,7 @@ where
 ///
 /// This is the same as [`new()`] although the
 /// generic constant `P` determines how much capacity the
-/// [`Apply`] vector will start out with.
+/// [`Apply`] vectors will start out with.
 ///
 /// Use this if you are planning to [`Writer::add()`]
 /// many `Patch`'s before [`Writer::commit()`]'ing, so that
@@ -183,6 +188,7 @@ where
 		remote,
 		arc,
 		patches: Vec::with_capacity(N),
+		patches_old: Vec::with_capacity(N),
 	};
 
 	(reader, writer)

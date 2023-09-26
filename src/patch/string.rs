@@ -44,6 +44,8 @@ use std::sync::Arc;
 /// assert_eq!(r.head(), "abc");
 /// assert_eq!(r.head().timestamp(), 1);
 /// ```
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[non_exhaustive]
 pub enum PatchString {
 	///
 	Clear,
@@ -57,7 +59,7 @@ pub enum PatchString {
 
 impl Apply<PatchString> for String {
 	fn apply(
-		operation: &PatchString,
+		operation: &mut PatchString,
 		writer: &mut Self,
 		_reader: &Self,
 	) {

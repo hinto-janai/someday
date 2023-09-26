@@ -10,7 +10,7 @@ use crate::{
 ///
 /// See the [`README.md`](https://github.com/hinto-janai/someday) for example code using [`PatchVec`].
 #[non_exhaustive]
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 pub enum PatchVec<T> {
 	///
 	Push(T),
@@ -34,7 +34,7 @@ pub enum PatchVec<T> {
 
 impl<T: Clone> Apply<PatchVec<T>> for Vec<T> {
 	fn apply(
-		operation: &PatchVec<T>,
+		operation: &mut PatchVec<T>,
 		writer: &mut Self,
 		_reader: &Self,
 	) {

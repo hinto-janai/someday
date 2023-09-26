@@ -8,7 +8,7 @@ macro_rules! impl_num {
 		///
 		#[doc = "They will modify the target [`" $num "`] in place."]
 		#[non_exhaustive]
-		#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+		#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 		pub enum [<Patch $num:camel>] {
 			/// Adds using the `+` operator
 			Add($num),
@@ -51,13 +51,13 @@ macro_rules! impl_num {
 		}
 
 		impl Apply<[<Patch $num:camel>]> for $num {
-			fn apply(patch: &[<Patch $num:camel>], writer: &mut Self, reader: &Self) {
+			fn apply(patch: &mut [<Patch $num:camel>], writer: &mut Self, reader: &Self) {
 				match patch {
-					[<Patch $num:camel>]::Add(num) => *writer += num,
-					[<Patch $num:camel>]::Sub(num) => *writer -= num,
-					[<Patch $num:camel>]::Div(num) => *writer /= num,
-					[<Patch $num:camel>]::Mul(num) => *writer *= num,
-					[<Patch $num:camel>]::Mod(num) => *writer %= num,
+					[<Patch $num:camel>]::Add(num) => *writer += *num,
+					[<Patch $num:camel>]::Sub(num) => *writer -= *num,
+					[<Patch $num:camel>]::Div(num) => *writer /= *num,
+					[<Patch $num:camel>]::Mul(num) => *writer *= *num,
+					[<Patch $num:camel>]::Mod(num) => *writer %= *num,
 					[<Patch $num:camel>]::Pow(num) => *writer = writer.pow(*num),
 					[<Patch $num:camel>]::SaturatingAdd(num) => *writer = writer.saturating_add(*num),
 					[<Patch $num:camel>]::SaturatingSub(num) => *writer = writer.saturating_sub(*num),

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 //---------------------------------------------------------------------------------------------------- PatchHashMap
 #[non_exhaustive]
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 /// Common operations for [`HashMap`]
 pub enum PatchHashMap<K, V> {
 	///
@@ -35,7 +35,7 @@ where
 	V: Clone,
 {
 	fn apply(
-		patch: &PatchHashMap<K, V>,
+		patch: &mut PatchHashMap<K, V>,
 		writer: &mut Self,
 		reader: &Self,
 	) {

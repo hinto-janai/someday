@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 //---------------------------------------------------------------------------------------------------- PatchBTreeMap
 #[non_exhaustive]
-#[derive(PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
 /// Common operations for [`BTreeMap`]
 pub enum PatchBTreeMap<K, V> {
 	///
@@ -27,7 +27,7 @@ where
 	V: Clone,
 {
 	fn apply(
-		patch: &PatchBTreeMap<K, V>,
+		patch: &mut PatchBTreeMap<K, V>,
 		writer: &mut Self,
 		reader: &Self,
 	) {
