@@ -7,10 +7,10 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-#[derive(Copy,Clone,Debug,Hash)]
+#[derive(Copy,Clone,Debug,Hash,PartialEq,PartialOrd)]
 /// Owned snapshot of some data `T` and its [`Timestamp`]
 ///
-/// This is a [`CommitRef`] of data received from the commit operations
+/// This is a [`Commit`] of data received from the operations
 /// like [`Writer::head()`] and [`Reader::head()`], but instead
 /// of being shared like [`CommitRef`], it is fully owned.
 ///
@@ -19,20 +19,22 @@ use crate::{
 /// let (reader, _) = someday::new(String::from("hello"));
 ///
 /// // This is a ref-counted String.
-/// let CommitRef: CommitRef<String> = reader.head();
+/// let reference: CommitRef<String> = reader.head();
 ///
 /// // This is an owned String.
-/// let owned: CommitOwned<String> = CommitRef.into_owned();
+/// let owned: CommitOwned<String> = reference.to_commit_owned();
+///
+/// // This may or may not actually deallocate the String.
+/// drop(reference);
+///
 /// // The String's destructor will run here.
-/// drop(owned)
+/// drop(owned);
 /// ```
 pub struct CommitOwned<T> {
-	/// Timestamp of this CommitRef.
+	/// Timestamp of this [`Commit`].
 	///
-	/// Starts at 0, and increments by 1 every time [`Writer::apply()`] is called.
-	///
-	/// This means this also represents how many
-	/// [`Operation`]'s were applied to your data.
+	/// Starts at 0, and increments by 1 every time a `commit`-like
+	/// operation is called by the [`Writer`].
 	pub timestamp: Timestamp,
 
 	/// The generic data `T`.
@@ -66,12 +68,6 @@ impl<T> AsRef<T> for CommitOwned<T> {
 impl<T> std::borrow::Borrow<T> for CommitOwned<T> {
 	fn borrow(&self) -> &T {
 		&self.data
-	}
-}
-
-impl<T: PartialEq> PartialEq for CommitOwned<T> {
-	fn eq(&self, other: &Self) -> bool {
-		self == other
 	}
 }
 
@@ -150,17 +146,17 @@ impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 //---------------------------------------------------------------------------------------------------- CommitRef
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-#[derive(Clone,Debug,Hash)]
+#[derive(Clone,Debug,Hash,PartialEq,PartialOrd)]
 /// Cheaply cloneable snapshot of some data `T` and its [`Timestamp`]
 ///
-/// This is a [`CommitRef`] of data received from the commit operations
+/// This is a [`Commit`] of data received from operations
 /// like [`Writer::head()`] and [`Reader::head()`].
 ///
 /// It is shared data, and cheaply [`Clone`]-able (it is an [`Arc`] internally).
 ///
 /// To get the inner data, use [`CommitRef::data()`].
 ///
-/// [`CommitRef`] also implements convenience traits like [`Deref`] and [`PartialEq`] for your `T`:
+/// [`CommitRef`] also implements convenience traits like [`PartialEq`] for your `T`:
 /// ```rust
 /// # use someday::{*,patch::*};
 /// let (reader, _) = someday::new(String::from("hello"));
@@ -181,18 +177,25 @@ pub struct CommitRef<T> {
 
 impl<T> CommitRef<T> {
 	#[inline]
-	/// How many other shared instances of this CommitRef exist?
+	/// How many other shared instances of this [`CommitRef`] exist?
 	///
 	/// This is akin to [`Arc::strong_count`].
-	///
-	/// If this returns `1`, then calling [`CommitRef::into_owned`]
-	/// and/or [`CommitOwned::try_into`] will be free.
 	pub fn count(&self) -> usize {
 		Arc::strong_count(&self.inner)
 	}
 
 	#[inline]
+	/// Cheaply convert to an [`CommitOwned`] if possible
 	///
+	/// This is akin to [`Arc::try_unwrap`].
+	///
+	/// This attempts to take ownership of the backing data
+	/// inside this [`CommitRef`]. If there are other references
+	/// ([`CommitRef::count()`]) then this function will fail
+	/// and return the `self` input back.
+	///
+	/// If there are no other references, this will cheaply
+	/// acquire ownership of the `T` data.
 	pub fn try_unwrap(self) -> Result<CommitOwned<T>, Self> {
 		Arc::try_unwrap(self.inner).map_err(|inner| CommitRef { inner })
 	}
@@ -215,12 +218,6 @@ impl<T> AsRef<T> for CommitRef<T> {
 impl<T> std::borrow::Borrow<T> for CommitRef<T> {
 	fn borrow(&self) -> &T {
 		&self.inner.data
-	}
-}
-
-impl<T: PartialEq> PartialEq for CommitRef<T> {
-	fn eq(&self, other: &Self) -> bool {
-		self.inner == other.inner
 	}
 }
 
@@ -332,28 +329,28 @@ pub trait Commit<T>: private::Sealed {
 
 	/// Cheaply convert `Self` to the owned data `T` if possible
 	///
-	/// If this is a `CommitRef` and it is the only [`CommitRef::strong`]
+	/// If this is a [`CommitRef`] and it is the only [`CommitRef::count`]
 	/// reference, this call will acquire ownership for free.
 	///
 	/// If there are other instances of this [`CommitRef`], the
 	/// internal data will be cloned directly.
 	///
-	/// This is a no-op for `CommitOwned`.
+	/// This is free for [`CommitOwned`].
 	fn into_data(self) -> T;
 
 	/// Expensively clone [`Self`], without consuming [`Self`]
-	fn to_owned(&self) -> CommitOwned<T>;
+	fn to_commit_owned(&self) -> CommitOwned<T>;
 
 	/// Cheaply convert `Self` to owned if possible
 	///
-	/// If this is a `CommitRef` and it is the only [`CommitRef::strong`]
+	/// If this is a [`CommitRef`] and it is the only [`CommitRef::count`]
 	/// reference, this call will acquire ownership for free.
 	///
 	/// If there are other instances of this [`CommitRef`], the
 	/// internal data will be cloned directly.
 	///
-	/// This is a no-op for `CommitOwned`.
-	fn into_owned(self) -> CommitOwned<T>;
+	/// This is a no-op for [`CommitOwned`].
+	fn into_commit_owned(self) -> CommitOwned<T>;
 
 	#[inline]
 	/// If there is a difference in `self` & `other`'s timestamps.
@@ -438,14 +435,14 @@ where
 	}
 
 	#[inline]
-	fn to_owned(&self) -> CommitOwned<T> {
+	fn to_commit_owned(&self) -> CommitOwned<T> {
 		CommitOwned {
 			timestamp: self.inner.timestamp,
 			data: self.inner.data.clone(),
 		}
 	}
 	#[inline]
-	fn into_owned(self) -> CommitOwned<T> where T: Clone {
+	fn into_commit_owned(self) -> CommitOwned<T> where T: Clone {
 		match Arc::try_unwrap(self.inner) {
 			Ok(s) => s,
 			Err(s) => CommitOwned {
@@ -480,11 +477,11 @@ where
 	}
 
 	#[inline(always)]
-	fn to_owned(&self) -> CommitOwned<T> {
+	fn to_commit_owned(&self) -> CommitOwned<T> {
 		self.clone()
 	}
 	#[inline(always)]
-	fn into_owned(self) -> CommitOwned<T> {
+	fn into_commit_owned(self) -> CommitOwned<T> {
 		self
 	}
 }

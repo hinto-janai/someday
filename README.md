@@ -26,7 +26,7 @@ The [`Writer`](https://docs.rs/someday/struct.Writer.html):
 The [`Reader(s)`](struct.Reader.html):
 1. Can continually call [`head()`](https://docs.rs/someday/struct.Reader.html#method.head) to cheaply acquire the latest "head" [`Commit`](https://docs.rs/someday/struct.Commit.html)
 2. Can hang onto those [`Commit`](https://docs.rs/someday/struct.Commit.html) objects forever (although at the peril of memory-usage)
-3. Will eventually catch up whenever the [`Writer`] calls [`push()`](https://docs.rs/someday/struct.Writer.html#method.push)
+3. Will eventually catch up whenever the [`Writer`](https://docs.rs/someday/struct.Writer.html) calls [`push()`](https://docs.rs/someday/struct.Writer.html#method.push)
 
 ## Example
 <img src="https://github.com/hinto-janai/someday/assets/101352116/d0587e16-56f8-48ae-b9f4-631cc1aef450" width="50%"/>

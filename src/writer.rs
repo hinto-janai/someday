@@ -360,20 +360,40 @@ where
 	}
 
 	#[inline]
-	/// Apply a `Patch` to your data, `T`
+	/// [`Apply`] all the `Patch`'s that were [`add()`](Writer::add)'ed
+	///
+	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
 	///
 	/// This immediately calls [`Apply::apply`] with
-	/// your patch `Patch` onto your data `T`.
+	/// your `Patch`'s onto your data `T`.
 	///
-	/// The new [`CommitRef`] created will become
-	/// this [`Writer`]'s new [`Writer::head()`].
+	/// The new [`CommitRef`] created from this will become
+	/// the [`Writer`]'s new [`Writer::head()`].
+	///
+	/// You can [`commit()`](Writer::commit) multiple times and
+	/// it will only affect the [`Writer`]'s local data.
+	///
+	/// You can choose when to publish those changes to
+	/// the [`Reader`]'s with [`push()`](Writer::push()).
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use someday::patch::*;
+	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	///
+	/// // Timestamp is 0.
+	/// assert_eq!(w.timestamp(), 0);
+	///
+	/// // And and commit a patch.
+	/// w.add_and(PatchUsize::Add(123)).commit();
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(*w.head(), 123);
+	/// ```
 	pub fn commit(&mut self) -> usize {
 		self.commit_inner()
 	}
 
 	#[inline]
-	/// Apply a `Patch` to your data, `T`
-	///
 	/// This function is the same as [`Writer::commit()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn commit_and(&mut self) -> &mut Self {
@@ -485,8 +505,8 @@ where
 	/// 	sleep(Duration::from_millis(1));
 	/// });
 	///
-	/// // Wait 10 milliseconds before resorting to cloning data.
-	/// let (commits_pushed, reclaimed) = w.push_wait(Duration::from_millis(10));
+	/// // Wait 250 milliseconds before resorting to cloning data.
+	/// let (commits_pushed, reclaimed) = w.push_wait(Duration::from_millis(250));
 	/// // We pushed 1 commit.
 	/// assert_eq!(commits_pushed, 1);
 	/// // And we successfully reclaimed the old data cheaply.
@@ -875,9 +895,8 @@ where
 	///
 	/// This returns the number indicating the [`Writer`]'s data's version.
 	///
-	/// This number starts at `0`, increments by `1` every time a [`commit()`]
-	/// -like operation is called, and it will never be less than the [`Reader`]'s
-	/// timestamp.
+	/// This number starts at `0`, increments by `1` every time a [`Writer::commit()`]
+	/// -like operation is called, and it will never be less than the [`Reader`]'s [`Timestamp`].
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
