@@ -9,6 +9,97 @@ use crate::{
 
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`
+///
+/// ## Usage
+/// This example covers the typical usage of a `Writer`:
+/// - Creating some [`Reader`]'s
+/// - Adding some `Patch`'s
+/// - Viewing the staged `Patch`'s, modifying them
+/// - Commiting those changes
+/// - Pushing those changes to the [`Reader`]'s
+///
+/// ```rust
+/// use someday::{
+/// 	{Writer,Reader,Commit,CommitOwned,CommitRef},
+/// 	patch::PatchString,
+/// };
+///
+/// // Create a Reader/Writer pair that can "apply"
+/// // the `PatchString` patch to `String`'s.
+/// let (r, w) = someday::new("".into());
+///
+/// // To clarify the types of these things:
+/// // This is the Reader.
+/// // It can clone itself infinite amount of
+/// // time very cheaply.
+/// let r: Reader<String> = r;
+/// for _ in 0..10_000 {
+/// 	// pretty cheap operation.
+/// 	let another_reader = r.clone();
+/// }
+///
+/// // This is the single Writer, it cannot clone itself.
+///	let mut w: Writer<String, PatchString> = w;
+///
+/// // Both Reader and Writer are at timestamp 0 and see no changes.
+/// assert_eq!(w.timestamp(), 0);
+/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(w.data(), "");
+/// assert_eq!(r.head(), "");
+///
+/// // The Writer can add many `Patch`'s
+/// w.add(PatchString::PushStr("abc".into()));
+/// w.add(PatchString::PushStr("def".into()));
+/// w.add(PatchString::PushStr("ghi".into()));
+/// w.add(PatchString::PushStr("jkl".into()));
+///
+/// // But `add()`'ing does not actually modify the
+/// // local (Writer) or remote (Readers) data, it
+/// // just "stages" those for a `commit()`.
+/// assert_eq!(w.timestamp(), 0);
+/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(w.data(), "");
+/// assert_eq!(r.head(), "");
+///
+/// // We can see our "staged" patches here.
+/// let staged: &mut Vec<PatchString> = w.staged();
+/// assert_eq!(staged.len(), 4);
+/// assert_eq!(staged[0], PatchString::PushStr("abc".into()));
+/// assert_eq!(staged[1], PatchString::PushStr("def".into()));
+/// assert_eq!(staged[2], PatchString::PushStr("ghi".into()));
+/// assert_eq!(staged[3], PatchString::PushStr("jkl".into()));
+///
+/// // Let's actually remove a patch.
+/// let removed = staged.remove(3);
+/// assert_eq!(removed, PatchString::PushStr("jkl".into()));
+///
+/// // Okay, now let's commit locally.
+/// let patches_applied = w.commit();
+/// // We applied 3 patches in total.
+/// assert_eq!(patches_applied, 3);
+/// // And added 1 commit (timestamp).
+/// assert_eq!(w.timestamp(), 1);
+///
+/// // We haven't pushed yet, so the Readers
+/// // are still un-aware of our local changes.
+/// assert_eq!(w.timestamp(), 1);
+/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(w.data(), "abcdefghi");
+/// assert_eq!(r.head(), "");
+///
+/// // Now we push.
+/// let commits_pushed = w.push();
+/// // We pushed 1 commit in total.
+/// assert_eq!(commits_pushed, 1);
+/// // Our staged patches are now gone.
+/// assert_eq!(w.staged().len(), 0);
+///
+/// // The Readers are now in sync.
+/// assert_eq!(w.timestamp(), 1);
+/// assert_eq!(r.timestamp(), 1);
+/// assert_eq!(w.data(), "abcdefghi");
+/// assert_eq!(r.head(), "abcdefghi");
+/// ```
 pub struct Writer<T, Patch>
 where
 	T: Apply<Patch>,

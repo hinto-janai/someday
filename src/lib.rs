@@ -125,9 +125,8 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 /// See their documentation for writing and reading functions.
 ///
 /// This pre-allocates `16` capacity for the internal
-/// [`Vec`]'s holding onto the `Patch`'s that haven't
-/// been [`Apply`]'ed yet to the (potentially reclaimed)
-/// old data.
+/// [`Vec`]'s holding onto the `Patch`'s that have and
+/// haven't been [`Apply`].
 ///
 /// Use [`with_capacity()`] to set a custom capacity.
 ///
@@ -153,7 +152,7 @@ where
 ///
 /// Use this if you are planning to [`Writer::add()`]
 /// many `Patch`'s before [`Writer::commit()`]'ing, so that
-/// the internal [`Vec`] doesn't need to reallocate so often.
+/// the internal [`Vec`]'s don't need to reallocate so often.
 ///
 /// ## Example
 /// ```rust

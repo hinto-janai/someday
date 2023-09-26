@@ -14,13 +14,13 @@ The single [`Writer`](https://docs.rs/someday/struct.Writer.html) can write [loc
 Readers who are holding onto old copies of data will be able to continue to do so indefinitely. If needed, they can always acquire a fresh copy of the data using [`head()`](https://docs.rs/someday/struct.Reader.html#method.head), but them holding onto the old [`Commit`](https://docs.rs/someday/struct.Commit.html)'s will not block the writer from continuing.
 
 ## API
-`someday`'s API is the same as [`git`](https://git-scm.com) commands and semantically does similar actions.
+`someday`'s API uses [`git`](https://git-scm.com) syntax and semantically does similar actions.
 
 The [`Writer`](https://docs.rs/someday/struct.Writer.html):
 1. Calls [`add()`](https://docs.rs/someday/struct.Writer.html#method.add) to add a [`Patch`](https://docs.rs/someday/trait.Apply) to their data
-2. Actually executes those changes by [`Apply::apply`](https://docs.rs/someday/trait.Apply)'ing their `Patch`'s
-3. Can see local changes whenever
-4. Can atomically publish those changes to the world with [`push()`](https://docs.rs/someday/struct.Writer.html#method.push)
+2. Actually executes those changes by [`commit()`](https://docs.rs/someday/struct.Writer.html#commit.add)'ing
+3. Can see local or remote (reader) data whenever
+4. Can atomically [`push()`](https://docs.rs/someday/struct.Writer.html#method.push) those changes to the [`Reader`]'s
 5. Can continue writing without having to wait on [`Reader`](https://docs.rs/someday/struct.Reader.html)'s
 
 The [`Reader(s)`](struct.Reader.html):
