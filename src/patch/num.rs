@@ -9,6 +9,8 @@ macro_rules! impl_num {
 		#[doc = "They will modify the target [`" $num "`] in place."]
 		#[non_exhaustive]
 		#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+		#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+		#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 		pub enum [<Patch $num:camel>] {
 			/// Adds using the `+` operator
 			Add($num),

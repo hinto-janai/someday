@@ -1,6 +1,6 @@
 [package]
 name = "someday"
-version = "0.0.0"
+version = "0.0.2"
 edition = "2021"
 authors = ["hinto.janai <hinto.janai@protonmail.com>"]
 description = "Eventually consistent, multi version concurrency"
@@ -22,6 +22,6 @@ patch = []
 arc-swap = { version = "1.6.0", default-features = false }
 
 # Optional.
-serde   = { version = "1", optional = true }
-bincode = { version = "2.0.0-rc.3", optional = true }
+serde   = { version = "1", optional = true, features = ["derive"] }
+bincode = { version = "2.0.0-rc.3", optional = true, features = ["derive"] }
 paste   = "1.0.14"

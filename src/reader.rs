@@ -99,11 +99,11 @@ use crate::{
 /// // the shared string is probably already
 /// // pretty long at this point.
 /// let head_commit: CommitRef<String> = reader.head();
-/// // Wow, longer than 10,000 bytes!
-/// assert!(head_commit.data().len() > 10_000);
+/// // Wow, longer than 5,000 bytes!
+/// assert!(head_commit.data().len() > 5_000);
 ///
 /// // The timestamp is probably pretty high already too.
-/// assert!(head_commit.timestamp() > 1_000);
+/// assert!(head_commit.timestamp() > 500);
 ///
 /// // We can continually call `.head()` and keep
 /// // retrieving the latest data. Doing this

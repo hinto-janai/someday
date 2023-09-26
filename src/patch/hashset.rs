@@ -9,21 +9,21 @@ use std::collections::HashSet;
 //---------------------------------------------------------------------------------------------------- PatchHashSet
 #[non_exhaustive]
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 /// Common operations for [`HashSet`]
 pub enum PatchHashSet<T> {
-	///
+	/// [`HashSet::insert`]
 	Insert(T),
-	///
+	/// [`HashSet::remove`]
 	Remove(T),
-	///
+	/// [`HashSet::clear`]
 	Clear,
-	///
+	/// [`HashSet::shrink_to_fit`]
 	ShrinkToFit,
-	///
+	/// [`HashSet::shrink_to`]
 	ShrinkTo(usize),
-	/// Reserves capacity for some number of additional elements in [`Values`]
-	/// for the given key. If the given key does not exist, allocate an empty
-	/// `Values` with the given capacity.
+	/// [`HashSet::reserve`]
 	Reserve(usize),
 }
 
@@ -36,7 +36,7 @@ where
 	fn apply(
 		patch: &mut PatchHashSet<T>,
 		writer: &mut Self,
-		reader: &Self,
+		_reader: &Self,
 	) {
 		match patch {
 			PatchHashSet::Insert(t) => { writer.insert(t.clone()); },

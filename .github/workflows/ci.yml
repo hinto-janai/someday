@@ -19,7 +19,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [windows-2019, macos-11, ubuntu-20.04]
+        os: [windows-latest, macos-latest, ubuntu-latest]
 
     steps:
     - name: Checkout

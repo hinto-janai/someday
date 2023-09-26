@@ -45,15 +45,17 @@ use std::sync::Arc;
 /// assert_eq!(r.head().timestamp(), 1);
 /// ```
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[non_exhaustive]
 pub enum PatchString {
-	///
+	/// [`String::clear`]
 	Clear,
-	///
+	/// [`String::insert_str`]
 	InsertStr(usize, Arc<str>),
-	///
+	/// [`String::push_str`]
 	PushStr(Arc<str>),
-	///
+	/// Assigns a new value to the [`String`]
 	Set(Arc<str>),
 }
 
