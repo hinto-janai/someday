@@ -1220,7 +1220,7 @@ where
 	/// 1. The [`Writer`]'s local data
 	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
 	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
-	/// 4. The commited `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::commited_patches()`])
+	/// 4. The commited `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};

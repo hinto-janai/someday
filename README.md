@@ -20,7 +20,7 @@ The [`Writer`](https://docs.rs/someday/struct.Writer.html):
 1. Calls [`add()`](https://docs.rs/someday/struct.Writer.html#method.add) to add a [`Patch`](https://docs.rs/someday/trait.Apply) to their data
 2. Actually executes those changes by [`commit()`](https://docs.rs/someday/struct.Writer.html#commit.add)'ing
 3. Can see local or remote (reader) data whenever
-4. Can atomically [`push()`](https://docs.rs/someday/struct.Writer.html#method.push) those changes to the [`Reader`]'s
+4. Can atomically [`push()`](https://docs.rs/someday/struct.Writer.html#method.push) those changes to the [`Reader`](https://docs.rs/someday/struct.Reader.html)'s
 5. Can continue writing without having to wait on [`Reader`](https://docs.rs/someday/struct.Reader.html)'s
 
 The [`Reader(s)`](struct.Reader.html):
