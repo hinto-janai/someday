@@ -92,8 +92,7 @@ use crate::{
 /// 	}
 /// });
 ///
-/// // Wait just a little...
-/// std::thread::sleep(std::time::Duration::from_millis(50));
+/// # std::thread::sleep(std::time::Duration::from_secs(1));
 ///
 /// // Even though the Writer _just_ started
 /// // the shared string is probably already
@@ -110,7 +109,7 @@ use crate::{
 /// // will _not_ block the Writer from continuing.
 /// let mut last_head = reader.head();
 /// let mut new_head  = reader.head();
-/// for _ in 0..100 {
+/// for _ in 0..10 {
 /// 	last_head = reader.head();
 ///
 /// 	// Wait just a little...

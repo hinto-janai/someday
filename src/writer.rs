@@ -531,19 +531,23 @@ where
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
-	/// # use std::{thread::*,time::*};
+	/// # use std::{sync::*,thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
 	/// w.add(PatchString::PushStr("abc".into()));
 	/// w.commit();
 	///
+	/// # let barrier  = Arc::new(Barrier::new(2));
+	/// # let other_b = barrier.clone();
 	/// let commit = r.head();
 	/// spawn(move || {
+	///     # other_b.wait();
 	/// 	// This `Reader` is holding onto the old data.
 	/// 	let moved = commit;
 	/// 	// But will let go after 1 millisecond.
 	/// 	sleep(Duration::from_millis(1));
 	/// });
 	///
+	/// # barrier.wait();
 	/// // Wait 250 milliseconds before resorting to cloning data.
 	/// let commit_info = w.push_wait(Duration::from_millis(250));
 	/// // We pushed 1 commit.
