@@ -120,8 +120,8 @@ use std::collections::HashMap;
 /// 	// Commit the data.
 /// 	// This will actually call `Apply::apply()`
 /// 	// with all the patches saved up so far.
-/// 	let patches_applied = w.commit();
-/// 	assert_eq!(patches_applied, 2);
+/// 	let commit_info = w.commit();
+/// 	assert_eq!(commit_info.patches, 2);
 ///
 /// 	// Now, the Writer can see the changes locally.
 /// 	assert_eq!(w.timestamp(), 1);
@@ -132,8 +132,8 @@ use std::collections::HashMap;
 /// 	assert_eq!(r.head(), HashMap::new());
 ///
 /// 	// Push the data (to the Readers).
-/// 	let commits_pushed = w.push();
-/// 	assert_eq!(commits_pushed, 1);
+/// 	let push_info = w.push();
+/// 	assert_eq!(push_info.commits, 1);
 ///
 /// 	// Now all Reader's can see the changes.
 /// 	assert_eq!(r.timestamp(), 1);

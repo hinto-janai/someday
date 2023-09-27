@@ -45,6 +45,13 @@ mod commit;
 mod writer;
 mod apply;
 
+/// Metadata resulting from common [`Writer`] operations
+///
+/// These are simple container structs that hold
+/// information about [`Writer`] operations.
+pub mod info;
+pub use info::*;
+
 #[cfg(feature = "patch")]
 /// Objects implementing [`Apply`] on common data structures
 ///
@@ -63,6 +70,8 @@ mod apply;
 /// someday = { version "0.0.0", default-features = false }
 /// ```
 pub mod patch;
+#[cfg(feature = "patch")]
+pub use patch::*;
 
 pub use reader::Reader;
 pub use commit::{Commit,CommitRef,CommitOwned};

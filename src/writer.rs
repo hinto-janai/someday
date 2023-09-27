@@ -5,6 +5,10 @@ use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
 	apply::Apply,
 	Timestamp,
+	info::{
+		CommitInfo,StatusInfo,
+		PullInfo,PushInfo,
+	},
 };
 
 //---------------------------------------------------------------------------------------------------- Writer
@@ -74,9 +78,9 @@ use crate::{
 /// assert_eq!(removed, PatchString::PushStr("jkl".into()));
 ///
 /// // Okay, now let's commit locally.
-/// let patches_applied = w.commit();
+/// let commit_info = w.commit();
 /// // We applied 3 patches in total.
-/// assert_eq!(patches_applied, 3);
+/// assert_eq!(commit_info.patches, 3);
 /// // And added 1 commit (timestamp).
 /// assert_eq!(w.timestamp(), 1);
 ///
@@ -88,9 +92,9 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // Now we push.
-/// let commits_pushed = w.push();
+/// let push_info = w.push();
 /// // We pushed 1 commit in total.
-/// assert_eq!(commits_pushed, 1);
+/// assert_eq!(push_info.commits, 1);
 /// // Our staged patches are now gone.
 /// assert_eq!(w.staged().len(), 0);
 ///
@@ -336,26 +340,51 @@ where
 	}
 
 	#[inline]
-	///
+	/// This function is the same as [`Writer::add()`]
+	/// but it returns the [`Writer`] back for method chaining.
 	pub fn add_and(&mut self, patch: Patch) -> &mut Self {
 		self.patches.push(patch);
 		self
 	}
 
 	#[inline]
+	/// Add multiple `Patch`'s to apply to the data `T`
 	///
+	/// This is the same as the [`Writer::add`] function but
+	/// it takes an [`Iterator`] of `Patch`'s and add those.
+	///
+	/// This [`Iterator`] could be [`Vec`], [`slice`], etc.
+	///
+	/// ```
+	/// # use someday::*;
+	/// # use someday::patch::*;
+	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	///
+	/// // Create some Patches.
+	/// let patches: Vec<PatchUsize> =
+	/// 	(0..100)
+	/// 	.map(|u| PatchUsize::Add(u))
+	/// 	.collect();
+	///
+	/// // Add them.
+	/// w.add_iter(patches.into_iter());
+	///
+	/// // They haven't been applied yet.
+	/// assert_eq!(w.staged().len(), 100);
+	///
+	/// // Now they have.
+	/// w.commit();
+	/// assert_eq!(w.staged().len(), 0);
+	/// ```
 	pub fn add_iter(&mut self, patches: impl Iterator<Item = Patch>) {
-		for patch in patches {
-			self.patches.push(patch);
-		}
+		self.patches.extend(patches);
 	}
 
 	#[inline]
-	///
+	/// This function is the same as [`Writer::add_iter()`]
+	/// but it returns the [`Writer`] back for method chaining.
 	pub fn add_iter_and(&mut self, patches: impl Iterator<Item = Patch>) -> &mut Self {
-		for patch in patches {
-			self.patches.push(patch);
-		}
+		self.patches.extend(patches);
 		self
 	}
 
@@ -376,6 +405,9 @@ where
 	/// You can choose when to publish those changes to
 	/// the [`Reader`]'s with [`push()`](Writer::push()).
 	///
+	/// The [`CommitInfo`] object returned is just a container
+	/// for some metadata about the [`commit()`](Writer::commit) operation.
+	///
 	/// ```rust
 	/// # use someday::*;
 	/// # use someday::patch::*;
@@ -389,7 +421,7 @@ where
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(*w.head(), 123);
 	/// ```
-	pub fn commit(&mut self) -> usize {
+	pub fn commit(&mut self) -> CommitInfo {
 		self.commit_inner()
 	}
 
@@ -397,12 +429,12 @@ where
 	/// This function is the same as [`Writer::commit()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn commit_and(&mut self) -> &mut Self {
-		self.commit_inner();
+		drop(self.commit_inner()); // probably optimized away
 		self
 	}
 
-	fn commit_inner(&mut self) -> usize {
-		let patch_len = self.patches.len();
+	fn commit_inner(&mut self) -> CommitInfo {
+		let patches = self.patches.len();
 
 		for mut patch in self.patches.drain(..) {
 			Apply::apply(
@@ -415,7 +447,10 @@ where
 
 		self.local().timestamp += 1;
 
-		patch_len
+		CommitInfo {
+			patches,
+			timestamp_diff: self.timestamp_diff(),
+		}
 	}
 
 	#[inline]
@@ -434,6 +469,9 @@ where
 	///
 	///	The `Patch`'s that were not [`commit()`](Writer::commit)'ed will not be
 	/// pushed and will remain in the [`staged()`](Writer::staged) vector of patches.
+	///
+	/// The [`PushInfo`] object returned is just a container
+	/// for some metadata about the [`push()`](Writer::push) operation.
 	///
 	/// ## Usage
 	/// This function should most likely be combined with a
@@ -455,22 +493,23 @@ where
 	/// w.commit();
 	///
 	/// if w.ahead() {
-	/// 	let commits_pushed = w.push();
-	/// 	assert_eq!(commits_pushed, 1);
+	/// 	let commit_info = w.push();
+	/// 	// We pushed 1 commit.
+	/// 	assert_eq!(commit_info.commits, 1);
 	/// } else {
 	/// 	// won't happen
 	/// 	unreachable!();
 	/// }
 	/// ```
-	pub fn push(&mut self) -> usize {
-		self.push_inner::<false>(None).0
+	pub fn push(&mut self) -> PushInfo {
+		self.push_inner::<false>(None)
 	}
 
 	#[inline]
 	/// This function is the same as [`Writer::push()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_and(&mut self) -> &mut Self {
-		self.push_inner::<false>(None);
+		drop(self.push_inner::<false>(None));
 		self
 	}
 
@@ -506,13 +545,13 @@ where
 	/// });
 	///
 	/// // Wait 250 milliseconds before resorting to cloning data.
-	/// let (commits_pushed, reclaimed) = w.push_wait(Duration::from_millis(250));
+	/// let commit_info = w.push_wait(Duration::from_millis(250));
 	/// // We pushed 1 commit.
-	/// assert_eq!(commits_pushed, 1);
+	/// assert_eq!(commit_info.commits, 1);
 	/// // And we successfully reclaimed the old data cheaply.
-	/// assert_eq!(reclaimed, true);
+	/// assert_eq!(commit_info.reclaimed, true);
 	/// ```
-	pub fn push_wait(&mut self, duration: Duration) -> (usize, bool) {
+	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
 		self.push_inner::<false>(Some(duration))
 	}
 
@@ -544,23 +583,23 @@ where
 	/// });
 	///
 	/// // Always clone data, don't wait.
-	/// let commits_pushed = w.push_clone();
+	/// let push_status = w.push_clone();
 	/// // We pushed 1 commit.
-	/// assert_eq!(commits_pushed, 1);
+	/// assert_eq!(push_status.commits, 1);
 	/// ```
-	pub fn push_clone(&mut self) -> usize {
-		self.push_inner::<true>(None).0
+	pub fn push_clone(&mut self) -> PushInfo {
+		self.push_inner::<true>(None)
 	}
 
 	#[inline]
 	/// This function is the same as [`Writer::push_clone()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_clone_and(&mut self) -> &mut Self {
-		self.push_inner::<true>(None);
+		drop(self.push_inner::<true>(None));
 		self
 	}
 
-	fn push_inner<const CLONE: bool>(&mut self, duration: Option<Duration>) -> (usize, bool) {
+	fn push_inner<const CLONE: bool>(&mut self, duration: Option<Duration>) -> PushInfo {
 		let timestamp_diff    = self.timestamp_diff();
 		let current_timestamp = self.timestamp();
 
@@ -583,7 +622,11 @@ where
 			self.local = Some((*self.remote).clone());
 			self.local().timestamp = current_timestamp;
 			self.patches_old.clear();
-			return (timestamp_diff, false);
+			return PushInfo {
+				timestamp: current_timestamp,
+				commits: timestamp_diff,
+				reclaimed: false,
+			}
 		}
 
 		// Try to reclaim data.
@@ -631,7 +674,11 @@ where
 		self.local().timestamp = current_timestamp;
 
 		// Return how many commits we pushed.
-		(timestamp_diff, reclaimed)
+		PushInfo {
+			timestamp: current_timestamp,
+			commits: timestamp_diff,
+			reclaimed
+		}
 	}
 
 	#[inline]
@@ -642,6 +689,9 @@ where
 	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
+	///
+	/// The [`PullInfo`] object returned is just a container
+	/// for some metadata about the [`pull()`](Writer::pull) operation.
 	///
 	/// ## ⚠️ Warning
 	/// This overwrites your [`Writer`]'s data!
@@ -669,13 +719,13 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Pull from the Reader.
-	/// let old_writer_data = w.pull();
-	/// assert_eq!(old_writer_data, "hello");
+	/// let pull_status = w.pull();
+	/// assert_eq!(pull_status.old_writer_data, "hello");
 	///
 	///	// We're back to square 1.
 	/// assert_eq!(w.head(), "");
 	/// ```
-	pub fn pull(&mut self) -> CommitOwned<T> {
+	pub fn pull(&mut self) -> PullInfo<T> {
 		self.pull_inner()
 	}
 
@@ -688,12 +738,15 @@ where
 	}
 
 	#[inline]
-	fn pull_inner(&mut self) -> CommitOwned<T> {
+	fn pull_inner(&mut self) -> PullInfo<T> {
 		// Delete old patches, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
 		self.patches_old.clear();
-		self.local_swap((*self.remote).clone())
+		PullInfo {
+			commits_reverted: self.timestamp_diff(),
+			old_writer_data: self.local_swap((*self.remote).clone()),
+		}
 	}
 
 	#[inline]
@@ -773,7 +826,7 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s [`Commit`] is different than the [`Reader`]'s
+	/// If the [`Writer`]'s local [`Commit`] is different than the [`Reader`]'s
 	///
 	/// Compares the [`Commit`] that the [`Reader`]'s can
 	/// currently access with the [`Writer`]'s current local [`Commit`].
@@ -782,7 +835,7 @@ where
 	/// - The data is different
 	/// - The [`Timestamp`] is different
 	///
-	/// Note that this includes non-[`push()`]'ed [`Writer`] data.
+	/// Note that this includes non-[`push()`](Writer::push)'ed [`Writer`] data.
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
@@ -800,7 +853,7 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s [`Timestamp`] is greater than the [`Reader`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is greater than the [`Reader`]'s [`Timestamp`]
 	///
 	/// Compares the timestamp of the [`Reader`]'s currently available
 	/// data with the [`Writer`]'s current local timestamp.
@@ -835,7 +888,7 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
@@ -865,7 +918,7 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
@@ -1075,6 +1128,90 @@ where
 	/// ```
 	pub fn committed_patches(&self) -> &Vec<Patch> {
 		&self.patches_old
+	}
+
+	#[inline]
+	/// How many [`Reader`]'s are _currently_ accessing
+	/// the current [`Reader`] head [`Commit`]?
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// // The Writer, `w` holds 2 strong counts.
+	/// assert_eq!(w.head_readers(), 2);
+	///
+	/// // Create and leak 8 Reader's.
+	/// // Note however, the above Reader's
+	/// // do not have strong references to the
+	/// // underlying data, so they don't count.
+	/// for i in 0..8 {
+	/// 	let reader = w.reader();
+	/// 	std::mem::forget(reader);
+	/// }
+	/// let r = w.reader();
+	/// assert_eq!(w.head_readers(), 2);
+	///
+	/// // Leak the actual data 8 times.
+	/// for i in 0..8 {
+	/// 	let head: CommitRef<String> = r.head();
+	/// 	std::mem::forget(head);
+	/// }
+	///
+	/// // Now there are 10 strong references.
+	/// // (which will never be reclaimed since
+	/// // we just leaked them)
+	/// assert_eq!(w.head_readers(), 10);
+	/// ```
+	pub fn head_readers(&self) -> usize {
+		Arc::strong_count(&self.remote)
+	}
+
+	#[inline]
+	/// How many [`Reader`]'s are there?
+	///
+	/// Unlike [`Writer::head_readers()`], this doesn't count references
+	/// to the data, it counts how many [`Reader`] objects are in existance.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// // 2 Reader's (the Writer counts as a Reader).
+	/// assert_eq!(w.reader_count(), 2);
+	///
+	/// // Create and leak 8 Reader's.
+	/// for i in 0..8 {
+	/// 	let reader = r.clone();
+	/// 	std::mem::forget(reader);
+	/// }
+	///
+	/// // Now there are 10.
+	/// assert_eq!(w.reader_count(), 10);
+	/// ```
+	pub fn reader_count(&self) -> usize {
+		Arc::strong_count(&self.arc)
+	}
+
+	/// Get the current status on the [`Writer`] and [`Reader`]
+	///
+	/// This is a bag of various metadata about the current
+	/// state of the [`Writer`] and [`Reader`].
+	///
+	/// If you only need 1 or a few of the fields in [`StatusInfo`],
+	/// consider using their individual methods instead.
+	pub fn status(&self) -> StatusInfo<'_, T, Patch> {
+		StatusInfo {
+			committed_patches: self.committed_patches(),
+			head: self.head(),
+			head_remote: self.head_remote(),
+			head_readers: self.head_readers(),
+			reader_count: self.reader_count(),
+			timestamp: self.timestamp(),
+			timestamp_remote: self.timestamp_remote(),
+		}
 	}
 
 	/// Consume this [`Writer`] and return the inner components

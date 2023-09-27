@@ -45,7 +45,11 @@ and the [`Reader`](https://docs.rs/someday/struct.Reader.html):
 The code:
 ```rust
 use someday::patch::PatchVec;
-use someday::{Writer,Reader,CommitRef,Commit,Apply};
+use someday::{
+	Apply,
+	Writer,Reader,
+	Commit,CommitRef,CommitInfo
+};
 
 // Create a vector.
 let v = vec!["a"];
@@ -75,18 +79,18 @@ w.add(PatchVec::Push("c"));
 assert_eq!(r.head(), vec!["a"]);
 
 // Writer commits their patches.
-let patches: usize = w.commit();
+let commit_info: CommitInfo = w.commit();
 // The 2 operation were commited locally
 // (only the Writer sees them).
-assert_eq!(patches, 2);
+assert_eq!(commit_info.patches, 2);
 
 // Readers still see old data.
 assert_eq!(r.head(), vec!["a"]);
 
 // Writer finally reveals those
 // changes by calling `push()`.
-let commits_pushed = w.push();
-assert_eq!(commits_pushed, 1);
+let push_info = w.push();
+assert_eq!(push_info.commits, 1);
 
 // Now readers see updates.
 let commit: CommitRef<Vec<&str>> = r.head();

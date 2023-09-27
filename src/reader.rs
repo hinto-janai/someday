@@ -233,6 +233,13 @@ where
 	pub fn head_owned(&self) -> CommitOwned<T> {
 		self.head().into_commit_owned()
 	}
+
+	/// How many [`Reader`]'s are there?
+	///
+	/// This is the same as [`Writer::reader_count()`].
+	pub fn reader_count(&self) -> usize {
+		Arc::strong_count(&self.arc)
+	}
 }
 
 impl<T: Apply<Patch>, Patch> From<&Writer<T, Patch>> for Reader<T> {
