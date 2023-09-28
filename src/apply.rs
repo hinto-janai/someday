@@ -12,7 +12,10 @@ use std::collections::HashMap;
 ///
 /// In other words, a [`Writer<T>`] mutates its `T` by [`Apply`]'ing the `Patch` onto `T`.
 ///
-/// You must implement what exactly your `Patch` does to your `T` in the method, [`Apply::apply()`].
+/// You must implement what exactly your `Patch` does to your `T` in the method, [`Apply::sync()`].
+///
+/// If you have a cheap way to de-duplicate your data, consider re-implementing
+/// the [`Apply::sync()`] method, as it gives access to the _most recent_ data.
 ///
 /// ## Safety
 /// **[`Apply::apply()`] must be deterministic.**
@@ -21,7 +24,7 @@ use std::collections::HashMap;
 /// cheaply reclaimed data if it has the opportunity to in [`Writer::push()`].
 ///
 /// If [`Apply::apply()`] is not implemented in a deterministic way, it will
-/// cause the [`Writer`] and [`Reader`]'s data to slowly drift part.
+/// cause the [`Writer`] and [`Reader`]'s data to drift part.
 ///
 /// ## Example
 /// In this example, we want a `Writer/Reader` combo guarding a [`HashMap`].
@@ -155,14 +158,66 @@ where
 	/// `reader` provides the most up-to-date copy of the data from the [`Reader`]'s
 	/// side, aka, it is the latest [`Commit`] that the `Writer` has [`Writer::push`]'ed.
 	///
-	/// This function will be called by the [`Writer`] when:
-	/// - Using commit operations such as [`Writer::commit()`], [`Writer::overwrite()`], etc.
-	/// - Re-applying patches to old re-claimed data in [`Writer::push()`]
-	///
 	/// Adding `Patch`'s with [`Writer::add()`] will not call this function.
 	///
 	/// Note that `patch` is `&mut` to be more flexible, although you must
 	/// not mutate `patch` in a way where the next time this is called it will
 	/// result in a non-deterministic changes.
 	fn apply(patch: &mut Patch, writer: &mut Self, reader: &Self);
+
+	/// Synchronize old data that was reclaimed by the [`Writer`] with the latest data
+	///
+	/// [`Apply::apply()`] will be called by the [`Writer`] when:
+	/// - Using commit operations such as [`Writer::commit()`], [`Writer::overwrite()`], etc.
+	///
+	/// [`Apply::sync()`] will be called by the [`Writer`] when:
+	/// - Re-applying patches to old re-claimed data in [`Writer::push()`]
+	///
+	/// Note that in case #1, `writer` data will be the most recent local
+	/// data and `reader` you'll have access to is old but in case #2,
+	/// `old_data` data will be the _old_ reclaimed [`Reader`] data (which is
+	/// now the [`Writer`]'s), and `latest_data` will be the _just then_ [`Writer::push()`]'ed data
+	/// (which is now viewable by all [`Reader`]'s)
+	///
+	/// For example:
+	///
+	/// | Apply Function | `writer` Timestamp | `reader` Timestamp |
+	/// |----------------|--------------------|--------------------|
+	/// | `apply()`      | 1000               | 999
+	/// | `sync()`       | 999                | 1000
+	///
+	/// In case #2 the [`Writer`] is re-applying your `Patch`'s to the old data.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// // Commit local changes.
+	/// w.add(PatchString::PushStr("hello".into()));
+	///
+	/// // Calls `Apply::apply()`
+	/// w.commit();
+	///
+	/// // Calls `Apply::sync()`
+	/// // (only if the Writer succesfully reclaimed the old data)
+	/// w.push();
+	/// ```
+	/// You can take advantage of this fact in your [`Apply::sync()`] implementation
+	/// because you have a direct reference to the latest data in `latest`
+	/// that you could use to de-duplicate or otherwise cheaply re-sync data.
+	///
+	/// By default [`Apply::sync()`] simply calls [`Apply::apply()`]
+	/// with your old `Patch`'s onto your old data, however if there
+	/// is a cheaper way to "fix" your data, consider re-implmenting this method.
+	///
+	/// ## Safety
+	/// **[`Apply::sync()`] must actually sync `old_data` and `latest_data` to be the same.**
+	///
+	/// If not, it will cause the [`Writer`] and [`Reader`]'s data to drift part.
+	fn sync(old_patches: &mut [Patch], old_data: &mut Self, latest_data: &Self) {
+		for mut patch in old_patches {
+			Self::apply(&mut patch, old_data, latest_data);
+		}
+	}
 }

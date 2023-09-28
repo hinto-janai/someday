@@ -39,8 +39,5 @@ jobs:
     - name: Test
       run: cargo test
 
-    - name: Bench
-      run: cargo bench --verbose
-
     - name: Build
       run: cargo build

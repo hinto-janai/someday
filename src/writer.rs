@@ -775,16 +775,15 @@ where
 			}, None)
 		}
 
-		// Set reclaiming flag.
-		self.reclaiming_true();
-
-		// Try to reclaim data.
-		let mut reclaimed = false;
-
 		// If the user wants to execute a function
 		// while waiting, do so and get the return value.
 		let return_value = function.map(|f| f(&self));
 
+		// Set reclaiming flags.
+		let mut reclaimed = false;
+		self.reclaiming_true();
+
+		// Try to reclaim data.
 		let mut local = match Arc::try_unwrap(old) {
 			// If there are no more dangling readers on the
 			// old Arc we can cheaply reclaim the old data.
@@ -828,8 +827,8 @@ where
 		// we're in a lot of trouble and will lock `Reader`'s.
 
 		// Re-apply patches to this old data.
-		for mut patch_old in self.patches_old.drain(..) {
-			Apply::apply(&mut patch_old, &mut local.data, &self.remote.data);
+		if reclaimed {
+			Apply::sync(&mut self.patches_old, &mut local.data, &self.remote.data);
 		}
 
 		// Re-initialize `self.local`.
@@ -837,6 +836,9 @@ where
 
 		// Set proper timestamp (we cloned reader's).
 		self.local().timestamp = current_timestamp;
+
+		// Clear patches.
+		self.patches_old.clear();
 
 		// Return how many commits we pushed.
 		(PushInfo {
@@ -1154,6 +1156,18 @@ where
 	/// Remove a stored tag from the [`Writer`]
 	///
 	/// This calls [`BTreeMap::remove()`] on this [`Writer`]'s internal tags.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	///
+	/// let tag = CommitRef::clone(&writer.tag());
+	///
+	/// let removed = writer.tag_remove(tag.timestamp()).unwrap();
+	///
+	/// assert_eq!(tag, removed);
+	/// ```
 	pub fn tag_remove(&mut self, timestamp: Timestamp) -> Option<CommitRef<T>> {
 		self.tags.remove(&timestamp)
 	}
@@ -1172,6 +1186,20 @@ where
 	/// The [`CommitRef`] returned is the _oldest_ one (smallest [`Timestamp`]).
 	///
 	/// This calls [`BTreeMap::pop_first()`] on this [`Writer`]'s internal tags.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	///
+	/// let tag_0 = CommitRef::clone(&writer.tag());
+	/// let tag_1 = CommitRef::clone(&writer.tag());
+	/// let tag_2 = CommitRef::clone(&writer.tag());
+	///
+	/// let removed = writer.tag_pop_oldest().unwrap();
+	///
+	/// assert_eq!(tag_0, removed);
+	/// ```
 	pub fn tag_pop_oldest(&mut self) -> Option<CommitRef<T>> {
 		self.tags.pop_first().map(|(_, c)| c)
 	}
@@ -1182,6 +1210,20 @@ where
 	/// The [`CommitRef`] returned is the _latest_ one (largest [`Timestamp`]).
 	///
 	/// This calls [`BTreeMap::pop_last()`] on this [`Writer`]'s internal tags.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	///
+	/// let tag_0 = CommitRef::clone(&writer.tag());
+	/// let tag_1 = CommitRef::clone(&writer.tag());
+	/// let tag_2 = CommitRef::clone(&writer.tag());
+	///
+	/// let removed = writer.tag_pop_latest().unwrap();
+	///
+	/// assert_eq!(tag_2, removed);
+	/// ```
 	pub fn tag_pop_latest(&mut self) -> Option<CommitRef<T>> {
 		self.tags.pop_last().map(|(_, c)| c)
 	}
