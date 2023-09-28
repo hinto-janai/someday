@@ -200,7 +200,7 @@ where
 	/// w.commit();
 	///
 	/// // Calls `Apply::sync()`
-	/// // (only if the Writer succesfully reclaimed the old data)
+	/// // (only if the Writer successfully reclaimed the old data)
 	/// w.push();
 	/// ```
 	/// You can take advantage of this fact in your [`Apply::sync()`] implementation
@@ -209,7 +209,7 @@ where
 	///
 	/// By default [`Apply::sync()`] simply calls [`Apply::apply()`]
 	/// with your old `Patch`'s onto your old data, however if there
-	/// is a cheaper way to "fix" your data, consider re-implmenting this method.
+	/// is a cheaper way to "fix" your data, consider re-implementing this method.
 	///
 	/// ## Safety
 	/// **[`Apply::sync()`] must actually sync `old_data` and `latest_data` to be the same.**
