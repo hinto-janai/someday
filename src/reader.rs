@@ -42,7 +42,7 @@ use crate::{
 /// ## Usage
 /// This example covers the typical usage of a `Reader`:
 /// - Creating some other [`Reader`]'s
-/// - Acquring the latest head [`Commit`] of data
+/// - Acquiring the latest head [`Commit`] of data
 /// - Viewing the data, the timestamp
 /// - Hanging onto that data for a while
 /// - Repeat
@@ -119,7 +119,9 @@ use crate::{
 /// 	last_head = reader.head();
 ///
 /// 	// Wait just a little...
-/// 	std::thread::sleep(std::time::Duration::from_millis(50));
+/// 	std::thread::sleep(std::time::Duration::from_millis(10));
+/// 	# // CI makes this non-reliable, add more sleep time.
+/// 	# std::thread::sleep(std::time::Duration::from_millis(90));
 ///
 /// 	new_head = reader.head();
 ///

@@ -14,7 +14,7 @@ macro_rules! impl_num {
 		pub enum [<Patch $num:camel>] {
 			/// Adds using the `+` operator
 			Add($num),
-			/// Substracts using the `-` operator
+			/// Subtracts using the `-` operator
 			Sub($num),
 			/// Divides using the `/` operator
 			Div($num),
@@ -27,7 +27,7 @@ macro_rules! impl_num {
 			Pow(u32),
 			/// Adds using `saturating_add()`
 			SaturatingAdd($num),
-			/// Substracts using `saturating_sub()`
+			/// Subtracts using `saturating_sub()`
 			SaturatingSub($num),
 			/// Divides using `saturating_div()`
 			SaturatingDiv($num),
@@ -38,7 +38,7 @@ macro_rules! impl_num {
 			SaturatingPow(u32),
 			/// Adds using `wrapping_add()`
 			WrappingAdd($num),
-			/// Substracts using `wrapping_sub()`
+			/// Subtracts using `wrapping_sub()`
 			WrappingSub($num),
 			/// Divides using `wrapping_div()`
 			WrappingDiv($num),

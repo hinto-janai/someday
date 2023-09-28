@@ -64,7 +64,7 @@ assert_eq!(commit.timestamp(), 0);
 
 // Writer writes some data, but does not commit.
 w.add(PatchVec::Push("b"));
-// Nothing commited, data still the same everywhere.
+// Nothing committed, data still the same everywhere.
 let data: &Vec<&str> = w.data();
 assert_eq!(*data, vec!["a"]);
 // Patches not yet commit:
@@ -80,7 +80,7 @@ assert_eq!(r.head(), vec!["a"]);
 
 // Writer commits their patches.
 let commit_info: CommitInfo = w.commit();
-// The 2 operation were commited locally
+// The 2 operation were committed locally
 // (only the Writer sees them).
 assert_eq!(commit_info.patches, 2);
 

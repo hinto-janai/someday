@@ -34,7 +34,7 @@ use crate::{
 /// - Creating some [`Reader`]'s
 /// - Adding some `Patch`'s
 /// - Viewing the staged `Patch`'s, modifying them
-/// - Commiting those changes
+/// - Committing those changes
 /// - Pushing those changes to the [`Reader`]'s
 ///
 /// ```rust
@@ -516,7 +516,7 @@ where
 	/// w.add(PatchString::PushStr("abc".into()));
 	///
 	/// if w.ahead() {
-	/// 	// won't happen, not yet commited
+	/// 	// won't happen, not yet committed
 	/// 	unreachable!();
 	/// 	// this call would be wasteful
 	/// 	w.push();
@@ -628,8 +628,8 @@ where
 	///     # other_b.wait();
 	/// 	// This `Reader` is holding onto the old data.
 	/// 	let moved = head;
-	/// 	// But will let go after 1 second.
-	/// 	sleep(Duration::from_secs(1));
+	/// 	// But will let go after 100 milliseconds.
+	/// 	sleep(Duration::from_millis(100));
 	/// });
 	///
 	/// # barrier.wait();
@@ -750,7 +750,7 @@ where
 		let current_timestamp = self.timestamp();
 
 		// SAFETY: we're temporarily "taking" our `self.local`.
-		// It will be unintialized for the time being.
+		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
 		let local = self.local_take();
 
@@ -827,7 +827,7 @@ where
 		// set `self.reclaiming` to `false` or else
 		// we're in a lot of trouble and will lock `Reader`'s.
 
-		// Re-apply patchs to this old data.
+		// Re-apply patches to this old data.
 		for mut patch_old in self.patches_old.drain(..) {
 			Apply::apply(&mut patch_old, &mut local.data, &self.remote.data);
 		}
@@ -955,7 +955,7 @@ where
 	/// // Overwrite the Writer with arbitrary data.
 	/// let old_data = w.overwrite(String::from("world")); // <- commit 5
 	/// assert_eq!(old_data, "hello");
-	/// // Commited patches were deleted.
+	/// // Committed patches were deleted.
 	/// assert_eq!(w.committed_patches().len(), 0);
 	///
 	///	// Push that change.
@@ -1460,7 +1460,7 @@ where
 	/// All the `Patch`'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
 	///
 	/// You are allowed to do anything to these `Patch`'s as they haven't
-	/// been commited yet and the `Writer` does not necessarily  need them.
+	/// been committed yet and the `Writer` does not necessarily  need them.
 	///
 	/// You can use something like `.staged().drain(..)` to get back all the `Patch`'s.
 	///
@@ -1575,7 +1575,7 @@ where
 	/// How many [`Reader`]'s are there?
 	///
 	/// Unlike [`Writer::head_readers()`], this doesn't count references
-	/// to the data, it counts how many [`Reader`] objects are in existance.
+	/// to the data, it counts how many [`Reader`] objects are in existence.
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
@@ -1667,7 +1667,7 @@ where
 	/// 1. The [`Writer`]'s local data
 	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
 	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
-	/// 4. The commited `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
+	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
