@@ -1,5 +1,11 @@
 //---------------------------------------------------------------------------------------------------- Use
-use std::sync::Arc;
+use std::{sync::{
+	Arc,
+	atomic::{
+		AtomicBool,
+		Ordering,
+	},
+}, time::Duration};
 use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
@@ -86,7 +92,7 @@ use crate::{
 /// 	// just for the example...
 /// 	loop {
 /// 		writer
-/// 			.add_and(PatchString::PushStr("abc".into()))
+/// 			.add(PatchString::PushStr("abc".into()))
 /// 			.commit_and()
 /// 			.push();
 /// 	}
@@ -136,6 +142,7 @@ where
 	T: Clone,
 {
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
+	pub(super) reclaiming: Arc<AtomicBool>,
 }
 
 impl<T> Reader<T>
@@ -143,7 +150,9 @@ where
 	T: Clone,
 {
 	#[inline]
-	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`]
+	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`].
+	///
+	/// This function will never block.
 	///
 	/// This will retrieve the latest data the [`Writer`] is willing
 	/// to share with [`Writer::push()`].
@@ -165,7 +174,7 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Writer commits some changes locally.
-	/// w.add_and(PatchString::Set("hello".into())).commit();
+	/// w.add(PatchString::Set("hello".into())).commit();
 	/// // Writer sees local changes.
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello");
@@ -200,6 +209,127 @@ where
 	}
 
 	#[inline]
+	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but wait a little to cooperate.
+	///
+	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
+	/// trying to reclaim old data, this function will wait for `duration` amount
+	/// of time before forcefully acquiring the latest [`CommitRef`] anyway.
+	///
+	/// Realistically, `duration` can be an insanely small number as
+	/// the time between the [`Writer`] pushing the data then trying
+	/// to reclaim the old data is a few atomic instructions.
+	///
+	/// `std::time::Duration::from_millis(1)` will most likely be more
+	/// than enough time for the [`Writer`] to finish.
+	pub fn head_wait(&self, duration: Duration) -> CommitRef<T> {
+		// Writer is not reclaiming, acquire head commit.
+		if !self.reclaiming() {
+			return self.head();
+		}
+
+		// Else sleep and acquire.
+		std::thread::sleep(duration);
+		self.head()
+	}
+
+	#[inline]
+	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but do something in the meanwhile if we can't.
+	///
+	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
+	/// trying to reclaim old data, this function will execute the function `F`
+	/// in the meanwhile before forcefully acquiring the latest [`CommitRef`] anyway.
+	///
+	/// This can be any arbitrary code, although the function
+	/// is provided with the same [`Reader`], `&self`.
+	///
+	/// If the [`CommitRef`] could be acquired immediately, then
+	/// the function `F` will execute and return.
+	///
+	/// The parameter `R` is the return value of the function, although
+	/// leaving it blank and having a non-returning function will
+	/// be enough inference that the return value is `()`.
+	///
+	/// Basically: "run the function `F` while we're waiting"
+	///
+	/// ## Example
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// /* Let's just pretend the Writer
+	///   is off doing some other things */
+	///       std::mem::forget(w);
+	///
+	/// // Some work to be done.
+	/// let mut hello_world   = String::from("hello");
+	/// let mut one_two_three = vec![0, 0, 0];
+	///
+	///	// Pass in a closure, so that we can do
+	/// // arbitrary things in the meanwhile...!
+	/// let (commit, return_value) = r.head_do(|reader| {
+	/// 	// While we're waiting, let's get some work done.
+	/// 	// Mutate this string.
+	/// 	hello_world.push_str(" world");
+	/// 	// Mutate this vector.
+	/// 	one_two_three[0] = 1;
+	/// 	one_two_three[1] = 2;
+	/// 	one_two_three[2] = 3; // <- `head_do()` returns `()`
+	/// });                       // although we could return anything
+	///                           // and it would be binded to `return_value`
+	///
+	///	// We have our commit:
+	/// assert_eq!(commit.timestamp(), 0);
+	/// // And we did some work
+	/// // while waiting to get it:
+	/// assert_eq!(hello_world,   "hello world");
+	/// assert_eq!(one_two_three, vec![1, 2, 3]);
+	/// assert_eq!(return_value,  ());
+	/// ```
+	pub fn head_do<F, R>(&self, f: F) -> (CommitRef<T>, R)
+	where
+		F: FnOnce(&Self) -> R
+	{
+		// Writer is not reclaiming, acquire head commit.
+		if !self.reclaiming() {
+			let head = self.head();
+			return (head, f(self));
+		}
+
+		// Else execute function and acquire.
+		let r = f(self);
+		(self.head(), r)
+	}
+
+	#[inline]
+	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`] ASAP, but while cooperating
+	///
+	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
+	/// trying to reclaim old data, this function will spin (`loop {}`)
+	/// until it is not.
+	///
+	/// Realistically, this function will only spin a few times
+	/// as the time between the [`Writer`] pushing the data then trying
+	/// to reclaim the old data is a few atomic instructions.
+	pub fn head_spin(&self) -> CommitRef<T> {
+		loop {
+			if !self.reclaiming() {
+				return self.head();
+			}
+		}
+	}
+
+	#[inline]
+	/// Attempt to acquire the latest [`CommitRef`] pushed by the [`Writer`]
+	///
+	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
+	/// trying to reclaim old data, this function will return `None`.
+	pub fn head_try(&self) -> Option<CommitRef<T>> {
+		match self.reclaiming() {
+			false => Some(self.head()),
+			true => None,
+		}
+	}
+
 	/// If the [`Reader`]'s current [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -207,7 +337,6 @@ where
 		self.head().ahead(commit)
 	}
 
-	#[inline]
 	/// If the [`Reader`]'s current [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -215,7 +344,6 @@ where
 		self.head().behind(commit)
 	}
 
-	#[inline]
 	/// Get the current [`Timestamp`] of the [`Reader`]'s head [`Commit`]
 	///
 	/// This returns the number indicating the [`Reader`]'s data's version.
@@ -238,6 +366,20 @@ where
 	/// This is the same as [`Writer::reader_count()`].
 	pub fn reader_count(&self) -> usize {
 		Arc::strong_count(&self.arc)
+	}
+
+	#[inline]
+	/// Is the [`Writer`] currently trying to reclaim old data?
+	///
+	/// This indicates if the [`Writer`] very recently [`Writer::push()`]'ed
+	/// new data and is waiting on old [`Reader`]'s to give up their data
+	/// so that the [`Writer`] can cheaply reclaim it.
+	///
+	/// If this returns `true`, that means calling [`Reader::head()`] will
+	/// actually return the _latest_ data and not impact the [`Writer`], as
+	/// they only care about the _old_ data.
+	pub fn reclaiming(&self) -> bool {
+		self.reclaiming.load(Ordering::Acquire)
 	}
 }
 

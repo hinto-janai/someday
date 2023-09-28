@@ -79,21 +79,22 @@ pub use writer::Writer;
 pub use apply::Apply;
 
 //---------------------------------------------------------------------------------------------------- Type alias.
-/// A [`usize`] representing a "version" of data
+/// An incrementing [`usize`] representing a new versions of data
 ///
-/// In [`Commit`] and [`CommitOwned`], there will be a
-/// [`Timestamp`] that represents that datas "version".
+/// In [`Commit`] objects, there is a [`Timestamp`] that represents that data's "version".
 ///
-/// Unlike `git`, this isn't a [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree).
+/// Unlike `git`, these aren't hashes in a [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree).
 ///
-/// This is just an incrementing [`usize`].
+/// It is just an incrementing [`usize`].
 ///
 /// Every time the [`Writer`] calls a commit operation like [`Writer::commit()`],
 /// or [`Writer::overwrite()`] the data's [`Timestamp`] is incremented by `1`, thus
 /// the timestamp is also how many commits there are.
 ///
 /// An invariant that can be relied upon is that the [`Writer`] can
-/// never "rebase", as in, go back in time with their [`Commit`]'s.
+/// never "rebase" (as in, go back in time with their [`Commit`]) more
+/// further back than the current [`Reader`]'s [`Timestamp`].
+///
 /// This means the [`Writer`]'s timestamp will _always_ be greater than or
 /// equal to the [`Reader`]'s timestamp.
 ///
@@ -149,14 +150,14 @@ pub fn new<T, Patch>(data: T) -> (Reader<T>, Writer<T, Patch>)
 where
 	T: Clone + Apply<Patch>,
 {
-	new_internal::<INIT_VEC_LEN, T, Patch>(data)
+	new_internal::<T, Patch>(data, INIT_VEC_LEN)
 }
 
 #[inline]
 /// Create a new [`Writer`] & [`Reader`] pair with a specified [`Apply`] capacity
 ///
-/// This is the same as [`new()`] although the
-/// generic constant `P` determines how much capacity the
+/// This is the same as [`crate::new()`] although the
+/// the input `capacity` determines how much capacity the
 /// [`Apply`] vectors will start out with.
 ///
 /// Use this if you are planning to [`Writer::add()`]
@@ -168,35 +169,82 @@ where
 /// use someday::patch::PatchString;
 ///
 /// // Can fit 128 patches without re-allocating.
-/// let (r, mut w) = someday::with_capacity::<128, String, PatchString>("".into());
+/// let (r, mut w) = someday::with_capacity::<String, PatchString>("".into(), 128);
+/// assert_eq!(w.staged().capacity(), 128);
+/// assert_eq!(w.committed_patches().capacity(), 128);
 /// ```
-pub fn with_capacity<const N: usize, T, Patch>(data: T) -> (Reader<T>, Writer<T, Patch>)
+pub fn with_capacity<T, Patch>(data: T, capacity: usize) -> (Reader<T>, Writer<T, Patch>)
 where
 	T: Clone + Apply<Patch>,
 {
-	new_internal::<N, T, Patch>(data)
+	new_internal::<T, Patch>(data, capacity)
 }
 
-fn new_internal<const N: usize, T, Patch>(data: T) -> (Reader<T>, Writer<T, Patch>)
+/// Create a default [`Writer`] & [`Reader`] pair
+///
+/// This is the same as [`crate::new()`] but it does not
+/// require input data, it will generate your data using
+/// [`Default::default()`].
+///
+/// ## Example
+/// ```rust
+/// use someday::patch::PatchString;
+///
+/// let (r, mut w) = someday::default::<String, PatchString>();
+/// assert_eq!(*w.data(), "");
+/// assert_eq!(r.head(), "");
+/// ```
+pub fn default<T, Patch>() -> (Reader<T>, Writer<T, Patch>)
+where
+	T: Default + Clone + Apply<Patch>,
+{
+	new_internal::<T, Patch>(Default::default(), INIT_VEC_LEN)
+}
+
+/// Create a default [`Writer`] & [`Reader`] pair with a specified [`Apply`] capacity
+///
+/// This is the same as [`crate::default`] combined with [`crate::with_capacity`].
+///
+/// ## Example
+/// ```rust
+/// use someday::patch::PatchString;
+///
+/// // Can fit 128 patches without re-allocating.
+/// let (r, mut w) = someday::default_with_capacity::<String, PatchString>(128);
+/// assert_eq!(w.staged().capacity(), 128);
+/// assert_eq!(w.committed_patches().capacity(), 128);
+/// ```
+pub fn default_with_capacity<T, Patch>(capacity: usize) -> (Reader<T>, Writer<T, Patch>)
+where
+	T: Default + Clone + Apply<Patch>,
+{
+	new_internal::<T, Patch>(Default::default(), capacity)
+}
+
+fn new_internal<T, Patch>(data: T, capacity: usize) -> (Reader<T>, Writer<T, Patch>)
 where
 	T: Clone + Apply<Patch>,
 {
-	use std::sync::Arc;
+	use std::sync::{Arc,atomic::AtomicBool};
 
 	let local  = CommitOwned { timestamp: 0, data };
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(arc_swap::ArcSwapAny::new(Arc::clone(&remote)));
+	let reclaiming = Arc::new(AtomicBool::new(false));
 
 	let reader = Reader {
 		arc: Arc::clone(&arc),
+		reclaiming: Arc::clone(&reclaiming),
 	};
 
 	let writer = Writer {
 		local: Some(local),
 		remote,
 		arc,
-		patches: Vec::with_capacity(N),
-		patches_old: Vec::with_capacity(N),
+		patches: Vec::with_capacity(capacity),
+		patches_old: Vec::with_capacity(capacity),
+		tags: std::collections::BTreeMap::new(),
+		reclaiming,
 	};
 
 	(reader, writer)

@@ -49,7 +49,9 @@ macro_rules! impl_num {
 			/// This function exists, so that all operations are accounted for in the wrapping operations.
 			WrappingRem($num),
 			#[doc = "This copies the `Reader`'s [`" $num "`] into `self`"]
-			CopyReader
+			CopyReader,
+			#[doc = "This sets the `Writer`'s [`" $num "`] to this value"]
+			Assign($num),
 		}
 
 		impl Apply<[<Patch $num:camel>]> for $num {
@@ -72,6 +74,7 @@ macro_rules! impl_num {
 					[<Patch $num:camel>]::WrappingMul(num) => *writer = writer.wrapping_mul(*num),
 					[<Patch $num:camel>]::WrappingRem(num) => *writer = writer.wrapping_rem(*num),
 					[<Patch $num:camel>]::CopyReader => *writer = *reader,
+					[<Patch $num:camel>]::Assign(num) => *writer = *num,
 				}
 			}
 		}

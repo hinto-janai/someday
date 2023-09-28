@@ -1,8 +1,8 @@
 mod string;
-pub use string::PatchString;
+pub use string::*;
 
 mod vec;
-pub use vec::PatchVec;
+pub use vec::*;
 
 mod num;
 pub use num::*;

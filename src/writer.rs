@@ -1,6 +1,21 @@
+use core::time;
 //---------------------------------------------------------------------------------------------------- Use
-use std::{sync::Arc, time::Duration};
+use std::{
+	sync::{Arc,
+		atomic::{
+			AtomicBool,
+			Ordering,
+		},
+	},
+	time::Duration,
+	borrow::Borrow,
+	collections::btree_map::{
+		BTreeMap,Entry,
+	}, mem::MaybeUninit,
+};
+
 use crate::{
+	INIT_VEC_LEN,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
 	apply::Apply,
@@ -138,6 +153,16 @@ where
 	// Patches that were already applied,
 	// that must be re-applied to the old `T`.
 	pub(super) patches_old: Vec<Patch>,
+
+	// This signifies to the `Reader`'s that the
+	// `Wrtier` is currently attempting to reclaim data.
+	//
+	// `Reader`'s can cooperate by sleeping
+	// for a bit // when they see this.
+	pub(super) reclaiming: Arc<AtomicBool>,
+
+	// Tags.
+	pub(super) tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
 
 //---------------------------------------------------------------------------------------------------- Writer
@@ -162,7 +187,10 @@ where
 	/// let readers: Vec<Reader<usize>> = vec![w.reader(); 100];
 	/// ```
 	pub fn reader(&self) -> Reader<T> {
-		Reader { arc: Arc::clone(&self.arc) }
+		Reader {
+			arc: Arc::clone(&self.arc),
+			reclaiming: Arc::clone(&self.reclaiming)
+		}
 	}
 
 	#[inline]
@@ -186,7 +214,7 @@ where
 	/// assert_eq!(r.head(),  0);
 	///
 	/// // Writer commits some changes.
-	/// w.add_and(PatchUsize::Add(1)).commit();
+	/// w.add(PatchUsize::Add(1)).commit();
 	///
 	/// //  Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
@@ -206,7 +234,7 @@ where
 	/// let (_, mut w) = someday::new::<usize, PatchUsize>(0);
 	///
 	/// // Writer commits some changes.
-	/// w.add_and(PatchUsize::Add(1)).commit();
+	/// w.add(PatchUsize::Add(1)).commit();
 	///
 	/// // Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
@@ -239,7 +267,7 @@ where
 	/// assert_eq!(commit.data,      500);
 	///
 	/// // Writer commits some changes.
-	/// w.add_and(PatchUsize::Add(1)).commit();
+	/// w.add(PatchUsize::Add(1)).commit();
 	///
 	/// // Head commit is now changed.
 	/// let commit: &CommitOwned<usize> = w.head();
@@ -268,7 +296,7 @@ where
 	/// assert_eq!(*commit.data(),     500);
 	///
 	/// // Writer commits & pushes some changes.
-	/// w.add_and(PatchUsize::Add(1)).commit_and().push();
+	/// w.add(PatchUsize::Add(1)).commit_and().push();
 	///
 	/// // Reader's head commit is now changed.
 	/// let commit: &CommitOwned<usize> = w.head_remote();
@@ -320,6 +348,8 @@ where
 	/// [`Commit`]-like operations are when these patches
 	/// are [`Apply`]'ed to your data.
 	///
+	/// This returns `self` for method chaining.
+	///
 	/// ```
 	/// # use someday::*;
 	/// # use someday::patch::*;
@@ -335,14 +365,7 @@ where
 	/// w.commit();
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn add(&mut self, patch: Patch) {
-		self.patches.push(patch);
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::add()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn add_and(&mut self, patch: Patch) -> &mut Self {
+	pub fn add(&mut self, patch: Patch) -> &mut Self {
 		self.patches.push(patch);
 		self
 	}
@@ -354,6 +377,8 @@ where
 	/// it takes an [`Iterator`] of `Patch`'s and add those.
 	///
 	/// This [`Iterator`] could be [`Vec`], [`slice`], etc.
+	///
+	/// This returns `self` for method chaining.
 	///
 	/// ```
 	/// # use someday::*;
@@ -376,14 +401,7 @@ where
 	/// w.commit();
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn add_iter(&mut self, patches: impl Iterator<Item = Patch>) {
-		self.patches.extend(patches);
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::add_iter()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn add_iter_and(&mut self, patches: impl Iterator<Item = Patch>) -> &mut Self {
+	pub fn add_iter(&mut self, patches: impl Iterator<Item = Patch>) -> &mut Self {
 		self.patches.extend(patches);
 		self
 	}
@@ -391,12 +409,15 @@ where
 	#[inline]
 	/// [`Apply`] all the `Patch`'s that were [`add()`](Writer::add)'ed
 	///
-	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`,
+	/// but only if there were `Patch`'s to actually [`Apply`]. In other
+	/// words, if you did not call [`add()`](Writer::add) before this,
+	/// [`commit()`](Writer::commit) will do nothing.
 	///
 	/// This immediately calls [`Apply::apply`] with
 	/// your `Patch`'s onto your data `T`.
 	///
-	/// The new [`CommitRef`] created from this will become
+	/// The new [`Commit`] created from this will become
 	/// the [`Writer`]'s new [`Writer::head()`].
 	///
 	/// You can [`commit()`](Writer::commit) multiple times and
@@ -417,7 +438,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // And and commit a patch.
-	/// w.add_and(PatchUsize::Add(123)).commit();
+	/// w.add(PatchUsize::Add(123)).commit();
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(*w.head(), 123);
 	/// ```
@@ -429,13 +450,27 @@ where
 	/// This function is the same as [`Writer::commit()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn commit_and(&mut self) -> &mut Self {
-		drop(self.commit_inner()); // probably optimized away
+		self.commit_inner();
 		self
 	}
 
 	fn commit_inner(&mut self) -> CommitInfo {
 		let patches = self.patches.len();
 
+		// Early return if there was nothing to do.
+		if patches == 0 {
+			return CommitInfo {
+				patches: 0,
+				timestamp_diff: self.timestamp_diff(),
+			};
+		} else {
+			self.local().timestamp += 1;
+		}
+
+		// Pre-allocate some space for the new patches.
+		self.patches_old.reserve_exact(patches);
+
+		// Apply the patches and add to the old vector.
 		for mut patch in self.patches.drain(..) {
 			Apply::apply(
 				&mut patch,
@@ -444,8 +479,6 @@ where
 			);
 			self.patches_old.push(patch);
 		}
-
-		self.local().timestamp += 1;
 
 		CommitInfo {
 			patches,
@@ -502,14 +535,14 @@ where
 	/// }
 	/// ```
 	pub fn push(&mut self) -> PushInfo {
-		self.push_inner::<false>(None)
+		self.push_inner::<false, ()>(None, None::<fn(&Self)>).0
 	}
 
 	#[inline]
 	/// This function is the same as [`Writer::push()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_and(&mut self) -> &mut Self {
-		drop(self.push_inner::<false>(None));
+		self.push_inner::<false, ()>(None, None::<fn(&Self)>);
 		self
 	}
 
@@ -556,7 +589,111 @@ where
 	/// assert_eq!(commit_info.reclaimed, true);
 	/// ```
 	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
-		self.push_inner::<false>(Some(duration))
+		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>).0
+	}
+
+	/// This function is the same as [`Writer::push_wait()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn push_wait_and(&mut self, duration: Duration) -> &mut Self {
+		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>);
+		self
+	}
+
+	#[inline]
+	/// This function is the same as [`Writer::push()`]
+	/// but it will execute the function `F` in the meanwhile before
+	/// attempting to reclaim the old [`Reader`] data.
+	///
+	/// This can be any arbitrary code, although the function
+	/// is provided with the same [`Writer`], `&self`.
+	///
+	/// The parameter `R` is the return value of the function, although
+	/// leaving it blank and having a non-returning function will
+	/// be enough inference that the return value is `()`.
+	///
+	/// Basically: "run the function `F` while we're waiting"
+	///
+	/// This is useful to get some work done before waiting
+	/// on the [`Reader`]'s to drop old copies of data.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{sync::*,thread::*,time::*,collections::*};
+	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// # let barrier  = Arc::new(Barrier::new(2));
+	/// # let other_b = barrier.clone();
+	/// let head = r.head();
+	/// spawn(move || {
+	///     # other_b.wait();
+	/// 	// This `Reader` is holding onto the old data.
+	/// 	let moved = head;
+	/// 	// But will let go after 1 second.
+	/// 	sleep(Duration::from_secs(1));
+	/// });
+	///
+	/// # barrier.wait();
+	/// // Some work to be done.
+	/// let mut hashmap = HashMap::<usize, String>::new();
+	/// let mut vec     = vec![];
+	///
+	/// // Commit.
+	/// // Now the `Writer` is ahead by 1 commit, while
+	/// // the `Reader` is hanging onto the old one.
+	/// w.add(PatchString::PushStr("abc".into()));
+	/// w.commit();
+	///
+	///	// Pass in a closure, so that we can do
+	/// // arbitrary things in the meanwhile...!
+	/// let (push_info, return_value) = w.push_do(|w| {
+	/// 	// While we're waiting, let's get some work done.
+	/// 	// Add a bunch of data to this HashMap.
+	/// 	(0..1_000).for_each(|i| {
+	/// 		hashmap.insert(i, format!("{i}"));
+	/// 	});
+	/// 	// Add some data to the vector.
+	/// 	(0..1_000).for_each(|_| {
+	///			vec.push(format!("aaaaaaaaaaaaaaaa"));
+	/// 	}); // <- `push_do()` returns `()`
+	/// 	# sleep(Duration::from_secs(1));
+	/// });     // although we could return anything
+	///         // and it would be binded to `return_value`
+	///
+	/// // At this point, the old `Reader`'s have
+	/// // probably all dropped their old references
+	/// // and we can probably cheaply reclaim our
+	/// // old data back.
+	///
+	///	// And yes, looks like we got it back cheaply:
+	/// assert_eq!(push_info.reclaimed, true);
+	///
+	/// // And we did some work
+	/// // while waiting to get it:
+	/// assert_eq!(hashmap.len(), 1_000);
+	/// assert_eq!(vec.len(), 1_000);
+	/// assert_eq!(return_value, ());
+	/// ```
+	pub fn push_do<F, R>(&mut self, f: F) -> (PushInfo, R)
+	where
+		F: FnOnce(&Self) -> R
+	{
+		let (push_info, r) = self.push_inner::<false, R>(None, Some(f));
+
+		// SAFETY: we _know_ `R` will be a `Some`
+		// because we provided a `Some`. `push_inner()`
+		// will always return a Some(value).
+		(push_info, unsafe { r.unwrap_unchecked() })
+	}
+
+	#[inline]
+	/// This function is the same as [`Writer::push_do()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn push_do_and<F, R>(&mut self, f: F) -> &mut Self
+	where
+		F: FnOnce(&Self) -> R
+	{
+		self.push_inner::<false, R>(None, Some(f));
+		self
 	}
 
 	#[inline]
@@ -592,18 +729,23 @@ where
 	/// assert_eq!(push_status.commits, 1);
 	/// ```
 	pub fn push_clone(&mut self) -> PushInfo {
-		self.push_inner::<true>(None)
+		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
 	}
 
 	#[inline]
 	/// This function is the same as [`Writer::push_clone()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_clone_and(&mut self) -> &mut Self {
-		drop(self.push_inner::<true>(None));
+		self.push_inner::<true, ()>(None, None::<fn(&Self)>);
 		self
 	}
 
-	fn push_inner<const CLONE: bool>(&mut self, duration: Option<Duration>) -> PushInfo {
+	fn push_inner<const CLONE: bool, R>(
+		&mut self,
+		duration: Option<Duration>,
+		function: Option<impl FnOnce(&Self) -> R>,
+	) -> (PushInfo, Option<R>)
+	{
 		let timestamp_diff    = self.timestamp_diff();
 		let current_timestamp = self.timestamp();
 
@@ -626,19 +768,28 @@ where
 			self.local = Some((*self.remote).clone());
 			self.local().timestamp = current_timestamp;
 			self.patches_old.clear();
-			return PushInfo {
+			return (PushInfo {
 				timestamp: current_timestamp,
 				commits: timestamp_diff,
 				reclaimed: false,
-			}
+			}, None)
 		}
+
+		// Set reclaiming flag.
+		self.reclaiming_true();
 
 		// Try to reclaim data.
 		let mut reclaimed = false;
+
+		// If the user wants to execute a function
+		// while waiting, do so and get the return value.
+		let return_value = function.map(|f| f(&self));
+
 		let mut local = match Arc::try_unwrap(old) {
 			// If there are no more dangling readers on the
 			// old Arc we can cheaply reclaim the old data.
 			Ok(old) => {
+				self.reclaiming_false();
 				reclaimed = true;
 				old
 			},
@@ -648,12 +799,17 @@ where
 			Err(old) => {
 				if let Some(duration) = duration {
 					// Sleep.
+					self.reclaiming_false();
 					std::thread::sleep(duration);
+					self.reclaiming_true();
+
 					// Try again.
 					if let Some(old) = Arc::into_inner(old) {
+						self.reclaiming_false();
 						reclaimed = true;
 						old
 					} else {
+						self.reclaiming_false();
 						(*self.remote).clone()
 					}
 				} else {
@@ -661,10 +817,15 @@ where
 					// As to not wait on them, just expensively clone
 					// the inner data to have a mutually exclusive
 					// up-to-date local copy.
+					self.reclaiming_false();
 					(*self.remote).clone()
 				}
 			},
 		};
+
+		// INVARIANT: ALL the branches above must
+		// set `self.reclaiming` to `false` or else
+		// we're in a lot of trouble and will lock `Reader`'s.
 
 		// Re-apply patchs to this old data.
 		for mut patch_old in self.patches_old.drain(..) {
@@ -678,11 +839,11 @@ where
 		self.local().timestamp = current_timestamp;
 
 		// Return how many commits we pushed.
-		PushInfo {
+		(PushInfo {
 			timestamp: current_timestamp,
 			commits: timestamp_diff,
 			reclaimed
-		}
+		}, return_value)
 	}
 
 	#[inline]
@@ -716,7 +877,7 @@ where
 	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
 	///
 	/// // Commit local changes.
-	/// w.add_and(PatchString::PushStr("hello".into())).commit();
+	/// w.add(PatchString::PushStr("hello".into())).commit();
 	/// assert_eq!(w.head(), "hello");
 	///
 	/// // Reader's sees nothing
@@ -737,7 +898,7 @@ where
 	/// This function is the same as [`Writer::pull()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn pull_and(&mut self) -> &mut Self {
-		drop(self.pull_inner());
+		self.pull_inner();
 		self
 	}
 
@@ -775,9 +936,9 @@ where
 	///
 	/// // Push changes.
 	/// w
-	/// 	.add_and(PatchString::PushStr("hello".into()))
-	/// 	.commit_and()
-	/// 	.push(); // <- commit 1
+	/// 	.add(PatchString::PushStr("hello".into()))
+	/// 	.commit_and() // <- commit 1
+	/// 	.push();
 	///
 	/// assert_eq!(w.timestamp(), 1);
 	///
@@ -786,9 +947,9 @@ where
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
-	/// w.add_and(PatchString::Set("hello".into())).commit(); // <- commit 2
-	/// w.add_and(PatchString::Set("hello".into())).commit(); // <- commit 3
-	/// w.add_and(PatchString::Set("hello".into())).commit(); // <- commit 4
+	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 2
+	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 3
+	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 4
 	/// assert_eq!(w.committed_patches().len(), 3);
 	///
 	/// // Overwrite the Writer with arbitrary data.
@@ -815,7 +976,7 @@ where
 	/// This function is the same as [`Writer::overwrite()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn overwrite_and(&mut self, data: T) -> &mut Self {
-		drop(self.overwrite_inner(data));
+		self.overwrite_inner(data);
 		self
 	}
 
@@ -827,6 +988,218 @@ where
 		// our data anyway.
 		self.patches_old.clear();
 		self.local_swap(CommitOwned { timestamp: self.timestamp() + 1, data })
+	}
+
+	#[inline]
+	/// Store the latest [`Reader`] head [`Commit`] (cheaply)
+	///
+	/// This stores the latest [`Reader`] [`Commit`]
+	/// (aka, whatever [`Reader::head()`] would return)
+	/// into the [`Writer`]'s local storage.
+	///
+	/// These tags can be inspected later with [`Writer::tags()`].
+	///
+	/// If [`Writer::tag()`] is never used, it will never allocate space.
+	///
+	/// This returns the tagged [`CommitRef`] that was stored.
+	///
+	/// ## Why does this exist?
+	/// You could store your own collection of [`CommitRef`]'s alongside
+	/// your [`Writer`] and achieve similar results, however there are
+	/// benefits to [`Writer`] coming with one built-in:
+	///
+	/// 1. It logically associates [`Commit`]'s with a certain [`Writer`]
+	/// 2. The invariant that all [`Commit`]'s tagged are/were valid [`Commit`]'s
+	/// to both the [`Writer`] and [`Reader`] is always upheld as the [`Writer`]
+	/// does not provide mutable access to the inner [`Commit`] data or [`Timestamp`]'s
+	///
+	/// ## Note
+	/// This stores the **Reader's** latest [`Commit`], not the Writer's.
+	///
+	/// The reason why the [`Writer`]'s commit cannot be tagged is that
+	/// the [`Writer`]'s commit is a local, mutable, non-shared `CommitOwned<T>`
+	/// instead of a shared `CommitRef<T>`, thus tagging it would require
+	/// cloning it into another "shared" copy, which may be expensive.
+	///
+	/// You can always [`Writer::push_and()`] + [`Writer::tag()`]
+	/// to push the latest commit, then tag it.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	///
+	/// // Push a change.
+	/// w.add(PatchString::PushStr("a".into())).commit_and().push();
+	///
+	///	// Tag that change, and clone it (this is cheap).
+	/// let tag = CommitRef::clone(w.tag());
+	///
+	/// // This tag is the same as the Reader's head Commit.
+	/// assert_eq!(tag, r.head());
+	/// assert_eq!(tag.timestamp(), 1);
+	///
+	/// // Push a whole bunch changes.
+	/// for _ in 0..100 {
+	/// 	w.add(PatchString::PushStr("b".into())).commit_and().push();
+	/// }
+	///	assert_eq!(w.timestamp(), 101);
+	///	assert_eq!(r.timestamp(), 101);
+	///
+	/// // Writer is still holding onto the tag, so remove it.
+	/// let removed_tag = w.tag_remove(tag.timestamp()).unwrap();
+	/// assert_eq!(removed_tag, tag);
+	///
+	/// // Atomically decrements a counter.
+	/// drop(removed_tag);
+	///
+	/// // SAFETY: now we know that we're the
+	/// // only ones holding onto this commit.
+	/// let inner_data: String = tag.try_unwrap().unwrap().data;
+	///
+	/// // Now, let's use that old tag to overwrite our current data.
+	/// //
+	/// // Note that the Writer can _never_ "rebase" and go back in time
+	/// // (at least, before the Reader's timestamp).
+	/// //
+	/// // This overwrite operation is the same as a regular commit,
+	/// // it takes the data and adds 1 to the timestamp, it does
+	/// // not reset the timestamp.
+	/// w.overwrite(inner_data);
+	/// assert_eq!(w.timestamp(), 102);
+	/// assert_eq!(w.data(), "a");
+	/// ```
+	pub fn tag(&mut self) -> &CommitRef<T> {
+		self.tags.entry(self.remote.timestamp)
+			.or_insert_with(|| CommitRef { inner: Arc::clone(&self.remote) })
+	}
+
+	/// This function is the same as [`Writer::tag()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn tag_and(&mut self) -> &mut Self {
+		if let Entry::Vacant(entry) = self.tags.entry(self.remote.timestamp) {
+			let head_remote = Arc::clone(&self.remote);
+			entry.insert(CommitRef { inner: head_remote });
+		}
+		self
+	}
+
+	#[inline]
+	/// Clear all the stored [`Writer`] tags
+	///
+	/// This calls [`BTreeMap::clear()`] on this [`Writer`]'s internal tags.
+	pub fn tag_clear(&mut self) -> &mut Self {
+		self.tags.clear();
+		self
+	}
+
+	/// Retains only the tags specified by the predicate
+	///
+	/// In other words, remove all tags for which `F` returns false.
+	///
+	/// The elements are visited in ascending key order.
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	///
+	/// // Tag this "aaa" commit.
+	/// writer.tag();
+	///
+	/// // Push and tag a whole bunch changes.
+	/// for i in 1..100 {
+	/// 	writer
+	/// 		.add(PatchString::Set("bbb".into()))
+	/// 		.commit_and()
+	/// 		.push_and()
+	/// 		.tag();
+	/// }
+	///
+	/// assert_eq!(writer.tags().len(), 100);
+	///
+	/// // Only retain the tags where the
+	/// // commit data value is "aaa".
+	/// writer.tag_retain(|timestamp, commit| *commit.data() == "aaa");
+	///
+	/// // Just 1 tag now.
+	/// assert_eq!(writer.tags().len(), 1);
+	/// assert_eq!(*writer.tags().get(&0).unwrap().data(), "aaa");
+	/// ```
+	pub fn tag_retain<F>(&mut self, f: F) -> &mut Self
+	where
+		F: Fn(&Timestamp, &CommitRef<T>) -> bool,
+	{
+		// The normal `retain()` gives `&mut` access to the
+		// 2nd argument, but we need to uphold the invariant
+		// that timestamps + commits are always valid, and
+		// never randomly mutated by the user.
+		//
+		// So, we will iterate over our btree, marking
+		// which timestamps we need to remove, then sweep
+		// them all after.
+
+		self.tags
+			.iter_mut()                  // for each key, value
+			.filter(|(k, v)| !f(k, v))   // yield if F returns false
+			.map(|(k, _)| *k)            // yield the timestamp
+			.collect::<Vec<Timestamp>>() // collect them
+			.into_iter()                 // for each timestamp
+			.for_each(|timestamp| { self.tags.remove(&timestamp); }); // remove it
+
+		self
+	}
+
+	#[inline]
+	/// Remove a stored tag from the [`Writer`]
+	///
+	/// This calls [`BTreeMap::remove()`] on this [`Writer`]'s internal tags.
+	pub fn tag_remove(&mut self, timestamp: Timestamp) -> Option<CommitRef<T>> {
+		self.tags.remove(&timestamp)
+	}
+
+	#[inline]
+	/// This function is the same as [`Writer::tag_remove()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn tag_remove_and(&mut self, timestamp: Timestamp) -> &mut Self {
+		self.tags.remove(&timestamp);
+		self
+	}
+
+	#[inline]
+	/// Removes and returns the oldest tag from the [`Writer`]
+	///
+	/// The [`CommitRef`] returned is the _oldest_ one (smallest [`Timestamp`]).
+	///
+	/// This calls [`BTreeMap::pop_first()`] on this [`Writer`]'s internal tags.
+	pub fn tag_pop_oldest(&mut self) -> Option<CommitRef<T>> {
+		self.tags.pop_first().map(|(_, c)| c)
+	}
+
+	#[inline]
+	/// Removes and returns the last tag from the [`Writer`]
+	///
+	/// The [`CommitRef`] returned is the _latest_ one (largest [`Timestamp`]).
+	///
+	/// This calls [`BTreeMap::pop_last()`] on this [`Writer`]'s internal tags.
+	pub fn tag_pop_latest(&mut self) -> Option<CommitRef<T>> {
+		self.tags.pop_last().map(|(_, c)| c)
+	}
+
+	#[inline]
+	/// This function is the same as [`Writer::tag_pop_oldest()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn tag_pop_oldest_and(&mut self) -> &mut Self {
+		self.tags.pop_first();
+		self
+	}
+
+	#[inline]
+	/// This function is the same as [`Writer::tag_pop_latest()`]
+	/// but it returns the [`Writer`] back for method chaining.
+	pub fn tag_pop_latest_and(&mut self) -> &mut Self {
+		self.tags.pop_last();
+		self
 	}
 
 	#[inline]
@@ -847,7 +1220,7 @@ where
 	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
 	///
 	/// // Commit but don't push.
-	/// w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// w.add(PatchString::PushStr("abc".into())).commit();
 	///
 	/// // Writer and Reader's commit is different.
 	/// assert!(w.diff());
@@ -875,7 +1248,7 @@ where
 	///
 	/// // Commit 10 times but don't push.
 	/// for i in 0..10 {
-	/// 	w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(PatchString::PushStr("abc".into())).commit();
 	/// }
 	///
 	/// // Writer at timestamp 10.
@@ -903,7 +1276,7 @@ where
 	///
 	/// // Commit 10 times.
 	/// for i in 0..10 {
-	/// 	w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(PatchString::PushStr("abc".into())).commit();
 	/// }
 	/// // At timestamp 10.
 	/// assert_eq!(w.timestamp(), 10);
@@ -964,7 +1337,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// w.add(PatchString::PushStr("abc".into())).commit();
 	///
 	/// // At timestamp 1.
 	/// assert_eq!(w.timestamp(), 1);
@@ -992,7 +1365,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// w.add(PatchString::PushStr("abc".into())).commit();
 	///
 	/// // Writer is at timestamp 1.
 	/// assert_eq!(w.timestamp(), 1);
@@ -1027,11 +1400,11 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add_and(PatchString::PushStr("abc".into())).commit_and().push();
+	/// w.add(PatchString::PushStr("abc".into())).commit_and().push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	/// 	w.add_and(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(PatchString::PushStr("abc".into())).commit();
 	/// }
 	///
 	/// // Writer is at timestamp 5.
@@ -1046,13 +1419,18 @@ where
 		self.local_ref().timestamp - self.remote.timestamp
 	}
 
-	/// Restore all the staged changes
+	/// Restore all the staged changes.
 	///
-	/// This removes all the `Patch`'s that haven't yet been [`commit()`]'ed.
+	/// This removes all the `Patch`'s that haven't yet been [`commit()`](Writer::commit)'ed.
 	///
-	/// Calling `staged().clear()` would be equivalent.
+	/// Calling `Writer::staged().drain(..)` would be equivalent.
 	///
-	/// This function returns how many `Patch`'s were removed.
+	/// If there are `Patch`'s, this function will remove
+	/// and return them as a [`std::vec::Drain`] iterator.
+	///
+	/// If there are no `Patch`'s, this will return [`None`].
+	///
+	/// Dropping the [`std::vec::Drain`] will drop the `Patch`'s.
 	///
 	/// ```rust
 	/// # use someday::{*,patch::*};
@@ -1064,17 +1442,18 @@ where
 	/// assert_eq!(w.staged().len(), 1);
 	///
 	///	// Restore changes.
-	/// let removed = w.restore();
-	/// assert_eq!(removed, 1);
+	/// let drain = w.restore();
+	/// match drain {
+	/// 	Some(removed) => assert_eq!(removed.count(), 1),
+	/// 	_ => unreachable!(),
+	/// }
 	/// ```
-	pub fn restore(&mut self) -> usize {
-		let patch_len = self.patches.len();
-
-		if patch_len != 0 {
-			self.patches.clear();
+	pub fn restore(&mut self) -> Option<std::vec::Drain<'_, Patch>> {
+		if self.patches.is_empty() {
+			None
+		} else {
+			Some(self.patches.drain(..))
 		}
-
-		patch_len
 	}
 
 	#[inline]
@@ -1108,6 +1487,26 @@ where
 	/// ```
 	pub fn staged(&mut self) -> &mut Vec<Patch> {
 		&mut self.patches
+	}
+
+	#[inline]
+	/// Return all the tagged [`Commit`]'s
+	///
+	/// This returns a [`BTreeMap`] where the:
+	/// - Key is the [`Commit`]'s [`Timestamp`], and the
+	/// - Value is the shared [`CommitRef`] object itself
+	///
+	/// Mutable access to these tags are restricted in a way
+	/// such that these tags are guaranteed to have been valid
+	/// [`Commit`]'s that were [`push()`](Writer::push)'ed to the [`Reader`]'s.
+	///
+	/// Aka, these tags will never be arbitrary data.
+	///
+	/// Therefore the [`Timestamp`] and [`CommitRef`] data can be relied upon.
+	///
+	/// These "tags" are created with [`Writer::tag()`].
+	pub fn tags(&self) -> &BTreeMap<Timestamp, CommitRef<T>> {
+		&self.tags
 	}
 
 	#[inline]
@@ -1208,6 +1607,7 @@ where
 	/// consider using their individual methods instead.
 	pub fn status(&self) -> StatusInfo<'_, T, Patch> {
 		StatusInfo {
+			staged_patches: &self.patches,
 			committed_patches: self.committed_patches(),
 			head: self.head(),
 			head_remote: self.head_remote(),
@@ -1216,6 +1616,49 @@ where
 			timestamp: self.timestamp(),
 			timestamp_remote: self.timestamp_remote(),
 		}
+	}
+
+	/// Shrinks the capacity of the `Patch` [`Vec`]'s as much as possible
+	///
+	/// This calls [`Vec::shrink_to_fit()`] on the 2
+	/// internal [`Vec`]'s in [`Writer`] holding:
+	/// 1. The currently staged `Patch`'s
+	/// 2. The already committed `Patch`'s
+	///
+	/// ```rust
+	/// # use someday::{*,patch::*};
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut w) = someday::with_capacity::<String, PatchString>("".into(), 16);
+	///
+	/// // Capacity is 16.
+	/// assert_eq!(w.committed_patches().capacity(), 16);
+	/// assert_eq!(w.staged().capacity(),            16);
+	///
+	/// // Commit 32 `Patch`'s
+	/// for i in 0..32 {
+	/// 	w.add(PatchString::Set("".into())).commit();
+	/// }
+	/// // Stage 16 `Patch`'s
+	/// for i in 0..16 {
+	/// 	w.add(PatchString::Set("".into()));
+	/// }
+	///
+	/// // Commit capacity is now 32.
+	/// assert_eq!(w.committed_patches().capacity(), 32);
+	/// // This didn't change, we already had
+	/// // enough space to store them.
+	/// assert_eq!(w.staged().capacity(), 16);
+	///
+	/// // Commit, push, shrink.
+	/// w.commit_and().push_and().shrink_to_fit();
+	///
+	/// // They're now empty and taking 0 space.
+	/// assert_eq!(w.committed_patches().capacity(), 0);
+	/// assert_eq!(w.staged().capacity(), 0);
+	/// ```
+	pub fn shrink_to_fit(&mut self) {
+		self.patches.shrink_to_fit();
+		self.patches_old.shrink_to_fit();
 	}
 
 	/// Consume this [`Writer`] and return the inner components
@@ -1329,6 +1772,16 @@ where
 		// When it isn't (`commit()`), this function isn't used.
 		unsafe { self.local.as_ref().unwrap_unchecked() }
 	}
+
+	#[inline(always)]
+	fn reclaiming_false(&mut self) {
+		self.reclaiming.store(false, Ordering::Relaxed);
+	}
+
+	#[inline(always)]
+	fn reclaiming_true(&mut self) {
+		self.reclaiming.store(true, Ordering::Relaxed);
+	}
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
@@ -1340,30 +1793,66 @@ where
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("CommitOwned")
 			.field("local", &self.local)
-			.field("arc", &self.arc)
 			.field("remote", &self.remote)
+			.field("arc", &self.arc)
 			.field("patches", &self.patches)
+			.field("patches_old", &self.patches_old)
 			.finish()
+	}
+}
+
+impl<T, Patch> PartialEq for Writer<T, Patch>
+where
+	T: PartialEq + Apply<Patch>,
+	Patch: PartialEq,
+{
+	fn eq(&self, other: &Self) -> bool {
+		// We have `&` access which means
+		// there is no `&mut` access.
+		//
+		// If there is no `&mut` access then
+		// that means the `Writer`'s `self.remote`
+		// is equal to whatever `self.arc.load()`
+		// would produce, so we can skip this.
+		//
+		// self.arc         == other.arc &&
+
+		self.local       == other.local &&
+		self.remote      == other.remote &&
+		self.patches     == other.patches &&
+		self.patches_old == other.patches_old
 	}
 }
 
 impl<T, Patch> Default for Writer<T, Patch>
 where
-	T: Apply<Patch> + Default,
+	T: Default + Apply<Patch>,
 {
+	/// Only generates the [`Writer`].
+	///
+	/// This initializes your data `T` with [`Default::default()`].
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, w1) = someday::default::<usize, PatchUsize>();
+	/// let w2      = Writer::<usize, PatchUsize>::default();
+	///
+	/// assert_eq!(w1, w2);
+	/// ```
 	fn default() -> Self {
-		let local = CommitOwned { timestamp: 0, data: T::default() };
-		let remote   = Arc::new(local.clone());
-		let arc   = Arc::new(arc_swap::ArcSwapAny::new(Arc::clone(&remote)));
-
-		use crate::INIT_VEC_LEN;
+		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
+		let remote = Arc::new(local.clone());
+		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
+		let reclaiming = Arc::new(AtomicBool::new(false));
 
 		let writer = Writer {
 			local: Some(local),
-			arc,
 			remote,
+			arc,
 			patches: Vec::with_capacity(INIT_VEC_LEN),
 			patches_old: Vec::with_capacity(INIT_VEC_LEN),
+			reclaiming,
+			tags: BTreeMap::new(),
 		};
 
 		writer
@@ -1377,6 +1866,15 @@ where
 	type Target = T;
 
 	fn deref(&self) -> &Self::Target {
+		&self.local_ref().data
+	}
+}
+
+impl<T, Patch> Borrow<T> for Writer<T, Patch>
+where
+	T: Apply<Patch>,
+{
+	fn borrow(&self) -> &T {
 		&self.local_ref().data
 	}
 }

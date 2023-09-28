@@ -1,6 +1,8 @@
+//---------------------------------------------------------------------------------------------------- Use
 use crate::{Writer,Reader,Commit};
 use std::collections::HashMap;
 
+//---------------------------------------------------------------------------------------------------- Apply
 /// Objects that can be used to "apply" patches to other objects
 ///
 /// This is the trait that objects must implement to be

@@ -16,7 +16,7 @@ use crate::{
 ///
 /// ```rust
 /// # use someday::{*,patch::*};
-/// let (reader, _) = someday::new(String::from("hello"));
+/// let (reader, _) = someday::new::<String, PatchString>("hello".into());
 ///
 /// // This is a ref-counted String.
 /// let reference: CommitRef<String> = reader.head();
@@ -159,7 +159,7 @@ impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 /// [`CommitRef`] also implements convenience traits like [`PartialEq`] for your `T`:
 /// ```rust
 /// # use someday::{*,patch::*};
-/// let (reader, _) = someday::new(String::from("hello"));
+/// let (reader, _) = someday::new::<String, PatchString>("hello".into());
 ///
 /// let commit: CommitRef<String> = reader.head();
 ///
@@ -244,7 +244,6 @@ impl<T: PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
 		self.inner.data.partial_cmp(&other)
 	}
 }
-
 
 macro_rules! impl_traits {
 	($target:ty => $($from:ty),* $(,)?) => {

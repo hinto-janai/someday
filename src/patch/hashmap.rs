@@ -27,7 +27,6 @@ pub enum PatchHashMap<K, V> {
 	Reserve(usize),
 }
 
-
 //---------------------------------------------------------------------------------------------------- Apply Impl
 impl<K, V> Apply<PatchHashMap<K, V>> for HashMap<K, V>
 where

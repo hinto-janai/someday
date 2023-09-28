@@ -63,6 +63,8 @@ pub struct PullInfo<T> {
 /// If you only need 1 or a few of these fields, consider
 /// using their individual methods instead.
 pub struct StatusInfo<'a, T, Patch> {
+	/// [`Writer::staged`]
+	pub staged_patches: &'a Vec<Patch>,
 	/// [`Writer::committed_patches`]
 	pub committed_patches: &'a Vec<Patch>,
 	/// [`Writer::head`]

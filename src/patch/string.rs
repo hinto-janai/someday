@@ -9,6 +9,8 @@ use std::sync::Arc;
 //---------------------------------------------------------------------------------------------------- PatchString
 /// Common operations for [`String`]
 ///
+/// The input [`str`]'s are wrapped in [`Arc`] for de-duplication.
+///
 /// ```rust
 /// # use someday::*;
 /// # use someday::patch::*;
