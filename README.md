@@ -29,7 +29,7 @@ The [`Reader(s)`](struct.Reader.html):
 3. Will eventually catch up whenever the [`Writer`](https://docs.rs/someday/struct.Writer.html) calls [`push()`](https://docs.rs/someday/struct.Writer.html#method.push)
 
 ## Example
-<img src="https://github.com/hinto-janai/someday/assets/101352116/d0587e16-56f8-48ae-b9f4-631cc1aef450" width="50%"/>
+<img src="https://github.com/hinto-janai/someday/assets/101352116/5473432c-ff39-4c0a-9bf2-00bd97f084dd" width="60%"/>
 
 This example shows the typical use case where the [`Writer`](https://docs.rs/someday/struct.Writer.html):
 1. Adds some changes
