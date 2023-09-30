@@ -140,8 +140,6 @@ use crate::{
 /// ```
 #[derive(Clone,Debug)]
 pub struct Reader<T>
-where
-	T: Clone,
 {
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
 	pub(super) reclaiming: Arc<AtomicBool>,
@@ -176,7 +174,7 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Writer commits some changes locally.
-	/// w.add(PatchString::Set("hello".into())).commit();
+	/// w.add(PatchString::Assign("hello".into())).commit();
 	/// // Writer sees local changes.
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello");

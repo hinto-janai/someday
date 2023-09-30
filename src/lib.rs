@@ -76,7 +76,7 @@ pub use patch::*;
 pub use reader::Reader;
 pub use commit::{Commit,CommitRef,CommitOwned};
 pub use writer::Writer;
-pub use apply::Apply;
+pub use apply::{Apply,ApplyReturn,ApplyReturnLt};
 
 //---------------------------------------------------------------------------------------------------- Type alias.
 /// An incrementing [`usize`] representing a new versions of data

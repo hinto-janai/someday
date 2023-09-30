@@ -1,4 +1,3 @@
-use core::time;
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
 	sync::{Arc,
@@ -11,14 +10,15 @@ use std::{
 	borrow::Borrow,
 	collections::btree_map::{
 		BTreeMap,Entry,
-	}, mem::MaybeUninit,
+	},
+	marker::PhantomData,
 };
 
 use crate::{
 	INIT_VEC_LEN,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
-	apply::Apply,
+	apply::{Apply,ApplyReturn,ApplyReturnLt},
 	Timestamp,
 	info::{
 		CommitInfo,StatusInfo,
@@ -28,6 +28,9 @@ use crate::{
 
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`
+///
+/// [`Writer`] applies your provided [`Patch`](Apply)'s onto your data `T`
+/// and can [`push()`](Writer::push) that data off to [`Reader`]'s atomically.
 ///
 /// ## Usage
 /// This example covers the typical usage of a `Writer`:
@@ -127,17 +130,17 @@ where
 	// exclusive copy of the data.
 	//
 	// This is an `Option` only because there's
-	// a brief moment in `commit()` where we need
+	// a brief moment in `push()` where we need
 	// to send off `local`, but we can't yet swap it
 	// with the old data.
 	//
 	// It will be `None` in-between those moments and
 	// the invariant is that is MUST be `Some` before
-	// `commit()` is over.
+	// `push()` is over.
 	//
-	// In release builds `.unwrap_unchecked()` will be used.
+	// `.unwrap_unchecked()` will be used which will panic in debug builds.
 	//
-	// MaybeUninit probably works clippy is sending me spooky lints.
+	// MaybeUninit probably works too but clippy is sending me spooky lints.
 	pub(super) local: Option<CommitOwned<T>>,
 
 	// The current data the remote `Reader`'s can see.
@@ -155,10 +158,10 @@ where
 	pub(super) patches_old: Vec<Patch>,
 
 	// This signifies to the `Reader`'s that the
-	// `Wrtier` is currently attempting to reclaim data.
+	// `Writer` is currently attempting to reclaim data.
 	//
 	// `Reader`'s can cooperate by sleeping
-	// for a bit // when they see this.
+	// for a bit when they see this as `true`
 	pub(super) reclaiming: Arc<AtomicBool>,
 
 	// Tags.
@@ -454,6 +457,97 @@ where
 		self
 	}
 
+	#[inline]
+	/// Immediately [`commit()`](Writer::commit) an `Input`, and return its value
+	///
+	/// If your `T` implements [`ApplyReturn`] you can specialize
+	/// that some of your `Patch`'s can return values.
+	///
+	/// This is optional, but is useful for re-acquiring heavy & expensive
+	/// data from the [`Writer`]'s data without dropping it like a normal
+	/// [`commit()`](Writer::commit) would.
+	///
+	/// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
+	/// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
+	/// - Returns you the value
+	///
+	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	///
+	/// See [`ApplyReturn`] for more details.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::collections::HashMap;
+	/// // Add an expensive object to the HashMap.
+	/// let (_, mut writer) = someday::new(HashMap::from([
+	/// 	("key", vec!["very expensive vector".to_string(); 1_000])
+	/// ]));
+	///
+	/// assert_eq!(writer.timestamp(), 0);
+	///
+	/// // Actually let's remove it, but we still want it back.
+	/// let vec: Vec<String> =
+	/// 	writer.commit_return(PatchHashMapRemove("key"))
+	/// 	.unwrap();
+	///
+	/// // We got the very expensive object back instead of just
+	/// // throwing it away like `Apply::apply()` would have done.
+	/// assert_eq!(vec, vec!["very expensive vector".to_string(); 1_000]);
+	/// ```
+	pub fn commit_return<Input, Output>(&mut self, mut input: Input) -> Output
+	where
+		T: ApplyReturn<Patch, Input, Output>,
+		Patch: From<Input>,
+	{
+		// Apply the patch and add to the old vector.
+		let return_value = ApplyReturn::apply_return(
+			&mut input,
+			&mut Self::local_field(&mut self.local).data,
+			&self.remote.data,
+		);
+
+		self.patches_old.push(input.into());
+		self.local().timestamp += 1;
+
+		return_value
+	}
+
+	/// Immediately [`commit()`](Writer::commit) an `Input`, and return a value with a lifetime
+	///
+	/// If your `T` implements [`ApplyReturnLt`] you can specialize
+	/// that some of your `Patch`'s can return values with lifetimes back.
+	///
+	/// This is optional, but is useful for things like [`std::collections::HashMap::entry()`]
+	/// which returns an object bounded to the lifetime of the [`Writer`]'s data.
+	///
+	/// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
+	/// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
+	/// - Returns you the value
+	///
+	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	///
+	/// See [`ApplyReturnLt`] for more details.
+	pub fn commit_return_lt<'i, 'o, Input, Output>(&'i mut self, mut input: Input) -> Output
+	where
+		T: crate::ApplyReturnLt<'i, 'o, Patch, Input, Output>,
+		Patch: From<Input>,
+		Output: 'o,
+		'i: 'o,
+	{
+		self.local().timestamp += 1;
+
+		// Apply the patch and add to the old vector.
+		let return_value = crate::ApplyReturnLt::apply_return_ref(
+			&mut input,
+			&mut Self::local_field(&mut self.local).data,
+			&self.remote.data,
+		);
+
+		self.patches_old.push(input.into());
+
+		return_value
+	}
+
 	fn commit_inner(&mut self) -> CommitInfo {
 		let patches = self.patches.len();
 
@@ -484,6 +578,144 @@ where
 			patches,
 			timestamp_diff: self.timestamp_diff(),
 		}
+	}
+
+	/// Add multiple `Input`'s  and get a lazily-committing, lazily-returning [`Iterator`]
+	///
+	/// This is the same as the [`Writer::commit_return`] function but
+	/// it takes an [`Iterator`] of `Input`'s and commits them.
+	///
+	/// Note that [`Iterator`]'s are _lazy_, so if `.next()` is not called on the returned [`Iterator`]:
+	/// - The `Input`'s won't be applied
+	/// - No [`Commit`]'s will occur
+	/// - No return values will be returned
+	///
+	/// If either `.next()` is not called OR the input iterator
+	/// contained no patches, the [`Writer`]'s timestamp will _not_
+	/// change.
+	///
+	/// If there's at least 1 input, the timestamp will increment by 1.
+	///
+	/// You could selectively look within the returned data, `collect()`,
+	/// them, or do anything you would do with an [`Iterator`].
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::collections::HashMap;
+	/// // Create a HashMap with keys going from 0 to 1,000.
+	/// // with their value to the exact same number, but a String.
+	/// let hashmap = (0..1_000)
+	/// 	.map(|i| (i, format!("{i}")))
+	/// 	.collect::<HashMap<usize, String>>();
+	///
+	/// // Create Writer with that HashMap.
+	/// let (_, mut writer) = someday::new(hashmap);
+	///
+	/// assert_eq!(writer.data().len(), 1000);
+	///
+	/// // We're now going to remove those `0..1_000` key/value pairs.
+	/// let iterator = (0..1_000).map(|i| PatchHashMapRemove(i));
+	///
+	/// // And store the values in here.
+	/// let mut vec: Vec<String> = vec![];
+	///
+	/// // This `for` loop simply reads as:
+	/// //
+	/// // For each number 0..1_000, use it as a key into
+	/// // our HashMap, remove that value and return it to us.
+	/// //
+	/// // Each time we iterate (call `.next()` implcitly in this `for` loop) we are:
+	/// // 1. Adding our Patch
+	/// // 2. Commiting our Patch
+	/// // 3. Getting the return value
+	/// //
+	/// // If we were to `break` half-way through this iteration,
+	/// // we would leave half of the patches un-touched.
+	/// for (i, return_value) in writer.commit_return_iter(iterator).enumerate() {
+	///		// To be more clear with the types here:
+	/// 	// Returned from `.enumerate()
+	/// 	let i: usize = i;
+	/// 	// The return value from our patch
+	/// 	let return_value: Option<String> = return_value;
+	///
+	/// 	let string: String = return_value.unwrap();
+	///
+	/// 	// Assert it is `i` formatted.
+	/// 	assert_eq!(string, format!("{i}"));
+	///
+	/// 	// Store.
+	/// 	vec.push(string);
+	/// }
+	///
+	/// assert_eq!(vec.len(), 1_000);
+	/// assert_eq!(writer.data().len(), 0);
+	/// ```
+	pub fn commit_return_iter<Iter, Input, Output>(&mut self, patches: Iter) -> impl Iterator<Item = Output> + '_
+	where
+		T: ApplyReturn<Patch, Input, Output>,
+		Iter: Iterator<Item = Input> + 'static,
+		Patch: From<Input>,
+		Output: 'static,
+		Input: 'static,
+	{
+		struct CommitReturnIter<'a, T, Patch, Input, Output, Iter>
+		where
+			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+			Iter: Iterator<Item = Input>,
+			Patch: From<Input>,
+		{
+			// Our Writer.
+			writer: &'a mut Writer<T, Patch>,
+			// The iterator of patches.
+			patches: Iter,
+			// Gets set to `true` if the iterator
+			// yielded at least 1 value. It allows
+			// to know whether to += 1 the timestamp
+			// on drop().
+			some: bool,
+			_return: PhantomData<Output>,
+		}
+
+		impl<T, Patch, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+		where
+			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+			Iter: Iterator<Item = Input>,
+			Patch: From<Input>,
+		{
+			fn drop(&mut self) {
+				if self.some {
+					self.writer.local().timestamp += 1;
+				}
+			}
+		}
+
+		impl<T, Patch, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+		where
+			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+			Iter: Iterator<Item = Input>,
+			Patch: From<Input>,
+		{
+			type Item = Output;
+
+			fn next(&mut self) -> Option<Self::Item> {
+				match self.patches.next() {
+					Some(mut patch) => {
+						self.some = true;
+
+						let return_value = ApplyReturn::apply_return(
+							&mut patch,
+							&mut Writer::local_field(&mut self.writer.local).data,
+							&self.writer.remote.data,
+						);
+
+						self.writer.patches_old.push(patch.into());
+						Some(return_value)
+					},
+					_ => None,
+				}
+			}
+		}
+
+		CommitReturnIter { writer: self, patches, some: false, _return: PhantomData }
 	}
 
 	#[inline]
@@ -763,7 +995,7 @@ where
 
 		// Re-acquire a local copy of data.
 
-		// Return early if the user wants to deep-clone no matter what.
+		// Output early if the user wants to deep-clone no matter what.
 		if CLONE {
 			self.local = Some((*self.remote).clone());
 			self.local().timestamp = current_timestamp;
@@ -828,7 +1060,7 @@ where
 
 		// Re-apply patches to this old data.
 		if reclaimed {
-			Apply::sync(&mut self.patches_old, &mut local.data, &self.remote.data);
+			Apply::sync(self.patches_old.drain(..), &mut local.data, &self.remote.data);
 		}
 
 		// Re-initialize `self.local`.
@@ -840,7 +1072,7 @@ where
 		// Clear patches.
 		self.patches_old.clear();
 
-		// Return how many commits we pushed.
+		// Output how many commits we pushed.
 		(PushInfo {
 			timestamp: current_timestamp,
 			commits: timestamp_diff,
@@ -949,9 +1181,9 @@ where
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
-	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 2
-	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 3
-	/// w.add(PatchString::Set("hello".into())).commit(); // <- commit 4
+	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 2
+	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 3
+	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 4
 	/// assert_eq!(w.committed_patches().len(), 3);
 	///
 	/// // Overwrite the Writer with arbitrary data.
@@ -1112,7 +1344,7 @@ where
 	/// // Push and tag a whole bunch changes.
 	/// for i in 1..100 {
 	/// 	writer
-	/// 		.add(PatchString::Set("bbb".into()))
+	/// 		.add(PatchString::Assign("bbb".into()))
 	/// 		.commit_and()
 	/// 		.push_and()
 	/// 		.tag();
@@ -1122,7 +1354,7 @@ where
 	///
 	/// // Only retain the tags where the
 	/// // commit data value is "aaa".
-	/// writer.tag_retain(|timestamp, commit| *commit.data() == "aaa");
+	/// writer.tag_retain(|commit| *commit.data() == "aaa");
 	///
 	/// // Just 1 tag now.
 	/// assert_eq!(writer.tags().len(), 1);
@@ -1130,7 +1362,7 @@ where
 	/// ```
 	pub fn tag_retain<F>(&mut self, f: F) -> &mut Self
 	where
-		F: Fn(&Timestamp, &CommitRef<T>) -> bool,
+		F: Fn(&CommitRef<T>) -> bool,
 	{
 		// The normal `retain()` gives `&mut` access to the
 		// 2nd argument, but we need to uphold the invariant
@@ -1143,7 +1375,7 @@ where
 
 		self.tags
 			.iter_mut()                  // for each key, value
-			.filter(|(k, v)| !f(k, v))   // yield if F returns false
+			.filter(|(_, v)| !f(v))      // yield if F returns false
 			.map(|(k, _)| *k)            // yield the timestamp
 			.collect::<Vec<Timestamp>>() // collect them
 			.into_iter()                 // for each timestamp
@@ -1532,7 +1764,7 @@ where
 	}
 
 	#[inline]
-	/// Return all the tagged [`Commit`]'s
+	/// Output all the tagged [`Commit`]'s
 	///
 	/// This returns a [`BTreeMap`] where the:
 	/// - Key is the [`Commit`]'s [`Timestamp`], and the
@@ -1678,11 +1910,11 @@ where
 	///
 	/// // Commit 32 `Patch`'s
 	/// for i in 0..32 {
-	/// 	w.add(PatchString::Set("".into())).commit();
+	/// 	w.add(PatchString::Assign("".into())).commit();
 	/// }
 	/// // Stage 16 `Patch`'s
 	/// for i in 0..16 {
-	/// 	w.add(PatchString::Set("".into()));
+	/// 	w.add(PatchString::Assign("".into()));
 	/// }
 	///
 	/// // Commit capacity is now 32.
@@ -1757,7 +1989,7 @@ where
 	// HACK:
 	// These `local_*()` functions are a work around.
 	// Writer's local data is almost always initialized, but
-	// during `commit()` there's a brief moment where we send our
+	// during `push()` there's a brief moment where we send our
 	// data off to the readers, but we haven't reclaimed or cloned
 	// new data yet, so our local data is empty (which isn't allowed).
 	//
@@ -1839,6 +2071,8 @@ where
 			.field("arc", &self.arc)
 			.field("patches", &self.patches)
 			.field("patches_old", &self.patches_old)
+			.field("reclaiming", &self.reclaiming)
+			.field("tags", &self.tags)
 			.finish()
 	}
 }
@@ -1857,12 +2091,14 @@ where
 		// is equal to whatever `self.arc.load()`
 		// would produce, so we can skip this.
 		//
-		// self.arc         == other.arc &&
+		// self.arc         == other.arc
+		// self.reclaiming  == other.reclaiming
 
 		self.local       == other.local &&
 		self.remote      == other.remote &&
 		self.patches     == other.patches &&
-		self.patches_old == other.patches_old
+		self.patches_old == other.patches_old &&
+		self.tags        == other.tags
 	}
 }
 

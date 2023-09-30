@@ -17,6 +17,19 @@ use std::collections::HashMap;
 /// If you have a cheap way to de-duplicate your data, consider re-implementing
 /// the [`Apply::sync()`] method, as it gives access to the _most recent_ data.
 ///
+/// ## Return Values
+/// [`Apply::apply()`] drops objects within scope and returns nothing.
+///
+/// This is usually fine as old data is usually discarded
+/// anyway in the data structures that match `someday`'s use-case.
+///
+/// However, if you want access to returned values (e.g, to get back a heavy expensive value)
+/// then consider implementing the super-trait [`ApplyReturn`]. It is the exact same as [`Apply`]
+/// except that its main [`ApplyReturn::apply_return()`] function allows for returning a value.
+///
+/// All types that implement [`ApplyReturn`] will automatically
+/// implement [`Apply`] and just discard the return value.
+///
 /// ## Safety
 /// **[`Apply::apply()`] must be deterministic.**
 ///
@@ -211,13 +224,299 @@ where
 	/// with your old `Patch`'s onto your old data, however if there
 	/// is a cheaper way to "fix" your data, consider re-implementing this method.
 	///
+	/// The `old_patches` is a [`std::vec::Drain`] iterator that yields
+	/// full ownership of the `Patch` when iterated over.
+	///
 	/// ## Safety
 	/// **[`Apply::sync()`] must actually sync `old_data` and `latest_data` to be the same.**
 	///
 	/// If not, it will cause the [`Writer`] and [`Reader`]'s data to drift part.
-	fn sync(old_patches: &mut [Patch], old_data: &mut Self, latest_data: &Self) {
+	fn sync(old_patches: std::vec::Drain<'_, Patch>, old_data: &mut Self, latest_data: &Self) {
 		for mut patch in old_patches {
 			Self::apply(&mut patch, old_data, latest_data);
 		}
 	}
+}
+
+//----------------------------------------------------------------------------------------------------
+/// Objects that can be used to "apply" patches to other objects and return values
+///
+/// This trait is as optional extension to the [`Apply`] trait
+/// as it functions the same way, although allows for inputting/outputting an
+/// arbitrarily infinite amount of generic types for your [`Writer`]'s inner data `T`.
+///
+/// This lets you have generic patches and return types without:
+/// - Boxing a `dyn Trait`
+/// - Using `enum` + `match` even when you know _at compile time_ which variant it is
+///
+/// For example, given this `Patch`:
+/// ```rust
+/// enum PatchString {
+/// 	PushStr(String),
+/// 	Take,
+/// 	Length,
+/// }
+/// ```
+/// A function cannot abstract over all the
+/// different return values that these variants map to:
+/// ```rust,ignore
+/// // I know at compile time that this is
+/// // a `Take` operation, and that it
+/// // 100% will return a `String`...
+/// let _: CouldBeAnything = map.add(PatchString::Take);
+///
+/// fn take(patch: PatchTake, s: &mut String) -> CouldBeAnything {
+/// 	// But, I still have to match...!
+/// 	match patch {
+/// 		PatchString::PushStr(s) => s.push_str(s),     // This returns `()`
+/// 		PatchString::Take       => std::mem::take(s), // This returns `String`
+/// 		PatchString::Length     => s.len(),           // This returns `usize`
+/// 	}
+/// }
+/// ```
+/// If we wrapped every return value in a "return enum" so
+/// that the above code would compile, it would look like this:
+/// ```rust,ignore
+/// enum CouldBeAnything {
+/// 	Unit(()),
+/// 	String(String),
+/// 	Usize(usize),
+/// }
+///
+/// let output: CouldBeAnything = writer.add(PatchString::Take);
+///
+/// // I know at compile type that this is a
+/// // `String`, but I still have to `match`...!
+/// let actual_value = match output {
+/// 	/* useless matching */
+/// };
+///
+/// // Or unnecessarily call unwrap.
+/// let actual_value = output.unwrap();
+/// ```
+/// The usual solution to this is using [dynamic dispatch](https://doc.rust-lang.org/beta/book/ch17-02-trait-objects.html).
+///
+/// Although, [`ApplyReturn`] combined with [`Writer::commit_return()`] and/or [`Writer::commit_return_iter()`]
+/// allow for infinite compile-time functions with generic input that output generic data.
+///
+/// ## Implementing [`ApplyReturn`]
+/// The things `ApplyReturn` needs from you at compile-time to make this work:
+/// 1. A generic type `Input` that acts as your input data
+/// 2. A generic type `Output` that is the return value from your function
+/// 3. Your `Input` must implement [`Into`] for your `Patch` and your
+/// [`Apply::apply()`] must behave the same when encountering that `Patch`
+///
+/// Essentially, if your `Patch` is an `enum`:
+/// 1. You create a `struct` mapping to each `enum` variant you want to specialize for
+/// 2. You implement [`ApplyReturn`] on that `struct`
+/// 3. You pass the `struct` instead of the `enum` variant into [`Writer::commit_return()`] when you want a return value
+///
+/// Using the above example as a base:
+/// ```rust
+/// # use someday::{Writer,Apply,ApplyReturn};
+/// enum PatchString {
+/// 	PushStr(String),
+/// 	Take,
+/// 	Length,
+/// }
+///
+/// // A specialized struct, specifically for `PatchString::Take`.
+/// // This would contain your input data, although
+/// // in this case, it is just an empty marker.
+/// struct Take;
+///
+/// // We have to make sure the above type can
+/// // 100% losslessly convert to our real `Patch`.
+/// impl From<Take> for PatchString {
+/// 	fn from(value: Take) -> Self {
+/// 		PatchString::Take
+/// 	}
+/// }
+///
+/// // Now, we implement `ApplyReturn`, specifying:
+/// // - The target data   --------------------------
+/// // - The return value  --------------           |
+/// // - Our input data    --------     |           |
+/// // - Our real `Patch`  --     |     |           |
+/// //                      |     |     |           |
+/// //                      v     v     v           v
+/// impl ApplyReturn<PatchString, Take, String> for String {
+/// 	fn apply_return(
+/// 		input: &mut Take,
+/// 		writer: &mut Self,
+/// 		reader: &Self,
+/// 	) -> String {
+/// 		// Now we just implement the operation as normal,
+/// 		// which 100% returns the `String` that we want.
+/// 		std::mem::take(writer)
+/// 	}
+/// }
+///
+/// // Now, instead of using [`Writer::commit()`] which always returns `()`,
+/// // we can use [`Writer::commit_return()`] and get back the value we have specified:
+///
+/// let (_, mut writer) = someday::new(String::new());
+///
+/// // Add a regular patch.
+/// let patch = PatchString::PushStr("expensive_string_we_want_back".into());
+/// # let patch = someday::PatchString::PushStr("expensive_string_we_want_back".into());
+/// writer.add(patch).commit();
+/// assert_eq!(writer.data(), "expensive_string_we_want_back");
+///
+/// // `.commit_return()` doesn't take in a regular a
+/// // regular `PatchString`, we need to specify our
+/// // "special" `ApplyReturn` struct ------------|
+/// //                                            |
+/// let take = Take;                           // v
+/// # let take = someday::PatchStringTake;
+/// let string: String = writer.commit_return(take);
+///
+/// // We got the `String` back.
+/// assert_eq!(string, "expensive_string_we_want_back");
+/// assert_eq!(writer.data(), "");
+/// ```
+///
+/// # Implementing [`Apply`] "for free"
+/// Since [`ApplyReturn`] is a super-set of [`Apply`], you can implement
+/// [`Apply`] easily by re-using [`ApplyReturn::apply_return()`] and just
+/// dropping the return value:
+/// ```rust
+/// # use someday::{Apply,ApplyReturn};
+/// # enum PatchString { OtherPatches, Take }
+/// # struct Take;
+/// # impl From<Take> for PatchString {
+/// # 	fn from(value: Take) -> Self { PatchString::Take }
+/// # }
+/// # impl ApplyReturn<PatchString, Take, ()> for String {
+/// # 	fn apply_return(input: &mut Take, writer: &mut Self, reader: &Self) {}
+/// # }
+/// impl Apply<PatchString> for String {
+/// 	fn apply(
+/// 		patch: &mut PatchString,
+/// 		writer: &mut Self,
+/// 		reader: &Self,
+/// 	) {
+/// 		match patch {
+/// 			// The normal patches that return `()`.
+/// 			PatchString::OtherPatches => (),
+///
+/// 			/* more matches */
+///
+/// 			// This one is already implemented by our
+/// 			// specialized `Take` struct that implements `ApplyReturn`,
+/// 			// so just call that function and drop the value.
+/// 			PatchString::Take => { ApplyReturn::apply_return(&mut Take, writer, reader); },
+/// 		}
+/// 	}
+/// }
+/// ```
+///
+/// ## Safety
+/// **[`ApplyReturn::apply_return()`] must be deterministic and leave the data in the same
+/// state as [`Apply::apply()`] would.**
+///
+/// When you feed your `Input` into [`Writer::commit_return()`], the `Writer`:
+/// 1. Executes your `apply_return()`
+/// 2. Returns the value
+/// 3. Converts your `Input` into a `Patch` using your implementation of `.into()`
+///
+/// If the time comes where [`Writer`] has to re-apply your `Patch` during [`Writer::push()`],
+/// it will use [`Apply::apply`] and discard your value, even if it has a return value.
+///
+/// You should be aware of this when implementing [`ApplyReturn`].
+pub trait ApplyReturn<Patch, Input, Output>
+where
+	Self: Clone,
+	Patch: From<Input>,
+{
+	/// Using `input`, apply some changes to the [`Writer`]'s side of data in `writer`.
+	///
+	/// `reader` provides the most up-to-date copy of the data from the [`Reader`]'s
+	/// side, aka, it is the latest [`Commit`] that the `Writer` has [`Writer::push`]'ed.
+	///
+	/// The reason why you cannot [`Writer::add()`] patches then commit them later is that
+	/// [`Writer`] has no way of knowing which `Patch`'s expect return values or not.
+	///
+	/// Thus, you must add 1 patch and commit it immediately to get the return value back
+	/// (or use [`Writer::commit_return_iter()`] to get a iterator of the same value
+	/// back).
+	fn apply_return(input: &mut Input, writer: &mut Self, reader: &Self) -> Output;
+}
+
+/// Objects that can be used to "apply" patches to other objects and return values with lifetimes
+///
+/// This trait is an optional extension onto [`ApplyReturn`] which itself
+/// is an optional extension onto [`Apply`], see [`ApplyReturn`] for more details.
+///
+/// This documentation will assume you understand [`ApplyReturn`] and why it is needed.
+///
+/// This trait is solely for usage in [`Writer::commit_return_lt()`].
+///
+/// ## Returned Lifetime
+/// This trait, just like [`ApplyReturn`] returns a generic `Output`
+/// that you specify, although it includes 2 key liftimes:
+/// - `'d`: your data's lifetime
+/// - `'o`: your output's lifetime
+///
+/// These two are connected such that your data must live as long as your `Output`.
+///
+/// This is useful for functions which returned data which has the common pattern of:
+/// ```rust
+/// # struct Guard<'a, T>(std::marker::PhantomData<&'a T>);
+/// # trait Asdf<T> {
+/// fn return_mutable_ref(&mut self) -> &mut Guard<'_, T>;
+/// # }
+/// ```
+/// Where the returned `Guard` can only live as long as the `&mut self`.
+///
+/// A real-world example of this is [`std::collections::HashMap`]'s entry API:
+/// ```rust
+/// # use someday::*;
+/// # use std::collections::hash_map::*;
+/// // Create `Writer` with a `HashMap`.
+/// let (r, mut w) = someday::new(HashMap::<usize, String>::new());
+///
+/// // Add some data.
+/// w.add(PatchHashMap::Insert(0, "hello".into())).commit();
+/// assert_eq!(w.data().get(&0).unwrap(), "hello");
+///
+/// // Using the regular `commit_return()` we would get a...
+/// // Compile error!
+/// //
+/// // let entry = w.commit_return(PatchHashMapEntry(0));
+/// //     ^
+/// //     \ this may live longer than the writer,
+/// //       we cannot allow this to compile.
+///
+///
+/// // This is where `commit_return_lt()` is used, which
+/// // has lifetime bounds such that your `Writer` _must_
+/// // live as least as long as your `Output`
+/// let entry: Entry<'_, usize, String> = w.commit_return_lt(PatchHashMapEntry(0));
+///
+/// // We can use `entry` as long as `w` is alive.
+/// match entry {
+/// 	Entry::Occupied(o) => assert_eq!(o.get(), "hello"),
+/// 	_ => unreachable!(),
+/// }
+///
+/// // Attempting to use `entry` again after
+/// // this drop would be a compile error.
+/// drop(w);
+/// ```
+pub trait ApplyReturnLt<'d, 'o, Patch, Input, Output>
+where
+	Self: Clone,
+	Patch: From<Input>,
+	Output: 'o,
+	'd: 'o,
+{
+	/// Exact same as [`ApplyReturn::apply_return()`], but with lifetime bounds.
+	///
+	/// [`ApplyReturnLt`] ensures that:
+	/// 1. `writer` and `reader` (your data) has a lifetime  of '`d`
+	/// 2. Your `Output` has a lifetime of `'o`
+	/// 3. `'d` must outlive `'o`, or in other words, your `Output`
+	/// cannot live longer than `writer` and `reader`
+	fn apply_return_ref(input: &mut Input, writer: &'d mut Self, reader: &'d Self) -> Output;
 }

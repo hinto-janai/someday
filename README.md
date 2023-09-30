@@ -148,8 +148,6 @@ As the same with `left_right`, `someday` retains all the same downsides:
 
 - **Patches must be enumerated:** You must define the patches that can be applied to your data and _how_ they apply to your data
 
-- **Limited to simple patches:** Complex patches with lifetimes, return values, etc, are trickier to implement and sometimes impossible. The patches are usually limited to simple create/read/update/delete operations
-
 ## Use-case
 `someday` is useful in situations where:
 
