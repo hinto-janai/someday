@@ -158,11 +158,11 @@ where
 	pub(super) patches_old: Vec<Patch>,
 
 	// This signifies to the `Reader`'s that the
-	// `Writer` is currently attempting to reclaim data.
+	// `Writer` is currently attempting to swap data.
 	//
 	// `Reader`'s can cooperate by sleeping
 	// for a bit when they see this as `true`
-	pub(super) reclaiming: Arc<AtomicBool>,
+	pub(super) swapping: Arc<AtomicBool>,
 
 	// Tags.
 	pub(super) tags: BTreeMap<Timestamp, CommitRef<T>>,
@@ -192,7 +192,7 @@ where
 	pub fn reader(&self) -> Reader<T> {
 		Reader {
 			arc: Arc::clone(&self.arc),
-			reclaiming: Arc::clone(&self.reclaiming)
+			swapping: Arc::clone(&self.swapping)
 		}
 	}
 
@@ -527,17 +527,16 @@ where
 	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
 	///
 	/// See [`ApplyReturnLt`] for more details.
-	pub fn commit_return_lt<'i, 'o, Input, Output>(&'i mut self, mut input: Input) -> Output
+	pub fn commit_return_lt<'a, Input, Output>(&'a mut self, mut input: Input) -> Output
 	where
-		T: crate::ApplyReturnLt<'i, 'o, Patch, Input, Output>,
+		T: crate::ApplyReturnLt<'a, Patch, Input, Output>,
 		Patch: From<Input>,
-		Output: 'o,
-		'i: 'o,
+		Output: 'a,
 	{
 		self.local().timestamp += 1;
 
 		// Apply the patch and add to the old vector.
-		let return_value = crate::ApplyReturnLt::apply_return_ref(
+		let return_value = crate::ApplyReturnLt::apply_return_lt(
 			&mut input,
 			&mut Self::local_field(&mut self.local).data,
 			&self.remote.data,
@@ -767,6 +766,7 @@ where
 	/// }
 	/// ```
 	pub fn push(&mut self) -> PushInfo {
+		self.swapping_true();
 		self.push_inner::<false, ()>(None, None::<fn(&Self)>).0
 	}
 
@@ -774,6 +774,7 @@ where
 	/// This function is the same as [`Writer::push()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_and(&mut self) -> &mut Self {
+		self.swapping_true();
 		self.push_inner::<false, ()>(None, None::<fn(&Self)>);
 		self
 	}
@@ -821,12 +822,14 @@ where
 	/// assert_eq!(commit_info.reclaimed, true);
 	/// ```
 	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
+		self.swapping_true();
 		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>).0
 	}
 
 	/// This function is the same as [`Writer::push_wait()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_wait_and(&mut self, duration: Duration) -> &mut Self {
+		self.swapping_true();
 		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>);
 		self
 	}
@@ -839,7 +842,7 @@ where
 	/// This can be any arbitrary code, although the function
 	/// is provided with the same [`Writer`], `&self`.
 	///
-	/// The parameter `R` is the return value of the function, although
+	/// The generic `R` is the return value of the function, although
 	/// leaving it blank and having a non-returning function will
 	/// be enough inference that the return value is `()`.
 	///
@@ -872,8 +875,7 @@ where
 	/// // Commit.
 	/// // Now the `Writer` is ahead by 1 commit, while
 	/// // the `Reader` is hanging onto the old one.
-	/// w.add(PatchString::PushStr("abc".into()));
-	/// w.commit();
+	/// w.add(PatchString::PushStr("abc".into())).commit();
 	///
 	///	// Pass in a closure, so that we can do
 	/// // arbitrary things in the meanwhile...!
@@ -909,6 +911,7 @@ where
 	where
 		F: FnOnce(&Self) -> R
 	{
+		self.swapping_true();
 		let (push_info, r) = self.push_inner::<false, R>(None, Some(f));
 
 		// SAFETY: we _know_ `R` will be a `Some`
@@ -924,6 +927,7 @@ where
 	where
 		F: FnOnce(&Self) -> R
 	{
+		self.swapping_true();
 		self.push_inner::<false, R>(None, Some(f));
 		self
 	}
@@ -961,6 +965,9 @@ where
 	/// assert_eq!(push_status.commits, 1);
 	/// ```
 	pub fn push_clone(&mut self) -> PushInfo {
+		// If we're always cloning, there's no
+		// need to block Reader's for reclaimation
+		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
 	}
 
@@ -968,6 +975,9 @@ where
 	/// This function is the same as [`Writer::push_clone()`]
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_clone_and(&mut self) -> &mut Self {
+		// If we're always cloning, there's no
+		// need to block Reader's for reclaimation
+		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>);
 		self
 	}
@@ -978,30 +988,31 @@ where
 		function: Option<impl FnOnce(&Self) -> R>,
 	) -> (PushInfo, Option<R>)
 	{
-		let timestamp_diff    = self.timestamp_diff();
-		let current_timestamp = self.timestamp();
-
 		// SAFETY: we're temporarily "taking" our `self.local`.
 		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
 		let local = self.local_take();
-
 		// Swap the reader's `arc_swap` with our new local.
-		let local = Arc::new(local);
-		self.remote  = Arc::clone(&local);
+		let old = self.arc.swap(Arc::new(local));
 
-		// This is the old data from the old AtomicPtr.
-		let old = self.arc.swap(Arc::clone(&self.remote));
+		if !CLONE { self.swapping_false(); }
+
+		// To keep the "swapping" phase as small
+		// as possible to not block `Reader`'s, these
+		// operations are done here.
+		//
+		// `self.arc` now returns the new data.
+		self.remote = self.arc.load_full();
+		let timestamp_diff = self.remote.timestamp - old.timestamp;
 
 		// Re-acquire a local copy of data.
 
-		// Output early if the user wants to deep-clone no matter what.
+		// Return early if the user wants to deep-clone no matter what.
 		if CLONE {
 			self.local = Some((*self.remote).clone());
-			self.local().timestamp = current_timestamp;
 			self.patches_old.clear();
 			return (PushInfo {
-				timestamp: current_timestamp,
+				timestamp: self.remote.timestamp,
 				commits: timestamp_diff,
 				reclaimed: false,
 			}, None)
@@ -1011,70 +1022,54 @@ where
 		// while waiting, do so and get the return value.
 		let return_value = function.map(|f| f(&self));
 
-		// Set reclaiming flags.
-		let mut reclaimed = false;
-		self.reclaiming_true();
-
 		// Try to reclaim data.
-		let mut local = match Arc::try_unwrap(old) {
+		let (mut local, reclaimed) = match Arc::try_unwrap(old) {
 			// If there are no more dangling readers on the
 			// old Arc we can cheaply reclaim the old data.
-			Ok(old) => {
-				self.reclaiming_false();
-				reclaimed = true;
-				old
-			},
+			Ok(old) => (old, true),
 
 			// Else, if the user wants to
 			// sleep and try again, do so.
 			Err(old) => {
 				if let Some(duration) = duration {
 					// Sleep.
-					self.reclaiming_false();
 					std::thread::sleep(duration);
-					self.reclaiming_true();
-
 					// Try again.
 					if let Some(old) = Arc::into_inner(old) {
-						self.reclaiming_false();
-						reclaimed = true;
-						old
+						(old, true)
 					} else {
-						self.reclaiming_false();
-						(*self.remote).clone()
+						((*self.remote).clone(), false)
 					}
 				} else {
 					// Else, there are dangling readers left.
 					// As to not wait on them, just expensively clone
 					// the inner data to have a mutually exclusive
 					// up-to-date local copy.
-					self.reclaiming_false();
-					(*self.remote).clone()
+					((*self.remote).clone(), false)
 				}
 			},
 		};
 
 		// INVARIANT: ALL the branches above must
-		// set `self.reclaiming` to `false` or else
+		// set `self.swapping` to `false` or else
 		// we're in a lot of trouble and will lock `Reader`'s.
 
-		// Re-apply patches to this old data.
 		if reclaimed {
+			// Re-apply patches to this old data.
 			Apply::sync(self.patches_old.drain(..), &mut local.data, &self.remote.data);
+			// Set proper timestamp if we're reusing old data.
+			local.timestamp = self.remote.timestamp;
 		}
 
 		// Re-initialize `self.local`.
 		self.local = Some(local);
-
-		// Set proper timestamp (we cloned reader's).
-		self.local().timestamp = current_timestamp;
 
 		// Clear patches.
 		self.patches_old.clear();
 
 		// Output how many commits we pushed.
 		(PushInfo {
-			timestamp: current_timestamp,
+			timestamp: self.remote.timestamp,
 			commits: timestamp_diff,
 			reclaimed
 		}, return_value)
@@ -2048,13 +2043,13 @@ where
 	}
 
 	#[inline(always)]
-	fn reclaiming_false(&mut self) {
-		self.reclaiming.store(false, Ordering::Relaxed);
+	fn swapping_true(&mut self) {
+		self.swapping.store(true, Ordering::Relaxed);
 	}
 
 	#[inline(always)]
-	fn reclaiming_true(&mut self) {
-		self.reclaiming.store(true, Ordering::Relaxed);
+	fn swapping_false(&mut self) {
+		self.swapping.store(false, Ordering::Release);
 	}
 }
 
@@ -2071,7 +2066,7 @@ where
 			.field("arc", &self.arc)
 			.field("patches", &self.patches)
 			.field("patches_old", &self.patches_old)
-			.field("reclaiming", &self.reclaiming)
+			.field("swapping", &self.swapping)
 			.field("tags", &self.tags)
 			.finish()
 	}
@@ -2092,7 +2087,7 @@ where
 		// would produce, so we can skip this.
 		//
 		// self.arc         == other.arc
-		// self.reclaiming  == other.reclaiming
+		// self.swapping  == other.reclaiming
 
 		self.local       == other.local &&
 		self.remote      == other.remote &&
@@ -2121,7 +2116,7 @@ where
 		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
 		let remote = Arc::new(local.clone());
 		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
-		let reclaiming = Arc::new(AtomicBool::new(false));
+		let swapping = Arc::new(AtomicBool::new(false));
 
 		let writer = Writer {
 			local: Some(local),
@@ -2129,7 +2124,7 @@ where
 			arc,
 			patches: Vec::with_capacity(INIT_VEC_LEN),
 			patches_old: Vec::with_capacity(INIT_VEC_LEN),
-			reclaiming,
+			swapping,
 			tags: BTreeMap::new(),
 		};
 

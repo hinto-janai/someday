@@ -454,69 +454,57 @@ where
 ///
 /// ## Returned Lifetime
 /// This trait, just like [`ApplyReturn`] returns a generic `Output`
-/// that you specify, although it includes 2 key liftimes:
-/// - `'d`: your data's lifetime
-/// - `'o`: your output's lifetime
-///
-/// These two are connected such that your data must live as long as your `Output`.
+/// that you specify, although it forces your `Output`'s lifetime to
+/// be connected with your data.
 ///
 /// This is useful for functions which returned data which has the common pattern of:
 /// ```rust
-/// # struct Guard<'a, T>(std::marker::PhantomData<&'a T>);
+/// # struct Return<'a, T>(std::marker::PhantomData<&'a T>);
 /// # trait Asdf<T> {
-/// fn return_mutable_ref(&mut self) -> &mut Guard<'_, T>;
+/// fn function<'a>(&'a mut self) -> Return<'a, T>;
 /// # }
 /// ```
-/// Where the returned `Guard` can only live as long as the `&mut self`.
+/// Where the returned `Return` object can only live as long as the `self`.
 ///
-/// A real-world example of this is [`std::collections::HashMap`]'s entry API:
+/// A real-world example of this is [`std::vec::Drain`]:
 /// ```rust
 /// # use someday::*;
-/// # use std::collections::hash_map::*;
-/// // Create `Writer` with a `HashMap`.
-/// let (r, mut w) = someday::new(HashMap::<usize, String>::new());
+/// # use std::vec::Drain;
+/// let (r, mut w) = someday::new(vec![0, 1, 2]);
 ///
-/// // Add some data.
-/// w.add(PatchHashMap::Insert(0, "hello".into())).commit();
-/// assert_eq!(w.data().get(&0).unwrap(), "hello");
-///
-/// // Using the regular `commit_return()` we would get a...
-/// // Compile error!
+/// // Using the regular `commit_return()`
+/// // we would get a compile error!
 /// //
-/// // let entry = w.commit_return(PatchHashMapEntry(0));
+/// // let entry = w.commit_return(PatchVecDrain);
 /// //     ^
-/// //     \ this may live longer than the writer,
-/// //       we cannot allow this to compile.
-///
+/// //     |_ this may live longer than the writer,
+/// //        this cannot compile.
 ///
 /// // This is where `commit_return_lt()` is used, which
 /// // has lifetime bounds such that your `Writer` _must_
 /// // live as least as long as your `Output`
-/// let entry: Entry<'_, usize, String> = w.commit_return_lt(PatchHashMapEntry(0));
+/// let drain: Drain<'_, usize> = w.commit_return_lt(PatchVecDrainAll);
 ///
-/// // We can use `entry` as long as `w` is alive.
-/// match entry {
-/// 	Entry::Occupied(o) => assert_eq!(o.get(), "hello"),
-/// 	_ => unreachable!(),
-/// }
+/// // We can use `drain` as long as `w` is alive.
+/// let numbers: Vec<usize> = drain.collect();
+/// assert_eq!(numbers, vec![0, 1, 2]);
 ///
 /// // Attempting to use `entry` again after
 /// // this drop would be a compile error.
+/// assert!(w.data().is_empty());
 /// drop(w);
 /// ```
-pub trait ApplyReturnLt<'d, 'o, Patch, Input, Output>
+pub trait ApplyReturnLt<'a, Patch, Input, Output>
 where
 	Self: Clone,
 	Patch: From<Input>,
-	Output: 'o,
-	'd: 'o,
+	Output: 'a,
 {
 	/// Exact same as [`ApplyReturn::apply_return()`], but with lifetime bounds.
 	///
 	/// [`ApplyReturnLt`] ensures that:
-	/// 1. `writer` and `reader` (your data) has a lifetime  of '`d`
-	/// 2. Your `Output` has a lifetime of `'o`
-	/// 3. `'d` must outlive `'o`, or in other words, your `Output`
-	/// cannot live longer than `writer` and `reader`
-	fn apply_return_ref(input: &mut Input, writer: &'d mut Self, reader: &'d Self) -> Output;
+	/// 1. `writer` and `reader` (your data) has a lifetime  of `'a`
+	/// 2. Your `Output` also has a lifetime of `'a`
+	/// 3. Your `Output` cannot live longer than `writer` and `reader`
+	fn apply_return_lt(input: &mut Input, writer: &'a mut Self, reader: &'a Self) -> Output;
 }

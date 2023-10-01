@@ -230,11 +230,11 @@ where
 	let local  = CommitOwned { timestamp: 0, data };
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(arc_swap::ArcSwapAny::new(Arc::clone(&remote)));
-	let reclaiming = Arc::new(AtomicBool::new(false));
+	let swapping = Arc::new(AtomicBool::new(false));
 
 	let reader = Reader {
 		arc: Arc::clone(&arc),
-		reclaiming: Arc::clone(&reclaiming),
+		swapping: Arc::clone(&swapping),
 	};
 
 	let writer = Writer {
@@ -244,7 +244,7 @@ where
 		patches: Vec::with_capacity(capacity),
 		patches_old: Vec::with_capacity(capacity),
 		tags: std::collections::BTreeMap::new(),
-		reclaiming,
+		swapping,
 	};
 
 	(reader, writer)

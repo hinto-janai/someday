@@ -82,7 +82,23 @@ impl Apply<PatchString> for String {
 }
 
 #[derive(Clone)]
+/// Specialized patch for [`PatchString`] implementing [`std::mem::take()`]
 ///
+/// ## Usage
+/// ```rust
+/// # use someday::*;
+/// # use someday::patch::*;
+/// // Create String.
+/// let s = String::from("original");
+///
+/// // Create Reader/Writer.
+/// let (r, mut w) = someday::new(s);
+///
+/// // Take it.
+/// let taken: String = w.commit_return(PatchStringTake);
+///
+/// assert_eq!(taken, "original");
+/// ```
 pub struct PatchStringTake;
 impl From<PatchStringTake> for PatchString {
 	fn from(_value: PatchStringTake) -> Self {

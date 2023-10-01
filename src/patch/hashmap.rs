@@ -62,7 +62,27 @@ where
 
 //---------------------------------------------------------------------------------------------------- PatchHashMapInsert
 #[derive(Clone)]
+/// Specialized patch for [`PatchHashMap`] implementing [`HashMap::insert()`]
 ///
+/// ## Usage
+/// ```rust
+/// # use someday::*;
+/// # use std::collections::hash_map::*;
+/// // Create HashMap
+/// let h = HashMap::from([(0, "old".into())]);
+///
+/// // Create Reader/Writer.
+/// let (r, mut w) = someday::new(h);
+///
+/// // Insert a value that already exists
+/// // and take ownership of the old entry.
+/// let old: Option<String> = w.commit_return(PatchHashMapInsert {
+/// 	key: 0,
+/// 	value: "new".into(),
+/// });
+///
+/// assert_eq!(old.unwrap(), "old");
+/// ```
 pub struct PatchHashMapInsert<K, V> {
 	///
 	pub key: K,
@@ -88,7 +108,23 @@ where
 
 //---------------------------------------------------------------------------------------------------- PatchHashMapRemove
 #[derive(Clone)]
+/// Specialized patch for [`PatchHashMap`] implementing [`HashMap::remove()`]
 ///
+/// ## Usage
+/// ```rust
+/// # use someday::*;
+/// # use std::collections::hash_map::*;
+/// // Create HashMap
+/// let h = HashMap::from([(0, "string".into())]);
+///
+/// // Create Reader/Writer.
+/// let (r, mut w) = someday::new(h);
+///
+/// // Remove a value and take ownership.
+/// let removed: Option<String> = w.commit_return(PatchHashMapRemove(0));
+///
+/// assert_eq!(removed.unwrap(), "string");
+/// ```
 pub struct PatchHashMapRemove<K>(pub K);
 impl<K, V> From<PatchHashMapRemove<K>> for PatchHashMap<K, V> {
 	fn from(value: PatchHashMapRemove<K>) -> Self { PatchHashMap::Remove(value.0) }
@@ -104,27 +140,5 @@ where
 		_reader: &Self,
 	) -> Option<V> {
 		writer.remove(&patch.0)
-	}
-}
-
-//---------------------------------------------------------------------------------------------------- PatchHashMapEntry
-#[derive(Clone)]
-///
-pub struct PatchHashMapEntry<K>(pub K);
-impl<K, V> From<PatchHashMapEntry<K>> for PatchHashMap<K, V> {
-	fn from(value: PatchHashMapEntry<K>) -> Self { PatchHashMap::Remove(value.0) }
-}
-impl<'d, 'o, K, V> crate::ApplyReturnLt<'d, 'o, PatchHashMap<K, V>, PatchHashMapEntry<K>, Entry<'o, K, V>> for HashMap<K, V>
-where
-	K: Clone + std::cmp::Eq + PartialEq + std::hash::Hash,
-	V: Clone,
-	'd: 'o,
-{
-	fn apply_return_ref(
-		patch: &mut PatchHashMapEntry<K>,
-		writer: &'d mut Self,
-		_reader: &'d Self,
-	) -> Entry<'o, K, V> {
-		writer.entry(patch.0.clone())
 	}
 }

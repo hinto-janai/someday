@@ -142,7 +142,7 @@ use crate::{
 pub struct Reader<T>
 {
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
-	pub(super) reclaiming: Arc<AtomicBool>,
+	pub(super) swapping: Arc<AtomicBool>,
 }
 
 impl<T> Reader<T>
@@ -212,18 +212,24 @@ where
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but wait a little to cooperate.
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// trying to reclaim old data, this function will wait for `duration` amount
+	/// trying to push new data, this function will wait for `duration` amount
 	/// of time before forcefully acquiring the latest [`CommitRef`] anyway.
 	///
-	/// Realistically, `duration` can be an insanely small number as
-	/// the time between the [`Writer`] pushing the data then trying
-	/// to reclaim the old data is a few atomic instructions.
+	/// Realistically, `duration` can be a small number as
+	/// the time it takes [`Writer`] to "push" new data is very small.
+	/// (1 new `Arc` and an atomic pointer swap)..
 	///
 	/// `std::time::Duration::from_millis(1)` will most likely be more
 	/// than enough time for the [`Writer`] to finish.
+	///
+	/// This will forcefully call [`head()`](Reader::head) after
+	/// sleeping regardless if the [`Writer`] is pushing.
+	///
+	/// Consider using [`Reader::head_do()`] or [`Reader::head_spin()`]
+	/// instead of paying the price of sleeping a thread for a tiny duration.
 	pub fn head_wait(&self, duration: Duration) -> CommitRef<T> {
-		// Writer is not reclaiming, acquire head commit.
-		if !self.reclaiming() {
+		// Writer is not swapping, acquire head commit.
+		if !self.swapping() {
 			return self.head();
 		}
 
@@ -236,8 +242,8 @@ where
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but do something in the meanwhile if we can't.
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// trying to reclaim old data, this function will execute the function `F`
-	/// in the meanwhile before forcefully acquiring the latest [`CommitRef`] anyway.
+	/// pushing new data, this function will execute the function `F` in the
+	/// meanwhile before forcefully acquiring the latest [`CommitRef`] anyway.
 	///
 	/// This can be any arbitrary code, although the function
 	/// is provided with the same [`Reader`], `&self`.
@@ -289,31 +295,36 @@ where
 	where
 		F: FnOnce(&Self) -> R
 	{
-		// Writer is not reclaiming, acquire head commit.
-		if !self.reclaiming() {
+		// Writer is not swapping, acquire head commit.
+		if !self.swapping() {
 			let head = self.head();
 			return (head, f(self));
 		}
 
 		// Else execute function and acquire.
-		let r = f(self);
-		(self.head(), r)
+		(self.head(), f(self))
 	}
 
 	#[inline]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`] ASAP, but while cooperating
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// trying to reclaim old data, this function will spin (`loop {}`)
+	/// pushing new data, this function will spin ([`std::hint::spin_loop()`])
 	/// until it is not.
 	///
-	/// Realistically, this function will only spin a few times
-	/// as the time between the [`Writer`] pushing the data then trying
-	/// to reclaim the old data is a few atomic instructions.
+	/// Realistically, this function will only spin for a brief moment
+	/// as the time it takes [`Writer`] to "push" new data is very small
+	/// (1 new `Arc` and an atomic pointer swap).
+	///
+	/// Nominally, this function will usually take anywhere from
+	/// the order of `0.000001` ~ `0.00001` seconds to return
+	/// (although, it is not guaranteed to).
 	pub fn head_spin(&self) -> CommitRef<T> {
 		loop {
-			if !self.reclaiming() {
+			if !self.swapping() {
 				return self.head();
+			} else {
+				std::hint::spin_loop();
 			}
 		}
 	}
@@ -324,7 +335,7 @@ where
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
 	/// trying to reclaim old data, this function will return `None`.
 	pub fn head_try(&self) -> Option<CommitRef<T>> {
-		match self.reclaiming() {
+		match self.swapping() {
 			false => Some(self.head()),
 			true => None,
 		}
@@ -369,17 +380,15 @@ where
 	}
 
 	#[inline]
-	/// Is the [`Writer`] currently trying to reclaim old data?
+	/// Is the [`Writer`] currently swapping data?
 	///
 	/// This indicates if the [`Writer`] very recently [`Writer::push()`]'ed
-	/// new data and is waiting on old [`Reader`]'s to give up their data
-	/// so that the [`Writer`] can cheaply reclaim it.
+	/// new data and is about to reclaim old [`Reader`] data.
 	///
-	/// If this returns `true`, that means calling [`Reader::head()`] will
-	/// actually return the _latest_ data and not impact the [`Writer`], as
-	/// they only care about the _old_ data.
-	pub fn reclaiming(&self) -> bool {
-		self.reclaiming.load(Ordering::Acquire)
+	/// If this returns `false`, that means subsequently calling [`Reader::head()`]
+	/// will return the latest data and not impact the [`Writer`].
+	pub fn swapping(&self) -> bool {
+		self.swapping.load(Ordering::Acquire)
 	}
 }
 
