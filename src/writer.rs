@@ -622,9 +622,9 @@ where
 	/// // For each number 0..1_000, use it as a key into
 	/// // our HashMap, remove that value and return it to us.
 	/// //
-	/// // Each time we iterate (call `.next()` implcitly in this `for` loop) we are:
+	/// // Each time we iterate (call `.next()` implicitly in this `for` loop) we are:
 	/// // 1. Adding our Patch
-	/// // 2. Commiting our Patch
+	/// // 2. Committing our Patch
 	/// // 3. Getting the return value
 	/// //
 	/// // If we were to `break` half-way through this iteration,
@@ -966,7 +966,7 @@ where
 	/// ```
 	pub fn push_clone(&mut self) -> PushInfo {
 		// If we're always cloning, there's no
-		// need to block Reader's for reclaimation
+		// need to block Reader's for reclamation
 		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
 	}
@@ -976,7 +976,7 @@ where
 	/// but it returns the [`Writer`] back for method chaining.
 	pub fn push_clone_and(&mut self) -> &mut Self {
 		// If we're always cloning, there's no
-		// need to block Reader's for reclaimation
+		// need to block Reader's for reclamation
 		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>);
 		self
