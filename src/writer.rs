@@ -373,45 +373,6 @@ where
 		self
 	}
 
-	// #[inline]
-	// /// Add multiple `Patch`'s to apply to the data `T`
-	// ///
-	// /// This is the same as the [`Writer::add`] function but
-	// /// it takes an [`Iterator`] of `Patch`'s and add those.
-	// ///
-	// /// This [`Iterator`] could be [`Vec`], [`slice`], etc.
-	// ///
-	// /// This returns `self` for method chaining.
-	// ///
-	// /// ```
-	// /// # use someday::*;
-	// /// # use someday::patch::*;
-	// /// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
-	// ///
-	// /// // Create some Patches.
-	// /// let functions: Vec<PatchUsize> =
-	// /// 	(0..100)
-	// /// 	.map(|u| PatchUsize::Add(u))
-	// /// 	.collect();
-	// ///
-	// /// // Add them.
-	// /// w.add_iter(functions.into_iter());
-	// ///
-	// /// // They haven't been applied yet.
-	// /// assert_eq!(w.staged().len(), 100);
-	// ///
-	// /// // Now they have.
-	// /// w.commit();
-	// /// assert_eq!(w.staged().len(), 0);
-	// /// ```
-	// pub fn add_iter<F>(&mut self, functions: impl Iterator<Item = F>) -> &mut Self
-	// where
-	// 	F: FnMut(&mut T, &T)
-	// {
-	// 	self.functions.extend(functions);
-	// 	self
-	// }
-
 	#[inline]
 	/// [`Apply`] all the `Patch`'s that were [`add()`](Writer::add)'ed
 	///
@@ -460,41 +421,6 @@ where
 		self
 	}
 
-	// /// Immediately [`commit()`](Writer::commit) an `Input`, and return a value with a lifetime
-	// ///
-	// /// If your `T` implements [`ApplyReturnLt`] you can specialize
-	// /// that some of your `Patch`'s can return values with lifetimes back.
-	// ///
-	// /// This is optional, but is useful for things like [`std::collections::HashMap::entry()`]
-	// /// which returns an object bounded to the lifetime of the [`Writer`]'s data.
-	// ///
-	// /// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
-	// /// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
-	// /// - Returns you the value
-	// ///
-	// /// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	// ///
-	// /// See [`ApplyReturnLt`] for more details.
-	// pub fn commit_return_lt<'a, Input, Output>(&'a mut self, mut input: Input) -> Output
-	// where
-	// 	T: crate::ApplyReturnLt<'a, Patch, Input, Output>,
-	// 	Patch: From<Input>,
-	// 	Output: 'a,
-	// {
-	// 	self.local().timestamp += 1;
-
-	// 	// Apply the patch and add to the old vector.
-	// 	let return_value = crate::ApplyReturnLt::apply_return_lt(
-	// 		&mut input,
-	// 		&mut Self::local_field(&mut self.local).data,
-	// 		&self.remote.data,
-	// 	);
-
-	// 	self.functions_old.push(input.into());
-
-	// 	return_value
-	// }
-
 	fn commit_inner(&mut self) -> CommitInfo {
 		let functions = self.functions.len();
 
@@ -529,144 +455,6 @@ where
 			timestamp_diff: self.timestamp_diff(),
 		}
 	}
-
-	// /// Add multiple `Input`'s  and get a lazily-committing, lazily-returning [`Iterator`]
-	// ///
-	// /// This is the same as the [`Writer::commit_return`] function but
-	// /// it takes an [`Iterator`] of `Input`'s and commits them.
-	// ///
-	// /// Note that [`Iterator`]'s are _lazy_, so if `.next()` is not called on the returned [`Iterator`]:
-	// /// - The `Input`'s won't be applied
-	// /// - No [`Commit`]'s will occur
-	// /// - No return values will be returned
-	// ///
-	// /// If either `.next()` is not called OR the input iterator
-	// /// contained no functions, the [`Writer`]'s timestamp will _not_
-	// /// change.
-	// ///
-	// /// If there's at least 1 input, the timestamp will increment by 1.
-	// ///
-	// /// You could selectively look within the returned data, `collect()`,
-	// /// them, or do anything you would do with an [`Iterator`].
-	// /// ```rust
-	// /// # use someday::*;
-	// /// # use std::collections::HashMap;
-	// /// // Create a HashMap with keys going from 0 to 1,000.
-	// /// // with their value to the exact same number, but a String.
-	// /// let hashmap = (0..1_000)
-	// /// 	.map(|i| (i, format!("{i}")))
-	// /// 	.collect::<HashMap<usize, String>>();
-	// ///
-	// /// // Create Writer with that HashMap.
-	// /// let (_, mut writer) = someday::new(hashmap);
-	// ///
-	// /// assert_eq!(writer.data().len(), 1000);
-	// ///
-	// /// // We're now going to remove those `0..1_000` key/value pairs.
-	// /// let iterator = (0..1_000).map(|i| PatchHashMapRemove(i));
-	// ///
-	// /// // And store the values in here.
-	// /// let mut vec: Vec<String> = vec![];
-	// ///
-	// /// // This `for` loop simply reads as:
-	// /// //
-	// /// // For each number 0..1_000, use it as a key into
-	// /// // our HashMap, remove that value and return it to us.
-	// /// //
-	// /// // Each time we iterate (call `.next()` implicitly in this `for` loop) we are:
-	// /// // 1. Adding our Patch
-	// /// // 2. Committing our Patch
-	// /// // 3. Getting the return value
-	// /// //
-	// /// // If we were to `break` half-way through this iteration,
-	// /// // we would leave half of the functions un-touched.
-	// /// for (i, return_value) in writer.commit_return_iter(iterator).enumerate() {
-	// ///		// To be more clear with the types here:
-	// /// 	// Returned from `.enumerate()
-	// /// 	let i: usize = i;
-	// /// 	// The return value from our patch
-	// /// 	let return_value: Option<String> = return_value;
-	// ///
-	// /// 	let string: String = return_value.unwrap();
-	// ///
-	// /// 	// Assert it is `i` formatted.
-	// /// 	assert_eq!(string, format!("{i}"));
-	// ///
-	// /// 	// Store.
-	// /// 	vec.push(string);
-	// /// }
-	// ///
-	// /// assert_eq!(vec.len(), 1_000);
-	// /// assert_eq!(writer.data().len(), 0);
-	// /// ```
-	// pub fn commit_return_iter<Iter, Input, Output>(&mut self, functions: Iter) -> impl Iterator<Item = Output> + '_
-	// where
-	// 	T: ApplyReturn<Patch, Input, Output>,
-	// 	Iter: Iterator<Item = Input> + 'static,
-	// 	Patch: From<Input>,
-	// 	Output: 'static,
-	// 	Input: 'static,
-	// {
-	// 	struct CommitReturnIter<'a, T, Input, Output, Iter>
-	// 	where
-	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
-	// 		Iter: Iterator<Item = Input>,
-	// 		Patch: From<Input>,
-	// 	{
-	// 		// Our Writer.
-	// 		writer: &'a mut Writer<T>,
-	// 		// The iterator of functions.
-	// 		functions: Iter,
-	// 		// Gets set to `true` if the iterator
-	// 		// yielded at least 1 value. It allows
-	// 		// to know whether to += 1 the timestamp
-	// 		// on drop().
-	// 		some: bool,
-	// 		_return: PhantomData<Output>,
-	// 	}
-
-	// 	impl<T, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Input, Output, Iter>
-	// 	where
-	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
-	// 		Iter: Iterator<Item = Input>,
-	// 		Patch: From<Input>,
-	// 	{
-	// 		fn drop(&mut self) {
-	// 			if self.some {
-	// 				self.writer.local().timestamp += 1;
-	// 			}
-	// 		}
-	// 	}
-
-	// 	impl<T, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Input, Output, Iter>
-	// 	where
-	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
-	// 		Iter: Iterator<Item = Input>,
-	// 		Patch: From<Input>,
-	// 	{
-	// 		type Item = Output;
-
-	// 		fn next(&mut self) -> Option<Self::Item> {
-	// 			match self.functions.next() {
-	// 				Some(mut patch) => {
-	// 					self.some = true;
-
-	// 					let return_value = ApplyReturn::apply_return(
-	// 						&mut patch,
-	// 						&mut Writer::local_field(&mut self.writer.local).data,
-	// 						&self.writer.remote.data,
-	// 					);
-
-	// 					self.writer.functions_old.push(patch.into());
-	// 					Some(return_value)
-	// 				},
-	// 				_ => None,
-	// 			}
-	// 		}
-	// 	}
-
-	// 	CommitReturnIter { writer: self, functions, some: false, _return: PhantomData }
-	// }
 
 	#[inline]
 	/// Unconditionally push [`Writer`]'s local _committed_ data to the [`Reader`]'s.
@@ -865,10 +653,10 @@ where
 		self.swapping_true();
 		let (push_info, r) = self.push_inner::<false, R>(None, Some(f));
 
-		// SAFETY: we _know_ `R` will be a `Some`
+		// INVARIANT: we _know_ `R` will be a `Some`
 		// because we provided a `Some`. `push_inner()`
 		// will always return a Some(value).
-		(push_info, unsafe { r.unwrap_unchecked() })
+		(push_info, r.unwrap())
 	}
 
 	#[inline]
