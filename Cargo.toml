@@ -15,8 +15,7 @@ all-features = true
 rustc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["patch"]
-patch = ["paste"]
+default = []
 
 [dependencies]
 arc-swap = { version = "1.6.0", default-features = false }
@@ -24,7 +23,6 @@ arc-swap = { version = "1.6.0", default-features = false }
 # Optional.
 serde   = { version = "1", optional = true, features = ["derive"] }
 bincode = { version = "2.0.0-rc.3", optional = true, features = ["derive"] }
-paste   = { version = "1.0.14", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

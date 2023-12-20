@@ -10,7 +10,6 @@ use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
 	Writer,
-	Apply,
 };
 
 //---------------------------------------------------------------------------------------------------- Reader

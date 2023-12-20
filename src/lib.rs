@@ -40,43 +40,17 @@
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
-mod reader;
-mod commit;
-mod writer;
-mod apply;
-
-/// Metadata resulting from common [`Writer`] operations
-///
-/// These are simple container structs that hold
-/// information about [`Writer`] operations.
 pub mod info;
-pub use info::*;
+pub use info::{CommitInfo, PushInfo, PullInfo, StatusInfo};
 
-#[cfg(feature = "patch")]
-/// Objects implementing [`Apply`] on common data structures
-///
-/// These are very basic common operations that can be done to common objects.
-///
-/// Anything with trait bounds or complicated returned values is not enumerated.
-///
-/// These all implement [`Apply`], so that they can
-/// be used as "functions" to give to your [`Writer`].
-///
-/// Realistically, you should be creating your own `Patch` type
-/// that implements [`Apply`] specifically for your needs.
-///
-/// This entire module can be disabled by setting `default-features` to `false`:
-/// ```toml
-/// someday = { version "0.0.0", default-features = false }
-/// ```
-pub mod patch;
-#[cfg(feature = "patch")]
-pub use patch::*;
-
+mod reader;
 pub use reader::Reader;
-pub use commit::{Commit,CommitRef,CommitOwned};
+
+mod commit;
+pub use commit::{Commit, CommitRef, CommitOwned};
+
+mod writer;
 pub use writer::Writer;
-pub use apply::{Apply,ApplyReturn,ApplyReturnLt};
 
 //---------------------------------------------------------------------------------------------------- Type alias.
 /// An incrementing [`usize`] representing a new versions of data

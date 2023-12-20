@@ -1,8 +1,6 @@
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
-use crate::{
-	Writer,Reader,Apply,Timestamp, patch::PatchBTreeMap,
-};
+use crate::{Writer,Reader,Timestamp};
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

@@ -18,7 +18,6 @@ use crate::{
 	INIT_VEC_LEN,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
-	apply::{Apply,ApplyReturn,ApplyReturnLt},
 	Timestamp,
 	info::{
 		CommitInfo,StatusInfo,
