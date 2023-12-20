@@ -14,8 +14,8 @@ use crate::{Timestamp, CommitOwned, Writer, Reader, Commit};
 ///
 /// It is returned from commit-like functions.
 pub struct CommitInfo {
-	/// How many `Patch`'s were applied in this [`Commit`]?
-	pub patches: usize,
+	/// How many function's were applied in this [`Commit`]?
+	pub functions: usize,
 	/// How many [`Commit`]'s is the [`Writer`] now ahead of
 	/// compared to the [`Reader`]'s latest head [`Commit`]?
 	pub timestamp_diff: usize,
@@ -69,9 +69,9 @@ pub struct PullInfo<T> {
 /// using their individual methods instead.
 pub struct StatusInfo<'a, T, Patch> {
 	/// [`Writer::staged`]
-	pub staged_patches: &'a Vec<Patch>,
-	/// [`Writer::committed_patches`]
-	pub committed_patches: &'a Vec<Patch>,
+	pub staged_functions: &'a Vec<Patch>,
+	/// [`Writer::committed_functions`]
+	pub committed_functions: &'a Vec<Patch>,
 	/// [`Writer::head`]
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]

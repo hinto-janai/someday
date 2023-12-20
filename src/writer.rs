@@ -82,7 +82,7 @@ use crate::{
 /// assert_eq!(w.data(), "");
 /// assert_eq!(r.head(), "");
 ///
-/// // We can see our "staged" patches here.
+/// // We can see our "staged" functions here.
 /// let staged: &mut Vec<PatchString> = w.staged();
 /// assert_eq!(staged.len(), 4);
 /// assert_eq!(staged[0], PatchString::PushStr("abc".into()));
@@ -96,8 +96,8 @@ use crate::{
 ///
 /// // Okay, now let's commit locally.
 /// let commit_info = w.commit();
-/// // We applied 3 patches in total.
-/// assert_eq!(commit_info.patches, 3);
+/// // We applied 3 functions in total.
+/// assert_eq!(commit_info.functions, 3);
 /// // And added 1 commit (timestamp).
 /// assert_eq!(w.timestamp(), 1);
 ///
@@ -112,7 +112,7 @@ use crate::{
 /// let push_info = w.push();
 /// // We pushed 1 commit in total.
 /// assert_eq!(push_info.commits, 1);
-/// // Our staged patches are now gone.
+/// // Our staged functions are now gone.
 /// assert_eq!(w.staged().len(), 0);
 ///
 /// // The Readers are now in sync.
@@ -136,10 +136,6 @@ where
 	// It will be `None` in-between those moments and
 	// the invariant is that is MUST be `Some` before
 	// `push()` is over.
-	//
-	// `.unwrap_unchecked()` will be used which will panic in debug builds.
-	//
-	// MaybeUninit probably works too but clippy is sending me spooky lints.
 	pub(super) local: Option<CommitOwned<T>>,
 
 	// The current data the remote `Reader`'s can see.
@@ -224,7 +220,8 @@ where
 	/// assert_eq!(r.head(), 0);
 	/// ```
 	pub fn data(&self) -> &T {
-		&self.local_ref().data
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap()
 	}
 
 	#[inline]
@@ -277,7 +274,8 @@ where
 	/// assert_eq!(commit.data,      501);
 	/// ```
 	pub fn head(&self) -> &CommitOwned<T> {
-		self.local_ref()
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap()
 	}
 
 	#[inline]
@@ -347,7 +345,7 @@ where
 	/// This does not execute the `Patch` immediately,
 	/// it will only store it for later usage.
 	///
-	/// [`Commit`]-like operations are when these patches
+	/// [`Commit`]-like operations are when these functions
 	/// are [`Apply`]'ed to your data.
 	///
 	/// This returns `self` for method chaining.
@@ -391,13 +389,13 @@ where
 	// /// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
 	// ///
 	// /// // Create some Patches.
-	// /// let patches: Vec<PatchUsize> =
+	// /// let functions: Vec<PatchUsize> =
 	// /// 	(0..100)
 	// /// 	.map(|u| PatchUsize::Add(u))
 	// /// 	.collect();
 	// ///
 	// /// // Add them.
-	// /// w.add_iter(patches.into_iter());
+	// /// w.add_iter(functions.into_iter());
 	// ///
 	// /// // They haven't been applied yet.
 	// /// assert_eq!(w.staged().len(), 100);
@@ -498,22 +496,23 @@ where
 	// }
 
 	fn commit_inner(&mut self) -> CommitInfo {
-		let patches = self.functions.len();
+		let functions = self.functions.len();
 
 		// Early return if there was nothing to do.
-		if patches == 0 {
+		if functions == 0 {
 			return CommitInfo {
-				patches: 0,
+				functions: 0,
 				timestamp_diff: self.timestamp_diff(),
 			};
 		} else {
-			self.local().timestamp += 1;
+			// INVARIANT: `local` must be initialized after push()
+			self.local.as_mut().unwrap().timestamp += 1;
 		}
 
-		// Pre-allocate some space for the new patches.
-		self.functions_old.reserve_exact(patches);
+		// Pre-allocate some space for the new functions.
+		self.functions_old.reserve_exact(functions);
 
-		// Apply the patches and add to the old vector.
+		// Apply the functions and add to the old vector.
 		// for mut patch in self.functions.drain(..) {
 		for patch in self.functions.drain(..) {
 			// FIXME
@@ -526,7 +525,7 @@ where
 		}
 
 		CommitInfo {
-			patches,
+			functions,
 			timestamp_diff: self.timestamp_diff(),
 		}
 	}
@@ -542,7 +541,7 @@ where
 	// /// - No return values will be returned
 	// ///
 	// /// If either `.next()` is not called OR the input iterator
-	// /// contained no patches, the [`Writer`]'s timestamp will _not_
+	// /// contained no functions, the [`Writer`]'s timestamp will _not_
 	// /// change.
 	// ///
 	// /// If there's at least 1 input, the timestamp will increment by 1.
@@ -580,7 +579,7 @@ where
 	// /// // 3. Getting the return value
 	// /// //
 	// /// // If we were to `break` half-way through this iteration,
-	// /// // we would leave half of the patches un-touched.
+	// /// // we would leave half of the functions un-touched.
 	// /// for (i, return_value) in writer.commit_return_iter(iterator).enumerate() {
 	// ///		// To be more clear with the types here:
 	// /// 	// Returned from `.enumerate()
@@ -600,7 +599,7 @@ where
 	// /// assert_eq!(vec.len(), 1_000);
 	// /// assert_eq!(writer.data().len(), 0);
 	// /// ```
-	// pub fn commit_return_iter<Iter, Input, Output>(&mut self, patches: Iter) -> impl Iterator<Item = Output> + '_
+	// pub fn commit_return_iter<Iter, Input, Output>(&mut self, functions: Iter) -> impl Iterator<Item = Output> + '_
 	// where
 	// 	T: ApplyReturn<Patch, Input, Output>,
 	// 	Iter: Iterator<Item = Input> + 'static,
@@ -608,16 +607,16 @@ where
 	// 	Output: 'static,
 	// 	Input: 'static,
 	// {
-	// 	struct CommitReturnIter<'a, T, Patch, Input, Output, Iter>
+	// 	struct CommitReturnIter<'a, T, Input, Output, Iter>
 	// 	where
-	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
 	// 		Iter: Iterator<Item = Input>,
 	// 		Patch: From<Input>,
 	// 	{
 	// 		// Our Writer.
 	// 		writer: &'a mut Writer<T>,
-	// 		// The iterator of patches.
-	// 		patches: Iter,
+	// 		// The iterator of functions.
+	// 		functions: Iter,
 	// 		// Gets set to `true` if the iterator
 	// 		// yielded at least 1 value. It allows
 	// 		// to know whether to += 1 the timestamp
@@ -626,9 +625,9 @@ where
 	// 		_return: PhantomData<Output>,
 	// 	}
 
-	// 	impl<T, Patch, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+	// 	impl<T, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Input, Output, Iter>
 	// 	where
-	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
 	// 		Iter: Iterator<Item = Input>,
 	// 		Patch: From<Input>,
 	// 	{
@@ -639,9 +638,9 @@ where
 	// 		}
 	// 	}
 
-	// 	impl<T, Patch, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+	// 	impl<T, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Input, Output, Iter>
 	// 	where
-	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		T: Clone + ApplyReturn<Patch, Input, Output>,
 	// 		Iter: Iterator<Item = Input>,
 	// 		Patch: From<Input>,
 	// 	{
@@ -658,7 +657,7 @@ where
 	// 						&self.writer.remote.data,
 	// 					);
 
-	// 					self.writer.patches_old.push(patch.into());
+	// 					self.writer.functions_old.push(patch.into());
 	// 					Some(return_value)
 	// 				},
 	// 				_ => None,
@@ -666,7 +665,7 @@ where
 	// 		}
 	// 	}
 
-	// 	CommitReturnIter { writer: self, patches, some: false, _return: PhantomData }
+	// 	CommitReturnIter { writer: self, functions, some: false, _return: PhantomData }
 	// }
 
 	#[inline]
@@ -674,7 +673,7 @@ where
 	///
 	/// This will push changes even if there are no new [`Commit`]'s.
 	/// This may be expensive as there are other operations in this
-	/// function (memory reclaiming, re-applying patches).
+	/// function (memory reclaiming, re-applying functions).
 	///
 	/// This will return how many [`Commit`]'s the [`Writer`]'s pushed
 	/// (aka, how times [`Writer::commit()`] or [`Writer::overwrite()`] or
@@ -684,7 +683,7 @@ where
 	/// the new [`Commit`] before this function is over.
 	///
 	///	The `Patch`'s that were not [`commit()`](Writer::commit)'ed will not be
-	/// pushed and will remain in the [`staged()`](Writer::staged) vector of patches.
+	/// pushed and will remain in the [`staged()`](Writer::staged) vector of functions.
 	///
 	/// The [`PushInfo`] object returned is just a container
 	/// for some metadata about the [`push()`](Writer::push) operation.
@@ -943,7 +942,7 @@ where
 		// SAFETY: we're temporarily "taking" our `self.local`.
 		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
-		let local = self.local_take();
+		let local = self.local.take().unwrap();
 		// Swap the reader's `arc_swap` with our new local.
 		let old = self.arc.swap(Arc::new(local));
 
@@ -1007,7 +1006,7 @@ where
 		// we're in a lot of trouble and will lock `Reader`'s.
 
 		if reclaimed {
-			// Re-apply patches to this old data.
+			// Re-apply functions to this old data.
 			// FIXME
 			// Apply::sync(self.functions_old.drain(..), &mut local.data, &self.remote.data);
 			// Set proper timestamp if we're reusing old data.
@@ -1017,7 +1016,7 @@ where
 		// Re-initialize `self.local`.
 		self.local = Some(local);
 
-		// Clear patches.
+		// Clear functions.
 		self.functions_old.clear();
 
 		// Output how many commits we pushed.
@@ -1033,7 +1032,7 @@ where
 	///
 	/// The [`Writer`]'s old local [`Commit`] is returned.
 	///
-	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
+	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_functions()`]).
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
 	///
@@ -1086,13 +1085,18 @@ where
 
 	#[inline]
 	fn pull_inner(&mut self) -> PullInfo<T> {
-		// Delete old patches, we won't need
+		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
 		self.functions_old.clear();
+
+		// INVARIANT: `local` must be initialized after push()
+		let old_writer_data = self.local.take().unwrap();
+		self.local = Some((*self.remote).clone());
+
 		PullInfo {
 			commits_reverted: self.timestamp_diff(),
-			old_writer_data: self.local_swap((*self.remote).clone()),
+			old_writer_data,
 		}
 	}
 
@@ -1101,7 +1105,7 @@ where
 	///
 	/// The [`Writer`]'s old local data is returned.
 	///
-	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
+	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_functions()`]).
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
 	///
@@ -1132,13 +1136,13 @@ where
 	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 2
 	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 3
 	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 4
-	/// assert_eq!(w.committed_patches().len(), 3);
+	/// assert_eq!(w.committed_functions().len(), 3);
 	///
 	/// // Overwrite the Writer with arbitrary data.
 	/// let old_data = w.overwrite(String::from("world")); // <- commit 5
 	/// assert_eq!(old_data, "hello");
-	/// // Committed patches were deleted.
-	/// assert_eq!(w.committed_patches().len(), 0);
+	/// // Committed functions were deleted.
+	/// assert_eq!(w.committed_functions().len(), 0);
 	///
 	///	// Push that change.
 	/// w.push();
@@ -1165,11 +1169,20 @@ where
 	#[inline(always)]
 	// `T` might be heavy to stack copy, so inline this.
 	fn overwrite_inner(&mut self, data: T) -> CommitOwned<T> {
-		// Delete old patches, we won't need
+		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
 		self.functions_old.clear();
-		self.local_swap(CommitOwned { timestamp: self.timestamp() + 1, data })
+
+		// INVARIANT: `local` must be initialized after push()
+		let old_data = self.local.take().unwrap();
+
+		self.local = Some(CommitOwned {
+			timestamp: self.timestamp() + 1,
+			data
+		});
+
+		old_data
 	}
 
 	#[inline]
@@ -1451,7 +1464,8 @@ where
 	where T:
 		PartialEq<T>
 	{
-		self.local_ref().diff(&*self.remote)
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().diff(&*self.remote)
 	}
 
 	#[inline]
@@ -1486,7 +1500,8 @@ where
 	/// assert!(w.ahead());
 	/// ```
 	pub fn ahead(&self) -> bool {
-		self.local_ref().ahead(&*self.remote)
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().ahead(&*self.remote)
 	}
 
 	#[inline]
@@ -1516,7 +1531,8 @@ where
 	/// assert!(w.ahead_of(&fake_commit));
 	/// ```
 	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
-		self.local_ref().ahead(commit)
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().ahead(commit)
 	}
 
 	#[inline]
@@ -1542,7 +1558,8 @@ where
 	/// assert!(w.behind(&fake_commit));
 	/// ```
 	pub fn behind(&self, commit: &impl Commit<T>) -> bool {
-		self.local_ref().behind(commit)
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().behind(commit)
 	}
 
 	#[inline]
@@ -1571,7 +1588,8 @@ where
 	/// assert_eq!(r.timestamp(), 0);
 	/// ```
 	pub fn timestamp(&self) -> Timestamp {
-		self.local_ref().timestamp
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().timestamp
 	}
 
 	#[inline]
@@ -1641,7 +1659,8 @@ where
 	/// assert_eq!(w.timestamp_diff(), 5);
 	/// ```
 	pub fn timestamp_diff(&self) -> usize {
-		self.local_ref().timestamp - self.remote.timestamp
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_ref().unwrap().timestamp - self.remote.timestamp
 	}
 
 	// /// Restore all the staged changes.
@@ -1750,11 +1769,11 @@ where
 	// /// w.add(change.clone());
 	// /// w.commit();
 	// ///
-	// /// // We can see but not mutate patches.
-	// /// assert_eq!(w.committed_patches().len(), 1);
-	// /// assert_eq!(w.committed_patches()[0], change);
+	// /// // We can see but not mutate functions.
+	// /// assert_eq!(w.committed_functions().len(), 1);
+	// /// assert_eq!(w.committed_functions()[0], change);
 	// /// ```
-	// pub fn committed_patches(&self) -> &Vec<Patch> {
+	// pub fn committed_functions(&self) -> &Vec<Patch> {
 	// 	&self.functions_old
 	// }
 
@@ -1830,10 +1849,10 @@ where
 	// ///
 	// /// If you only need 1 or a few of the fields in [`StatusInfo`],
 	// /// consider using their individual methods instead.
-	// pub fn status(&self) -> StatusInfo<'_, T, Patch> {
+	// pub fn status(&self) -> StatusInfo<'_, T> {
 	// 	StatusInfo {
-	// 		staged_patches: &self.functions,
-	// 		committed_patches: self.committed_patches(),
+	// 		staged_functions: &self.functions,
+	// 		committed_functions: self.committed_functions(),
 	// 		head: self.head(),
 	// 		head_remote: self.head_remote(),
 	// 		head_readers: self.head_readers(),
@@ -1856,7 +1875,7 @@ where
 	/// let (_, mut w) = someday::with_capacity::<String, PatchString>("".into(), 16);
 	///
 	/// // Capacity is 16.
-	/// assert_eq!(w.committed_patches().capacity(), 16);
+	/// assert_eq!(w.committed_functions().capacity(), 16);
 	/// assert_eq!(w.staged().capacity(),            16);
 	///
 	/// // Commit 32 `Patch`'s
@@ -1869,7 +1888,7 @@ where
 	/// }
 	///
 	/// // Commit capacity is now 32.
-	/// assert_eq!(w.committed_patches().capacity(), 32);
+	/// assert_eq!(w.committed_functions().capacity(), 32);
 	/// // This didn't change, we already had
 	/// // enough space to store them.
 	/// assert_eq!(w.staged().capacity(), 16);
@@ -1878,7 +1897,7 @@ where
 	/// w.commit_and().push_and().shrink_to_fit();
 	///
 	/// // They're now empty and taking 0 space.
-	/// assert_eq!(w.committed_patches().capacity(), 0);
+	/// assert_eq!(w.committed_functions().capacity(), 0);
 	/// assert_eq!(w.staged().capacity(), 0);
 	/// ```
 	pub fn shrink_to_fit(&mut self) {
@@ -1892,7 +1911,7 @@ where
 	// /// 1. The [`Writer`]'s local data
 	// /// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
 	// /// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
-	// /// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
+	// /// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_functions()`])
 	// ///
 	// /// ```rust
 	// /// # use someday::{*,patch::*};
@@ -1937,67 +1956,6 @@ impl<T> Writer<T>
 where
 	T: Clone
 {
-	// HACK:
-	// These `local_*()` functions are a work around.
-	// Writer's local data is almost always initialized, but
-	// during `push()` there's a brief moment where we send our
-	// data off to the readers, but we haven't reclaimed or cloned
-	// new data yet, so our local data is empty (which isn't allowed).
-	//
-	// `MaybeUninit` may work here but keeping our local data
-	// as `Option<T>` then just using `.unwrap_unchecked()` is
-	// easier than safely upholding the insane amount of
-	// invariants uninitialized memory has.
-	//
-	// `.unwrap_unchecked()` actually `panic!()`'s on `debug_assertions` too.
-
-	#[inline(always)]
-	fn local(&mut self) -> &mut CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { self.local.as_mut().unwrap_unchecked() }
-	}
-
-	// Same as `local()`, but field specific so we
-	// can around taking `&mut self` when we need
-	// `&` to `self` as well.
-	//
-	// SAFETY: This function is ONLY for this `self.local` purpose.
-	#[inline(always)]
-	fn local_field(local: &mut Option<CommitOwned<T>>) -> &mut CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { local.as_mut().unwrap_unchecked() }
-	}
-
-	#[inline(always)]
-	fn local_take(&mut self) -> CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { self.local.take().unwrap_unchecked() }
-	}
-
-	#[inline(always)]
-	fn local_swap(&mut self, other: CommitOwned<T>) -> CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { self.local.replace(other).unwrap_unchecked() }
-	}
-
-	#[inline(always)]
-	fn local_inner(self) -> CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { self.local.unwrap_unchecked() }
-	}
-
-	#[inline(always)]
-	fn local_ref(&self) -> &CommitOwned<T> {
-		// SAFETY: This is always initialized with something.
-		// When it isn't (`commit()`), this function isn't used.
-		unsafe { self.local.as_ref().unwrap_unchecked() }
-	}
-
 	#[inline(always)]
 	fn swapping_true(&mut self) {
 		self.swapping.store(true, Ordering::Relaxed);
@@ -2010,107 +1968,75 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
-// impl<T> std::fmt::Debug for Writer<T>
-// where
-// 	T: Clone + std::fmt::Debug,
-// {
-// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		f.debug_struct("CommitOwned")
-// 			.field("local", &self.local)
-// 			.field("remote", &self.remote)
-// 			.field("arc", &self.arc)
-// 			.field("patches", &self.functions)
-// 			.field("patches_old", &self.functions_old)
-// 			.field("swapping", &self.swapping)
-// 			.field("tags", &self.tags)
-// 			.finish()
-// 	}
-// }
+impl<T> std::fmt::Debug for Writer<T>
+where
+	T: Clone + std::fmt::Debug,
+{
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("CommitOwned")
+			.field("local", &self.local)
+			.field("remote", &self.remote)
+			.field("arc", &self.arc)
+			.field("swapping", &self.swapping)
+			.field("tags", &self.tags)
+			.finish()
+	}
+}
 
-// impl<T> PartialEq for Writer<T>
-// where
-// 	T: Clone + PartialEq,
-// {
-// 	fn eq(&self, other: &Self) -> bool {
-// 		// We have `&` access which means
-// 		// there is no `&mut` access.
-// 		//
-// 		// If there is no `&mut` access then
-// 		// that means the `Writer`'s `self.remote`
-// 		// is equal to whatever `self.arc.load()`
-// 		// would produce, so we can skip this.
-// 		//
-// 		// self.arc         == other.arc
-// 		// self.swapping  == other.reclaiming
+impl<T> Default for Writer<T>
+where
+	T: Clone + Default,
+{
+	/// Only generates the [`Writer`].
+	///
+	/// This initializes your data `T` with [`Default::default()`].
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, w1) = someday::default::<usize, PatchUsize>();
+	/// let w2      = Writer::<usize, PatchUsize>::default();
+	///
+	/// assert_eq!(w1, w2);
+	/// ```
+	fn default() -> Self {
+		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
+		let remote = Arc::new(local.clone());
+		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
+		let swapping = Arc::new(AtomicBool::new(false));
 
-// 		self.local       == other.local &&
-// 		self.remote      == other.remote &&
-// 		self.functions     == other.patches &&
-// 		self.functions_old == other.patches_old &&
-// 		self.tags        == other.tags
-// 	}
-// }
+		let writer = Writer {
+			local: Some(local),
+			remote,
+			arc,
+			functions: Vec::with_capacity(INIT_VEC_LEN),
+			functions_old: Vec::with_capacity(INIT_VEC_LEN),
+			swapping,
+			tags: BTreeMap::new(),
+		};
 
-// impl<T> Default for Writer<T>
-// where
-// 	T: Clone + Default,
-// {
-// 	/// Only generates the [`Writer`].
-// 	///
-// 	/// This initializes your data `T` with [`Default::default()`].
-// 	///
-// 	/// ```rust
-// 	/// # use someday::*;
-// 	/// let (_, w1) = someday::default::<usize, PatchUsize>();
-// 	/// let w2      = Writer::<usize, PatchUsize>::default();
-// 	///
-// 	/// assert_eq!(w1, w2);
-// 	/// ```
-// 	fn default() -> Self {
-// 		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
-// 		let remote = Arc::new(local.clone());
-// 		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
-// 		let swapping = Arc::new(AtomicBool::new(false));
+		writer
+	}
+}
 
-// 		let writer = Writer {
-// 			local: Some(local),
-// 			remote,
-// 			arc,
-// 			patches: Vec::with_capacity(INIT_VEC_LEN),
-// 			patches_old: Vec::with_capacity(INIT_VEC_LEN),
-// 			swapping,
-// 			tags: BTreeMap::new(),
-// 		};
+impl<T: Clone> std::ops::Deref for Writer<T> {
+	type Target = T;
 
-// 		writer
-// 	}
-// }
+	fn deref(&self) -> &Self::Target {
+		// INVARIANT: `local` must be initialized after push()
+		&self.local.as_ref().unwrap().data
+	}
+}
 
-// impl<T, Patch> std::ops::Deref for Writer<T>
-// where
-// 	T: Apply<Patch>,
-// {
-// 	type Target = T;
+impl<T: Clone> Borrow<T> for Writer<T> {
+	fn borrow(&self) -> &T {
+		// INVARIANT: `local` must be initialized after push()
+		&self.local.as_ref().unwrap().data
+	}
+}
 
-// 	fn deref(&self) -> &Self::Target {
-// 		&self.local_ref().data
-// 	}
-// }
-
-// impl<T, Patch> Borrow<T> for Writer<T>
-// where
-// 	T: Apply<Patch>,
-// {
-// 	fn borrow(&self) -> &T {
-// 		&self.local_ref().data
-// 	}
-// }
-
-// impl<T, Patch> AsRef<T> for Writer<T>
-// where
-// 	T: Apply<Patch>,
-// {
-// 	fn as_ref(&self) -> &T {
-// 		&self.local_ref().data
-// 	}
-// }
+impl<T: Clone> AsRef<T> for Writer<T> {
+	fn as_ref(&self) -> &T {
+		// INVARIANT: `local` must be initialized after push()
+		&self.local.as_ref().unwrap().data
+	}
+}
