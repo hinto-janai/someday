@@ -146,7 +146,7 @@ where
 /// assert_eq!(w.staged().capacity(), 128);
 /// assert_eq!(w.committed_functions().capacity(), 128);
 /// ```
-pub fn with_capacity<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
+pub fn new_with_capacity<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
 where
 	T: Clone,
 {

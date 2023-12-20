@@ -410,18 +410,6 @@ where
 	/// assert_eq!(*w.head(), 123);
 	/// ```
 	pub fn commit(&mut self) -> CommitInfo {
-		self.commit_inner()
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::commit()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn commit_and(&mut self) -> &mut Self {
-		self.commit_inner();
-		self
-	}
-
-	fn commit_inner(&mut self) -> CommitInfo {
 		let functions = self.functions.len();
 
 		// Early return if there was nothing to do.
@@ -511,15 +499,6 @@ where
 
 	#[inline]
 	/// This function is the same as [`Writer::push()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn push_and(&mut self) -> &mut Self {
-		self.swapping_true();
-		self.push_inner::<false, ()>(None, None::<fn(&Self)>);
-		self
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::push()`]
 	/// but it will [`std::thread::sleep()`] for at least `duration`
 	/// amount of time to wait to reclaim the old [`Reader`]'s data.
 	///
@@ -563,14 +542,6 @@ where
 	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
 		self.swapping_true();
 		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>).0
-	}
-
-	/// This function is the same as [`Writer::push_wait()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn push_wait_and(&mut self, duration: Duration) -> &mut Self {
-		self.swapping_true();
-		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>);
-		self
 	}
 
 	#[inline]
@@ -660,18 +631,6 @@ where
 	}
 
 	#[inline]
-	/// This function is the same as [`Writer::push_do()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn push_do_and<F, R>(&mut self, f: F) -> &mut Self
-	where
-		F: FnOnce(&Self) -> R
-	{
-		self.swapping_true();
-		self.push_inner::<false, R>(None, Some(f));
-		self
-	}
-
-	#[inline]
 	/// This function is the same as [`Writer::push()`]
 	/// but it will **always** expensively clone the data
 	/// and not attempt to reclaim any old data.
@@ -708,17 +667,6 @@ where
 		// need to block Reader's for reclamation
 		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::push_clone()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn push_clone_and(&mut self) -> &mut Self {
-		// If we're always cloning, there's no
-		// need to block Reader's for reclamation
-		// so don't set `swapping`.
-		self.push_inner::<true, ()>(None, None::<fn(&Self)>);
-		self
 	}
 
 	fn push_inner<const CLONE: bool, R>(
@@ -860,19 +808,6 @@ where
 	/// assert_eq!(w.head(), "");
 	/// ```
 	pub fn pull(&mut self) -> PullInfo<T> {
-		self.pull_inner()
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::pull()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn pull_and(&mut self) -> &mut Self {
-		self.pull_inner();
-		self
-	}
-
-	#[inline]
-	fn pull_inner(&mut self) -> PullInfo<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
@@ -943,20 +878,6 @@ where
 	/// assert_eq!(r.timestamp(), 5);
 	/// ```
 	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
-		self.overwrite_inner(data)
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::overwrite()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn overwrite_and(&mut self, data: T) -> &mut Self {
-		self.overwrite_inner(data);
-		self
-	}
-
-	#[inline(always)]
-	// `T` might be heavy to stack copy, so inline this.
-	fn overwrite_inner(&mut self, data: T) -> CommitOwned<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
@@ -1057,16 +978,6 @@ where
 			.or_insert_with(|| CommitRef { inner: Arc::clone(&self.remote) })
 	}
 
-	/// This function is the same as [`Writer::tag()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn tag_and(&mut self) -> &mut Self {
-		if let Entry::Vacant(entry) = self.tags.entry(self.remote.timestamp) {
-			let head_remote = Arc::clone(&self.remote);
-			entry.insert(CommitRef { inner: head_remote });
-		}
-		self
-	}
-
 	#[inline]
 	/// Clear all the stored [`Writer`] tags
 	///
@@ -1154,14 +1065,6 @@ where
 	}
 
 	#[inline]
-	/// This function is the same as [`Writer::tag_remove()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn tag_remove_and(&mut self, timestamp: Timestamp) -> &mut Self {
-		self.tags.remove(&timestamp);
-		self
-	}
-
-	#[inline]
 	/// Removes and returns the oldest tag from the [`Writer`]
 	///
 	/// The [`CommitRef`] returned is the _oldest_ one (smallest [`Timestamp`]).
@@ -1207,22 +1110,6 @@ where
 	/// ```
 	pub fn tag_pop_latest(&mut self) -> Option<CommitRef<T>> {
 		self.tags.pop_last().map(|(_, c)| c)
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::tag_pop_oldest()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn tag_pop_oldest_and(&mut self) -> &mut Self {
-		self.tags.pop_first();
-		self
-	}
-
-	#[inline]
-	/// This function is the same as [`Writer::tag_pop_latest()`]
-	/// but it returns the [`Writer`] back for method chaining.
-	pub fn tag_pop_latest_and(&mut self) -> &mut Self {
-		self.tags.pop_last();
-		self
 	}
 
 	#[inline]
