@@ -29,7 +29,7 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`
 ///
-/// [`Writer`] applies your provided [`Patch`](Apply)'s onto your data `T`
+/// [`Writer`] applies your provided functions onto your data `T`
 /// and can [`push()`](Writer::push) that data off to [`Reader`]'s atomically.
 ///
 /// ## Usage
@@ -122,9 +122,9 @@ use crate::{
 /// assert_eq!(w.data(), "abcdefghi");
 /// assert_eq!(r.head(), "abcdefghi");
 /// ```
-pub struct Writer<T, Patch>
+pub struct Writer<T>
 where
-	T: Apply<Patch>,
+	T: Clone,
 {
 	// The writer's local mutually
 	// exclusive copy of the data.
@@ -150,12 +150,12 @@ where
 	// Calling `.load()` would load the `remote` above.
 	pub(super) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
 
-	// Patches that haven't been applied yet.
-	pub(super) patches: Vec<Patch>,
+	// Functions that have not yet been applied.
+	pub(super) functions: Vec<Box<dyn FnMut(&mut T, &T) + 'static>>,
 
-	// Patches that were already applied,
+	// Functions that were already applied,
 	// that must be re-applied to the old `T`.
-	pub(super) patches_old: Vec<Patch>,
+	pub(super) functions_old: Vec<Box<dyn FnMut(&mut T, &T) + 'static>>,
 
 	// This signifies to the `Reader`'s that the
 	// `Writer` is currently attempting to swap data.
@@ -169,9 +169,9 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- Writer
-impl<T, Patch> Writer<T, Patch>
+impl<T> Writer<T>
 where
-	T: Apply<Patch>,
+	T: Clone,
 {
 	#[inline]
 	/// Cheaply construct a [`Reader`] connected to this [`Writer`]
@@ -368,46 +368,52 @@ where
 	/// w.commit();
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn add(&mut self, patch: Patch) -> &mut Self {
-		self.patches.push(patch);
+	pub fn add<F>(&mut self, f: F) -> &mut Self
+	where
+		F: FnMut(&mut T, &T) + 'static
+	{
+		self.functions.push(Box::new(f));
 		self
 	}
 
-	#[inline]
-	/// Add multiple `Patch`'s to apply to the data `T`
-	///
-	/// This is the same as the [`Writer::add`] function but
-	/// it takes an [`Iterator`] of `Patch`'s and add those.
-	///
-	/// This [`Iterator`] could be [`Vec`], [`slice`], etc.
-	///
-	/// This returns `self` for method chaining.
-	///
-	/// ```
-	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
-	///
-	/// // Create some Patches.
-	/// let patches: Vec<PatchUsize> =
-	/// 	(0..100)
-	/// 	.map(|u| PatchUsize::Add(u))
-	/// 	.collect();
-	///
-	/// // Add them.
-	/// w.add_iter(patches.into_iter());
-	///
-	/// // They haven't been applied yet.
-	/// assert_eq!(w.staged().len(), 100);
-	///
-	/// // Now they have.
-	/// w.commit();
-	/// assert_eq!(w.staged().len(), 0);
-	/// ```
-	pub fn add_iter(&mut self, patches: impl Iterator<Item = Patch>) -> &mut Self {
-		self.patches.extend(patches);
-		self
-	}
+	// #[inline]
+	// /// Add multiple `Patch`'s to apply to the data `T`
+	// ///
+	// /// This is the same as the [`Writer::add`] function but
+	// /// it takes an [`Iterator`] of `Patch`'s and add those.
+	// ///
+	// /// This [`Iterator`] could be [`Vec`], [`slice`], etc.
+	// ///
+	// /// This returns `self` for method chaining.
+	// ///
+	// /// ```
+	// /// # use someday::*;
+	// /// # use someday::patch::*;
+	// /// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	// ///
+	// /// // Create some Patches.
+	// /// let patches: Vec<PatchUsize> =
+	// /// 	(0..100)
+	// /// 	.map(|u| PatchUsize::Add(u))
+	// /// 	.collect();
+	// ///
+	// /// // Add them.
+	// /// w.add_iter(patches.into_iter());
+	// ///
+	// /// // They haven't been applied yet.
+	// /// assert_eq!(w.staged().len(), 100);
+	// ///
+	// /// // Now they have.
+	// /// w.commit();
+	// /// assert_eq!(w.staged().len(), 0);
+	// /// ```
+	// pub fn add_iter<F>(&mut self, functions: impl Iterator<Item = F>) -> &mut Self
+	// where
+	// 	F: FnMut(&mut T, &T)
+	// {
+	// 	self.functions.extend(functions);
+	// 	self
+	// }
 
 	#[inline]
 	/// [`Apply`] all the `Patch`'s that were [`add()`](Writer::add)'ed
@@ -457,98 +463,43 @@ where
 		self
 	}
 
-	#[inline]
-	/// Immediately [`commit()`](Writer::commit) an `Input`, and return its value
-	///
-	/// If your `T` implements [`ApplyReturn`] you can specialize
-	/// that some of your `Patch`'s can return values.
-	///
-	/// This is optional, but is useful for re-acquiring heavy & expensive
-	/// data from the [`Writer`]'s data without dropping it like a normal
-	/// [`commit()`](Writer::commit) would.
-	///
-	/// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
-	/// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
-	/// - Returns you the value
-	///
-	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	///
-	/// See [`ApplyReturn`] for more details.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::collections::HashMap;
-	/// // Add an expensive object to the HashMap.
-	/// let (_, mut writer) = someday::new(HashMap::from([
-	/// 	("key", vec!["very expensive vector".to_string(); 1_000])
-	/// ]));
-	///
-	/// assert_eq!(writer.timestamp(), 0);
-	///
-	/// // Actually let's remove it, but we still want it back.
-	/// let vec: Vec<String> =
-	/// 	writer.commit_return(PatchHashMapRemove("key"))
-	/// 	.unwrap();
-	///
-	/// // We got the very expensive object back instead of just
-	/// // throwing it away like `Apply::apply()` would have done.
-	/// assert_eq!(vec, vec!["very expensive vector".to_string(); 1_000]);
-	/// ```
-	pub fn commit_return<Input, Output>(&mut self, mut input: Input) -> Output
-	where
-		T: ApplyReturn<Patch, Input, Output>,
-		Patch: From<Input>,
-	{
-		// Apply the patch and add to the old vector.
-		let return_value = ApplyReturn::apply_return(
-			&mut input,
-			&mut Self::local_field(&mut self.local).data,
-			&self.remote.data,
-		);
+	// /// Immediately [`commit()`](Writer::commit) an `Input`, and return a value with a lifetime
+	// ///
+	// /// If your `T` implements [`ApplyReturnLt`] you can specialize
+	// /// that some of your `Patch`'s can return values with lifetimes back.
+	// ///
+	// /// This is optional, but is useful for things like [`std::collections::HashMap::entry()`]
+	// /// which returns an object bounded to the lifetime of the [`Writer`]'s data.
+	// ///
+	// /// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
+	// /// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
+	// /// - Returns you the value
+	// ///
+	// /// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	// ///
+	// /// See [`ApplyReturnLt`] for more details.
+	// pub fn commit_return_lt<'a, Input, Output>(&'a mut self, mut input: Input) -> Output
+	// where
+	// 	T: crate::ApplyReturnLt<'a, Patch, Input, Output>,
+	// 	Patch: From<Input>,
+	// 	Output: 'a,
+	// {
+	// 	self.local().timestamp += 1;
 
-		self.patches_old.push(input.into());
-		self.local().timestamp += 1;
+	// 	// Apply the patch and add to the old vector.
+	// 	let return_value = crate::ApplyReturnLt::apply_return_lt(
+	// 		&mut input,
+	// 		&mut Self::local_field(&mut self.local).data,
+	// 		&self.remote.data,
+	// 	);
 
-		return_value
-	}
+	// 	self.functions_old.push(input.into());
 
-	/// Immediately [`commit()`](Writer::commit) an `Input`, and return a value with a lifetime
-	///
-	/// If your `T` implements [`ApplyReturnLt`] you can specialize
-	/// that some of your `Patch`'s can return values with lifetimes back.
-	///
-	/// This is optional, but is useful for things like [`std::collections::HashMap::entry()`]
-	/// which returns an object bounded to the lifetime of the [`Writer`]'s data.
-	///
-	/// This function does not touch any of your current [`staged()`](Writer::staged) `Patch`'s as it:
-	/// - Immediately executes your `input`'s [`ApplyReturn::apply_return()`] implementation
-	/// - Returns you the value
-	///
-	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	///
-	/// See [`ApplyReturnLt`] for more details.
-	pub fn commit_return_lt<'a, Input, Output>(&'a mut self, mut input: Input) -> Output
-	where
-		T: crate::ApplyReturnLt<'a, Patch, Input, Output>,
-		Patch: From<Input>,
-		Output: 'a,
-	{
-		self.local().timestamp += 1;
-
-		// Apply the patch and add to the old vector.
-		let return_value = crate::ApplyReturnLt::apply_return_lt(
-			&mut input,
-			&mut Self::local_field(&mut self.local).data,
-			&self.remote.data,
-		);
-
-		self.patches_old.push(input.into());
-
-		return_value
-	}
+	// 	return_value
+	// }
 
 	fn commit_inner(&mut self) -> CommitInfo {
-		let patches = self.patches.len();
+		let patches = self.functions.len();
 
 		// Early return if there was nothing to do.
 		if patches == 0 {
@@ -561,16 +512,18 @@ where
 		}
 
 		// Pre-allocate some space for the new patches.
-		self.patches_old.reserve_exact(patches);
+		self.functions_old.reserve_exact(patches);
 
 		// Apply the patches and add to the old vector.
-		for mut patch in self.patches.drain(..) {
-			Apply::apply(
-				&mut patch,
-				&mut Self::local_field(&mut self.local).data,
-				&self.remote.data,
-			);
-			self.patches_old.push(patch);
+		// for mut patch in self.functions.drain(..) {
+		for patch in self.functions.drain(..) {
+			// FIXME
+			// Apply::apply(
+			// 	&mut patch,
+			// 	&mut Self::local_field(&mut self.local).data,
+			// 	&self.remote.data,
+			// );
+			self.functions_old.push(patch);
 		}
 
 		CommitInfo {
@@ -579,143 +532,143 @@ where
 		}
 	}
 
-	/// Add multiple `Input`'s  and get a lazily-committing, lazily-returning [`Iterator`]
-	///
-	/// This is the same as the [`Writer::commit_return`] function but
-	/// it takes an [`Iterator`] of `Input`'s and commits them.
-	///
-	/// Note that [`Iterator`]'s are _lazy_, so if `.next()` is not called on the returned [`Iterator`]:
-	/// - The `Input`'s won't be applied
-	/// - No [`Commit`]'s will occur
-	/// - No return values will be returned
-	///
-	/// If either `.next()` is not called OR the input iterator
-	/// contained no patches, the [`Writer`]'s timestamp will _not_
-	/// change.
-	///
-	/// If there's at least 1 input, the timestamp will increment by 1.
-	///
-	/// You could selectively look within the returned data, `collect()`,
-	/// them, or do anything you would do with an [`Iterator`].
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::collections::HashMap;
-	/// // Create a HashMap with keys going from 0 to 1,000.
-	/// // with their value to the exact same number, but a String.
-	/// let hashmap = (0..1_000)
-	/// 	.map(|i| (i, format!("{i}")))
-	/// 	.collect::<HashMap<usize, String>>();
-	///
-	/// // Create Writer with that HashMap.
-	/// let (_, mut writer) = someday::new(hashmap);
-	///
-	/// assert_eq!(writer.data().len(), 1000);
-	///
-	/// // We're now going to remove those `0..1_000` key/value pairs.
-	/// let iterator = (0..1_000).map(|i| PatchHashMapRemove(i));
-	///
-	/// // And store the values in here.
-	/// let mut vec: Vec<String> = vec![];
-	///
-	/// // This `for` loop simply reads as:
-	/// //
-	/// // For each number 0..1_000, use it as a key into
-	/// // our HashMap, remove that value and return it to us.
-	/// //
-	/// // Each time we iterate (call `.next()` implicitly in this `for` loop) we are:
-	/// // 1. Adding our Patch
-	/// // 2. Committing our Patch
-	/// // 3. Getting the return value
-	/// //
-	/// // If we were to `break` half-way through this iteration,
-	/// // we would leave half of the patches un-touched.
-	/// for (i, return_value) in writer.commit_return_iter(iterator).enumerate() {
-	///		// To be more clear with the types here:
-	/// 	// Returned from `.enumerate()
-	/// 	let i: usize = i;
-	/// 	// The return value from our patch
-	/// 	let return_value: Option<String> = return_value;
-	///
-	/// 	let string: String = return_value.unwrap();
-	///
-	/// 	// Assert it is `i` formatted.
-	/// 	assert_eq!(string, format!("{i}"));
-	///
-	/// 	// Store.
-	/// 	vec.push(string);
-	/// }
-	///
-	/// assert_eq!(vec.len(), 1_000);
-	/// assert_eq!(writer.data().len(), 0);
-	/// ```
-	pub fn commit_return_iter<Iter, Input, Output>(&mut self, patches: Iter) -> impl Iterator<Item = Output> + '_
-	where
-		T: ApplyReturn<Patch, Input, Output>,
-		Iter: Iterator<Item = Input> + 'static,
-		Patch: From<Input>,
-		Output: 'static,
-		Input: 'static,
-	{
-		struct CommitReturnIter<'a, T, Patch, Input, Output, Iter>
-		where
-			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
-			Iter: Iterator<Item = Input>,
-			Patch: From<Input>,
-		{
-			// Our Writer.
-			writer: &'a mut Writer<T, Patch>,
-			// The iterator of patches.
-			patches: Iter,
-			// Gets set to `true` if the iterator
-			// yielded at least 1 value. It allows
-			// to know whether to += 1 the timestamp
-			// on drop().
-			some: bool,
-			_return: PhantomData<Output>,
-		}
+	// /// Add multiple `Input`'s  and get a lazily-committing, lazily-returning [`Iterator`]
+	// ///
+	// /// This is the same as the [`Writer::commit_return`] function but
+	// /// it takes an [`Iterator`] of `Input`'s and commits them.
+	// ///
+	// /// Note that [`Iterator`]'s are _lazy_, so if `.next()` is not called on the returned [`Iterator`]:
+	// /// - The `Input`'s won't be applied
+	// /// - No [`Commit`]'s will occur
+	// /// - No return values will be returned
+	// ///
+	// /// If either `.next()` is not called OR the input iterator
+	// /// contained no patches, the [`Writer`]'s timestamp will _not_
+	// /// change.
+	// ///
+	// /// If there's at least 1 input, the timestamp will increment by 1.
+	// ///
+	// /// You could selectively look within the returned data, `collect()`,
+	// /// them, or do anything you would do with an [`Iterator`].
+	// /// ```rust
+	// /// # use someday::*;
+	// /// # use std::collections::HashMap;
+	// /// // Create a HashMap with keys going from 0 to 1,000.
+	// /// // with their value to the exact same number, but a String.
+	// /// let hashmap = (0..1_000)
+	// /// 	.map(|i| (i, format!("{i}")))
+	// /// 	.collect::<HashMap<usize, String>>();
+	// ///
+	// /// // Create Writer with that HashMap.
+	// /// let (_, mut writer) = someday::new(hashmap);
+	// ///
+	// /// assert_eq!(writer.data().len(), 1000);
+	// ///
+	// /// // We're now going to remove those `0..1_000` key/value pairs.
+	// /// let iterator = (0..1_000).map(|i| PatchHashMapRemove(i));
+	// ///
+	// /// // And store the values in here.
+	// /// let mut vec: Vec<String> = vec![];
+	// ///
+	// /// // This `for` loop simply reads as:
+	// /// //
+	// /// // For each number 0..1_000, use it as a key into
+	// /// // our HashMap, remove that value and return it to us.
+	// /// //
+	// /// // Each time we iterate (call `.next()` implicitly in this `for` loop) we are:
+	// /// // 1. Adding our Patch
+	// /// // 2. Committing our Patch
+	// /// // 3. Getting the return value
+	// /// //
+	// /// // If we were to `break` half-way through this iteration,
+	// /// // we would leave half of the patches un-touched.
+	// /// for (i, return_value) in writer.commit_return_iter(iterator).enumerate() {
+	// ///		// To be more clear with the types here:
+	// /// 	// Returned from `.enumerate()
+	// /// 	let i: usize = i;
+	// /// 	// The return value from our patch
+	// /// 	let return_value: Option<String> = return_value;
+	// ///
+	// /// 	let string: String = return_value.unwrap();
+	// ///
+	// /// 	// Assert it is `i` formatted.
+	// /// 	assert_eq!(string, format!("{i}"));
+	// ///
+	// /// 	// Store.
+	// /// 	vec.push(string);
+	// /// }
+	// ///
+	// /// assert_eq!(vec.len(), 1_000);
+	// /// assert_eq!(writer.data().len(), 0);
+	// /// ```
+	// pub fn commit_return_iter<Iter, Input, Output>(&mut self, patches: Iter) -> impl Iterator<Item = Output> + '_
+	// where
+	// 	T: ApplyReturn<Patch, Input, Output>,
+	// 	Iter: Iterator<Item = Input> + 'static,
+	// 	Patch: From<Input>,
+	// 	Output: 'static,
+	// 	Input: 'static,
+	// {
+	// 	struct CommitReturnIter<'a, T, Patch, Input, Output, Iter>
+	// 	where
+	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		Iter: Iterator<Item = Input>,
+	// 		Patch: From<Input>,
+	// 	{
+	// 		// Our Writer.
+	// 		writer: &'a mut Writer<T>,
+	// 		// The iterator of patches.
+	// 		patches: Iter,
+	// 		// Gets set to `true` if the iterator
+	// 		// yielded at least 1 value. It allows
+	// 		// to know whether to += 1 the timestamp
+	// 		// on drop().
+	// 		some: bool,
+	// 		_return: PhantomData<Output>,
+	// 	}
 
-		impl<T, Patch, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
-		where
-			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
-			Iter: Iterator<Item = Input>,
-			Patch: From<Input>,
-		{
-			fn drop(&mut self) {
-				if self.some {
-					self.writer.local().timestamp += 1;
-				}
-			}
-		}
+	// 	impl<T, Patch, Input, Output, Iter> Drop for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+	// 	where
+	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		Iter: Iterator<Item = Input>,
+	// 		Patch: From<Input>,
+	// 	{
+	// 		fn drop(&mut self) {
+	// 			if self.some {
+	// 				self.writer.local().timestamp += 1;
+	// 			}
+	// 		}
+	// 	}
 
-		impl<T, Patch, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
-		where
-			T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
-			Iter: Iterator<Item = Input>,
-			Patch: From<Input>,
-		{
-			type Item = Output;
+	// 	impl<T, Patch, Input, Output, Iter> Iterator for CommitReturnIter<'_, T, Patch, Input, Output, Iter>
+	// 	where
+	// 		T: Apply<Patch> + ApplyReturn<Patch, Input, Output>,
+	// 		Iter: Iterator<Item = Input>,
+	// 		Patch: From<Input>,
+	// 	{
+	// 		type Item = Output;
 
-			fn next(&mut self) -> Option<Self::Item> {
-				match self.patches.next() {
-					Some(mut patch) => {
-						self.some = true;
+	// 		fn next(&mut self) -> Option<Self::Item> {
+	// 			match self.functions.next() {
+	// 				Some(mut patch) => {
+	// 					self.some = true;
 
-						let return_value = ApplyReturn::apply_return(
-							&mut patch,
-							&mut Writer::local_field(&mut self.writer.local).data,
-							&self.writer.remote.data,
-						);
+	// 					let return_value = ApplyReturn::apply_return(
+	// 						&mut patch,
+	// 						&mut Writer::local_field(&mut self.writer.local).data,
+	// 						&self.writer.remote.data,
+	// 					);
 
-						self.writer.patches_old.push(patch.into());
-						Some(return_value)
-					},
-					_ => None,
-				}
-			}
-		}
+	// 					self.writer.patches_old.push(patch.into());
+	// 					Some(return_value)
+	// 				},
+	// 				_ => None,
+	// 			}
+	// 		}
+	// 	}
 
-		CommitReturnIter { writer: self, patches, some: false, _return: PhantomData }
-	}
+	// 	CommitReturnIter { writer: self, patches, some: false, _return: PhantomData }
+	// }
 
 	#[inline]
 	/// Unconditionally push [`Writer`]'s local _committed_ data to the [`Reader`]'s.
@@ -1010,7 +963,7 @@ where
 		// Return early if the user wants to deep-clone no matter what.
 		if CLONE {
 			self.local = Some((*self.remote).clone());
-			self.patches_old.clear();
+			self.functions_old.clear();
 			return (PushInfo {
 				timestamp: self.remote.timestamp,
 				commits: timestamp_diff,
@@ -1056,7 +1009,8 @@ where
 
 		if reclaimed {
 			// Re-apply patches to this old data.
-			Apply::sync(self.patches_old.drain(..), &mut local.data, &self.remote.data);
+			// FIXME
+			// Apply::sync(self.functions_old.drain(..), &mut local.data, &self.remote.data);
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
 		}
@@ -1065,7 +1019,7 @@ where
 		self.local = Some(local);
 
 		// Clear patches.
-		self.patches_old.clear();
+		self.functions_old.clear();
 
 		// Output how many commits we pushed.
 		(PushInfo {
@@ -1136,7 +1090,7 @@ where
 		// Delete old patches, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
-		self.patches_old.clear();
+		self.functions_old.clear();
 		PullInfo {
 			commits_reverted: self.timestamp_diff(),
 			old_writer_data: self.local_swap((*self.remote).clone()),
@@ -1215,7 +1169,7 @@ where
 		// Delete old patches, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
-		self.patches_old.clear();
+		self.functions_old.clear();
 		self.local_swap(CommitOwned { timestamp: self.timestamp() + 1, data })
 	}
 
@@ -1494,7 +1448,10 @@ where
 	/// // Writer and Reader's commit is different.
 	/// assert!(w.diff());
 	/// ```
-	pub fn diff(&self) -> bool where T: PartialEq<T> {
+	pub fn diff(&self) -> bool
+	where T:
+		PartialEq<T>
+	{
 		self.local_ref().diff(&*self.remote)
 	}
 
@@ -1688,75 +1645,75 @@ where
 		self.local_ref().timestamp - self.remote.timestamp
 	}
 
-	/// Restore all the staged changes.
-	///
-	/// This removes all the `Patch`'s that haven't yet been [`commit()`](Writer::commit)'ed.
-	///
-	/// Calling `Writer::staged().drain(..)` would be equivalent.
-	///
-	/// If there are `Patch`'s, this function will remove
-	/// and return them as a [`std::vec::Drain`] iterator.
-	///
-	/// If there are no `Patch`'s, this will return [`None`].
-	///
-	/// Dropping the [`std::vec::Drain`] will drop the `Patch`'s.
-	///
-	/// ```rust
-	/// # use someday::{*,patch::*};
-	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	///
-	/// // Add some changes, but don't commit.
-	/// w.add(PatchString::PushStr("abc".into()));
-	/// assert_eq!(w.staged().len(), 1);
-	///
-	///	// Restore changes.
-	/// let drain = w.restore();
-	/// match drain {
-	/// 	Some(removed) => assert_eq!(removed.count(), 1),
-	/// 	_ => unreachable!(),
-	/// }
-	/// ```
-	pub fn restore(&mut self) -> Option<std::vec::Drain<'_, Patch>> {
-		if self.patches.is_empty() {
-			None
-		} else {
-			Some(self.patches.drain(..))
-		}
-	}
+	// /// Restore all the staged changes.
+	// ///
+	// /// This removes all the `Patch`'s that haven't yet been [`commit()`](Writer::commit)'ed.
+	// ///
+	// /// Calling `Writer::staged().drain(..)` would be equivalent.
+	// ///
+	// /// If there are `Patch`'s, this function will remove
+	// /// and return them as a [`std::vec::Drain`] iterator.
+	// ///
+	// /// If there are no `Patch`'s, this will return [`None`].
+	// ///
+	// /// Dropping the [`std::vec::Drain`] will drop the `Patch`'s.
+	// ///
+	// /// ```rust
+	// /// # use someday::{*,patch::*};
+	// /// # use std::{thread::*,time::*};
+	// /// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	// ///
+	// /// // Add some changes, but don't commit.
+	// /// w.add(PatchString::PushStr("abc".into()));
+	// /// assert_eq!(w.staged().len(), 1);
+	// ///
+	// ///	// Restore changes.
+	// /// let drain = w.restore();
+	// /// match drain {
+	// /// 	Some(removed) => assert_eq!(removed.count(), 1),
+	// /// 	_ => unreachable!(),
+	// /// }
+	// /// ```
+	// pub fn restore(&mut self) -> Option<std::vec::Drain<'_, Patch>> {
+	// 	if self.functions.is_empty() {
+	// 		None
+	// 	} else {
+	// 		Some(self.functions.drain(..))
+	// 	}
+	// }
 
-	#[inline]
-	/// All the `Patch`'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
-	///
-	/// You are allowed to do anything to these `Patch`'s as they haven't
-	/// been committed yet and the `Writer` does not necessarily  need them.
-	///
-	/// You can use something like `.staged().drain(..)` to get back all the `Patch`'s.
-	///
-	/// All the `Patch`'s that have been [`commit()`](Writer::commit)'ed but not yet
-	/// [`push()`](Writer::push)'ed are safely stored internally by the [`Writer`].
-	///
-	/// ```rust
-	/// # use someday::{*,patch::*};
-	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	///
-	/// // Add some changes.
-	/// let change = PatchString::PushStr("abc".into());
-	/// w.add(change.clone());
-	///
-	/// // We see and mutate the staged changes.
-	/// assert_eq!(w.staged().len(), 1);
-	/// assert_eq!(w.staged()[0], change);
-	///
-	/// // Let's actually remove that change.
-	/// let removed = w.staged().remove(0);
-	/// assert_eq!(w.staged().len(), 0);
-	/// assert_eq!(change, removed);
-	/// ```
-	pub fn staged(&mut self) -> &mut Vec<Patch> {
-		&mut self.patches
-	}
+	// #[inline]
+	// /// All the `Patch`'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
+	// ///
+	// /// You are allowed to do anything to these `Patch`'s as they haven't
+	// /// been committed yet and the `Writer` does not necessarily  need them.
+	// ///
+	// /// You can use something like `.staged().drain(..)` to get back all the `Patch`'s.
+	// ///
+	// /// All the `Patch`'s that have been [`commit()`](Writer::commit)'ed but not yet
+	// /// [`push()`](Writer::push)'ed are safely stored internally by the [`Writer`].
+	// ///
+	// /// ```rust
+	// /// # use someday::{*,patch::*};
+	// /// # use std::{thread::*,time::*};
+	// /// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	// ///
+	// /// // Add some changes.
+	// /// let change = PatchString::PushStr("abc".into());
+	// /// w.add(change.clone());
+	// ///
+	// /// // We see and mutate the staged changes.
+	// /// assert_eq!(w.staged().len(), 1);
+	// /// assert_eq!(w.staged()[0], change);
+	// ///
+	// /// // Let's actually remove that change.
+	// /// let removed = w.staged().remove(0);
+	// /// assert_eq!(w.staged().len(), 0);
+	// /// assert_eq!(change, removed);
+	// /// ```
+	// pub fn staged(&mut self) -> &mut Vec<Patch> {
+	// 	&mut self.functions
+	// }
 
 	#[inline]
 	/// Output all the tagged [`Commit`]'s
@@ -1778,29 +1735,29 @@ where
 		&self.tags
 	}
 
-	#[inline]
-	/// All the `Patch`'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
-	///
-	/// You are not allowed to mutate these `Patch`'s as they haven't been
-	/// [`push()`](Writer::push)'ed yet and the `Writer` may need them in the future.
-	///
-	/// ```rust
-	/// # use someday::{*,patch::*};
-	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	///
-	/// // Commit some changes.
-	/// let change = PatchString::PushStr("abc".into());
-	/// w.add(change.clone());
-	/// w.commit();
-	///
-	/// // We can see but not mutate patches.
-	/// assert_eq!(w.committed_patches().len(), 1);
-	/// assert_eq!(w.committed_patches()[0], change);
-	/// ```
-	pub fn committed_patches(&self) -> &Vec<Patch> {
-		&self.patches_old
-	}
+	// #[inline]
+	// /// All the `Patch`'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
+	// ///
+	// /// You are not allowed to mutate these `Patch`'s as they haven't been
+	// /// [`push()`](Writer::push)'ed yet and the `Writer` may need them in the future.
+	// ///
+	// /// ```rust
+	// /// # use someday::{*,patch::*};
+	// /// # use std::{thread::*,time::*};
+	// /// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	// ///
+	// /// // Commit some changes.
+	// /// let change = PatchString::PushStr("abc".into());
+	// /// w.add(change.clone());
+	// /// w.commit();
+	// ///
+	// /// // We can see but not mutate patches.
+	// /// assert_eq!(w.committed_patches().len(), 1);
+	// /// assert_eq!(w.committed_patches()[0], change);
+	// /// ```
+	// pub fn committed_patches(&self) -> &Vec<Patch> {
+	// 	&self.functions_old
+	// }
 
 	#[inline]
 	/// How many [`Reader`]'s are _currently_ accessing
@@ -1867,25 +1824,25 @@ where
 		Arc::strong_count(&self.arc)
 	}
 
-	/// Get the current status on the [`Writer`] and [`Reader`]
-	///
-	/// This is a bag of various metadata about the current
-	/// state of the [`Writer`] and [`Reader`].
-	///
-	/// If you only need 1 or a few of the fields in [`StatusInfo`],
-	/// consider using their individual methods instead.
-	pub fn status(&self) -> StatusInfo<'_, T, Patch> {
-		StatusInfo {
-			staged_patches: &self.patches,
-			committed_patches: self.committed_patches(),
-			head: self.head(),
-			head_remote: self.head_remote(),
-			head_readers: self.head_readers(),
-			reader_count: self.reader_count(),
-			timestamp: self.timestamp(),
-			timestamp_remote: self.timestamp_remote(),
-		}
-	}
+	// /// Get the current status on the [`Writer`] and [`Reader`]
+	// ///
+	// /// This is a bag of various metadata about the current
+	// /// state of the [`Writer`] and [`Reader`].
+	// ///
+	// /// If you only need 1 or a few of the fields in [`StatusInfo`],
+	// /// consider using their individual methods instead.
+	// pub fn status(&self) -> StatusInfo<'_, T, Patch> {
+	// 	StatusInfo {
+	// 		staged_patches: &self.functions,
+	// 		committed_patches: self.committed_patches(),
+	// 		head: self.head(),
+	// 		head_remote: self.head_remote(),
+	// 		head_readers: self.head_readers(),
+	// 		reader_count: self.reader_count(),
+	// 		timestamp: self.timestamp(),
+	// 		timestamp_remote: self.timestamp_remote(),
+	// 	}
+	// }
 
 	/// Shrinks the capacity of the `Patch` [`Vec`]'s as much as possible
 	///
@@ -1926,60 +1883,60 @@ where
 	/// assert_eq!(w.staged().capacity(), 0);
 	/// ```
 	pub fn shrink_to_fit(&mut self) {
-		self.patches.shrink_to_fit();
-		self.patches_old.shrink_to_fit();
+		self.functions.shrink_to_fit();
+		self.functions_old.shrink_to_fit();
 	}
 
-	/// Consume this [`Writer`] and return the inner components
-	///
-	/// In left-to-right order, this returns:
-	/// 1. The [`Writer`]'s local data
-	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
-	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
-	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
-	///
-	/// ```rust
-	/// # use someday::{*,patch::*};
-	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	///
-	/// // Commit some changes.
-	/// let committed_change = PatchString::PushStr("a".into());
-	/// w.add(committed_change.clone());
-	/// w.commit();
-	///
-	/// // Add but don't commit
-	/// let staged_change = PatchString::PushStr("b".into());
-	/// w.add(staged_change.clone());
-	///
-	/// let (
-	/// 	writer_data,
-	/// 	reader_data,
-	/// 	staged_changes,
-	/// 	committed_changes,
-	/// ) = w.into_inner();
-	///
-	/// assert_eq!(writer_data, "a");
-	/// assert_eq!(reader_data, ""); // We never `push()`'ed, so Readers saw nothing.
-	/// assert_eq!(staged_changes[0], staged_change);
-	/// assert_eq!(committed_changes[0], committed_change);
-	/// ```
-	pub fn into_inner(mut self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch>, Vec<Patch>) {
-		let local = self.local_take();
+	// /// Consume this [`Writer`] and return the inner components
+	// ///
+	// /// In left-to-right order, this returns:
+	// /// 1. The [`Writer`]'s local data
+	// /// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
+	// /// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
+	// /// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
+	// ///
+	// /// ```rust
+	// /// # use someday::{*,patch::*};
+	// /// # use std::{thread::*,time::*};
+	// /// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	// ///
+	// /// // Commit some changes.
+	// /// let committed_change = PatchString::PushStr("a".into());
+	// /// w.add(committed_change.clone());
+	// /// w.commit();
+	// ///
+	// /// // Add but don't commit
+	// /// let staged_change = PatchString::PushStr("b".into());
+	// /// w.add(staged_change.clone());
+	// ///
+	// /// let (
+	// /// 	writer_data,
+	// /// 	reader_data,
+	// /// 	staged_changes,
+	// /// 	committed_changes,
+	// /// ) = w.into_inner();
+	// ///
+	// /// assert_eq!(writer_data, "a");
+	// /// assert_eq!(reader_data, ""); // We never `push()`'ed, so Readers saw nothing.
+	// /// assert_eq!(staged_changes[0], staged_change);
+	// /// assert_eq!(committed_changes[0], committed_change);
+	// /// ```
+	// pub fn into_inner(mut self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch>, Vec<Patch>) {
+	// 	let local = self.local_take();
 
-		let snap = CommitOwned {
-			timestamp: local.timestamp,
-			data: local.data,
-		};
+	// 	let snap = CommitOwned {
+	// 		timestamp: local.timestamp,
+	// 		data: local.data,
+	// 	};
 
-		(snap, CommitRef { inner: self.remote }, self.patches, self.patches_old)
-	}
+	// 	(snap, CommitRef { inner: self.remote }, self.functions, self.functions_old)
+	// }
 }
 
 //---------------------------------------------------------------------------------------------------- Private writer functions
-impl<T, Patch> Writer<T, Patch>
+impl<T> Writer<T>
 where
-	T: Apply<Patch>,
+	T: Clone
 {
 	// HACK:
 	// These `local_*()` functions are a work around.
@@ -2054,109 +2011,107 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
-impl<T, Patch> std::fmt::Debug for Writer<T, Patch>
-where
-	T: Apply<Patch> + std::fmt::Debug,
-	Patch: std::fmt::Debug,
-{
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("CommitOwned")
-			.field("local", &self.local)
-			.field("remote", &self.remote)
-			.field("arc", &self.arc)
-			.field("patches", &self.patches)
-			.field("patches_old", &self.patches_old)
-			.field("swapping", &self.swapping)
-			.field("tags", &self.tags)
-			.finish()
-	}
-}
+// impl<T> std::fmt::Debug for Writer<T>
+// where
+// 	T: Clone + std::fmt::Debug,
+// {
+// 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+// 		f.debug_struct("CommitOwned")
+// 			.field("local", &self.local)
+// 			.field("remote", &self.remote)
+// 			.field("arc", &self.arc)
+// 			.field("patches", &self.functions)
+// 			.field("patches_old", &self.functions_old)
+// 			.field("swapping", &self.swapping)
+// 			.field("tags", &self.tags)
+// 			.finish()
+// 	}
+// }
 
-impl<T, Patch> PartialEq for Writer<T, Patch>
-where
-	T: PartialEq + Apply<Patch>,
-	Patch: PartialEq,
-{
-	fn eq(&self, other: &Self) -> bool {
-		// We have `&` access which means
-		// there is no `&mut` access.
-		//
-		// If there is no `&mut` access then
-		// that means the `Writer`'s `self.remote`
-		// is equal to whatever `self.arc.load()`
-		// would produce, so we can skip this.
-		//
-		// self.arc         == other.arc
-		// self.swapping  == other.reclaiming
+// impl<T> PartialEq for Writer<T>
+// where
+// 	T: Clone + PartialEq,
+// {
+// 	fn eq(&self, other: &Self) -> bool {
+// 		// We have `&` access which means
+// 		// there is no `&mut` access.
+// 		//
+// 		// If there is no `&mut` access then
+// 		// that means the `Writer`'s `self.remote`
+// 		// is equal to whatever `self.arc.load()`
+// 		// would produce, so we can skip this.
+// 		//
+// 		// self.arc         == other.arc
+// 		// self.swapping  == other.reclaiming
 
-		self.local       == other.local &&
-		self.remote      == other.remote &&
-		self.patches     == other.patches &&
-		self.patches_old == other.patches_old &&
-		self.tags        == other.tags
-	}
-}
+// 		self.local       == other.local &&
+// 		self.remote      == other.remote &&
+// 		self.functions     == other.patches &&
+// 		self.functions_old == other.patches_old &&
+// 		self.tags        == other.tags
+// 	}
+// }
 
-impl<T, Patch> Default for Writer<T, Patch>
-where
-	T: Default + Apply<Patch>,
-{
-	/// Only generates the [`Writer`].
-	///
-	/// This initializes your data `T` with [`Default::default()`].
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (_, w1) = someday::default::<usize, PatchUsize>();
-	/// let w2      = Writer::<usize, PatchUsize>::default();
-	///
-	/// assert_eq!(w1, w2);
-	/// ```
-	fn default() -> Self {
-		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
-		let remote = Arc::new(local.clone());
-		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
-		let swapping = Arc::new(AtomicBool::new(false));
+// impl<T> Default for Writer<T>
+// where
+// 	T: Clone + Default,
+// {
+// 	/// Only generates the [`Writer`].
+// 	///
+// 	/// This initializes your data `T` with [`Default::default()`].
+// 	///
+// 	/// ```rust
+// 	/// # use someday::*;
+// 	/// let (_, w1) = someday::default::<usize, PatchUsize>();
+// 	/// let w2      = Writer::<usize, PatchUsize>::default();
+// 	///
+// 	/// assert_eq!(w1, w2);
+// 	/// ```
+// 	fn default() -> Self {
+// 		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
+// 		let remote = Arc::new(local.clone());
+// 		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
+// 		let swapping = Arc::new(AtomicBool::new(false));
 
-		let writer = Writer {
-			local: Some(local),
-			remote,
-			arc,
-			patches: Vec::with_capacity(INIT_VEC_LEN),
-			patches_old: Vec::with_capacity(INIT_VEC_LEN),
-			swapping,
-			tags: BTreeMap::new(),
-		};
+// 		let writer = Writer {
+// 			local: Some(local),
+// 			remote,
+// 			arc,
+// 			patches: Vec::with_capacity(INIT_VEC_LEN),
+// 			patches_old: Vec::with_capacity(INIT_VEC_LEN),
+// 			swapping,
+// 			tags: BTreeMap::new(),
+// 		};
 
-		writer
-	}
-}
+// 		writer
+// 	}
+// }
 
-impl<T, Patch> std::ops::Deref for Writer<T, Patch>
-where
-	T: Apply<Patch>,
-{
-	type Target = T;
+// impl<T, Patch> std::ops::Deref for Writer<T>
+// where
+// 	T: Apply<Patch>,
+// {
+// 	type Target = T;
 
-	fn deref(&self) -> &Self::Target {
-		&self.local_ref().data
-	}
-}
+// 	fn deref(&self) -> &Self::Target {
+// 		&self.local_ref().data
+// 	}
+// }
 
-impl<T, Patch> Borrow<T> for Writer<T, Patch>
-where
-	T: Apply<Patch>,
-{
-	fn borrow(&self) -> &T {
-		&self.local_ref().data
-	}
-}
+// impl<T, Patch> Borrow<T> for Writer<T>
+// where
+// 	T: Apply<Patch>,
+// {
+// 	fn borrow(&self) -> &T {
+// 		&self.local_ref().data
+// 	}
+// }
 
-impl<T, Patch> AsRef<T> for Writer<T, Patch>
-where
-	T: Apply<Patch>,
-{
-	fn as_ref(&self) -> &T {
-		&self.local_ref().data
-	}
-}
+// impl<T, Patch> AsRef<T> for Writer<T>
+// where
+// 	T: Apply<Patch>,
+// {
+// 	fn as_ref(&self) -> &T {
+// 		&self.local_ref().data
+// 	}
+// }

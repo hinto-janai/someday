@@ -60,7 +60,7 @@ pub use info::*;
 /// Anything with trait bounds or complicated returned values is not enumerated.
 ///
 /// These all implement [`Apply`], so that they can
-/// be used as "patches" to give to your [`Writer`].
+/// be used as "functions" to give to your [`Writer`].
 ///
 /// Realistically, you should be creating your own `Patch` type
 /// that implements [`Apply`] specifically for your needs.
@@ -83,9 +83,7 @@ pub use apply::{Apply,ApplyReturn,ApplyReturnLt};
 ///
 /// In [`Commit`] objects, there is a [`Timestamp`] that represents that data's "version".
 ///
-/// Unlike `git`, these aren't hashes in a [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree).
-///
-/// It is just an incrementing [`usize`].
+/// It is just an incrementing [`usize`] starting at 0.
 ///
 /// Every time the [`Writer`] calls a commit operation like [`Writer::commit()`],
 /// or [`Writer::overwrite()`] the data's [`Timestamp`] is incremented by `1`, thus
@@ -95,8 +93,8 @@ pub use apply::{Apply,ApplyReturn,ApplyReturnLt};
 /// never "rebase" (as in, go back in time with their [`Commit`]) more
 /// further back than the current [`Reader`]'s [`Timestamp`].
 ///
-/// This means the [`Writer`]'s timestamp will _always_ be greater than or
-/// equal to the [`Reader`]'s timestamp.
+/// This means the [`Writer`]'s timestamp will _always_ be
+/// greater than or equal to the [`Reader`]'s timestamp.
 ///
 /// ## Example
 /// ```rust
@@ -146,11 +144,11 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 ///
 /// let (r, mut w) = someday::new::<String, PatchString>("".into());
 /// ```
-pub fn new<T, Patch>(data: T) -> (Reader<T>, Writer<T, Patch>)
+pub fn new<T>(data: T) -> (Reader<T>, Writer<T>)
 where
-	T: Clone + Apply<Patch>,
+	T: Clone,
 {
-	new_internal::<T, Patch>(data, INIT_VEC_LEN)
+	new_internal::<T>(data, INIT_VEC_LEN)
 }
 
 #[inline]
@@ -168,16 +166,16 @@ where
 /// ```rust
 /// use someday::patch::PatchString;
 ///
-/// // Can fit 128 patches without re-allocating.
+/// // Can fit 128 functions without re-allocating.
 /// let (r, mut w) = someday::with_capacity::<String, PatchString>("".into(), 128);
 /// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_patches().capacity(), 128);
+/// assert_eq!(w.committed_functions().capacity(), 128);
 /// ```
-pub fn with_capacity<T, Patch>(data: T, capacity: usize) -> (Reader<T>, Writer<T, Patch>)
+pub fn with_capacity<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
 where
-	T: Clone + Apply<Patch>,
+	T: Clone,
 {
-	new_internal::<T, Patch>(data, capacity)
+	new_internal::<T>(data, capacity)
 }
 
 /// Create a default [`Writer`] & [`Reader`] pair
@@ -194,11 +192,11 @@ where
 /// assert_eq!(*w.data(), "");
 /// assert_eq!(r.head(), "");
 /// ```
-pub fn default<T, Patch>() -> (Reader<T>, Writer<T, Patch>)
+pub fn default<T>() -> (Reader<T>, Writer<T>)
 where
-	T: Default + Clone + Apply<Patch>,
+	T: Default + Clone,
 {
-	new_internal::<T, Patch>(Default::default(), INIT_VEC_LEN)
+	new_internal::<T>(Default::default(), INIT_VEC_LEN)
 }
 
 /// Create a default [`Writer`] & [`Reader`] pair with a specified [`Apply`] capacity
@@ -209,21 +207,21 @@ where
 /// ```rust
 /// use someday::patch::PatchString;
 ///
-/// // Can fit 128 patches without re-allocating.
+/// // Can fit 128 functions without re-allocating.
 /// let (r, mut w) = someday::default_with_capacity::<String, PatchString>(128);
 /// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_patches().capacity(), 128);
+/// assert_eq!(w.committed_functions().capacity(), 128);
 /// ```
-pub fn default_with_capacity<T, Patch>(capacity: usize) -> (Reader<T>, Writer<T, Patch>)
+pub fn default_with_capacity<T>(capacity: usize) -> (Reader<T>, Writer<T>)
 where
-	T: Default + Clone + Apply<Patch>,
+	T: Default + Clone,
 {
-	new_internal::<T, Patch>(Default::default(), capacity)
+	new_internal::<T>(Default::default(), capacity)
 }
 
-fn new_internal<T, Patch>(data: T, capacity: usize) -> (Reader<T>, Writer<T, Patch>)
+fn new_internal<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
 where
-	T: Clone + Apply<Patch>,
+	T: Clone,
 {
 	use std::sync::{Arc,atomic::AtomicBool};
 
@@ -241,8 +239,8 @@ where
 		local: Some(local),
 		remote,
 		arc,
-		patches: Vec::with_capacity(capacity),
-		patches_old: Vec::with_capacity(capacity),
+		functions: Vec::with_capacity(capacity),
+		functions_old: Vec::with_capacity(capacity),
 		tags: std::collections::BTreeMap::new(),
 		swapping,
 	};

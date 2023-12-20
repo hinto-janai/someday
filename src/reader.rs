@@ -140,6 +140,8 @@ use crate::{
 /// ```
 #[derive(Clone,Debug)]
 pub struct Reader<T>
+where
+	T: Clone,
 {
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
 	pub(super) swapping: Arc<AtomicBool>,
@@ -392,8 +394,8 @@ where
 	}
 }
 
-impl<T: Apply<Patch>, Patch> From<&Writer<T, Patch>> for Reader<T> {
-	fn from(value: &Writer<T, Patch>) -> Self {
+impl<T: Clone> From<&Writer<T>> for Reader<T> {
+	fn from(value: &Writer<T>) -> Self {
 		value.reader()
 	}
 }
