@@ -50,6 +50,9 @@ pub use reader::Reader;
 mod commit;
 pub use commit::{Commit, CommitRef, CommitOwned};
 
+mod patch;
+pub use patch::Patch;
+
 mod writer;
 pub use writer::Writer;
 
@@ -144,7 +147,7 @@ where
 /// // Can fit 128 functions without re-allocating.
 /// let (r, mut w) = someday::with_capacity::<String, PatchString>("".into(), 128);
 /// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_functions().capacity(), 128);
+/// assert_eq!(w.committed_patches().capacity(), 128);
 /// ```
 pub fn new_with_capacity<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
 where
@@ -185,7 +188,7 @@ where
 /// // Can fit 128 functions without re-allocating.
 /// let (r, mut w) = someday::default_with_capacity::<String, PatchString>(128);
 /// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_functions().capacity(), 128);
+/// assert_eq!(w.committed_patches().capacity(), 128);
 /// ```
 pub fn default_with_capacity<T>(capacity: usize) -> (Reader<T>, Writer<T>)
 where
@@ -214,8 +217,8 @@ where
 		local: Some(local),
 		remote,
 		arc,
-		functions: Vec::with_capacity(capacity),
-		functions_old: Vec::with_capacity(capacity),
+		patches: Vec::with_capacity(capacity),
+		patches_old: Vec::with_capacity(capacity),
 		tags: std::collections::BTreeMap::new(),
 		swapping,
 	};

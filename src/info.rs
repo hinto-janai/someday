@@ -4,7 +4,13 @@
 //! information about [`Writer`] operations.
 
 //---------------------------------------------------------------------------------------------------- Use
-use crate::{Timestamp, CommitOwned, Writer, Reader, Commit};
+use crate::{
+	Timestamp,
+	commit::{Commit, CommitOwned},
+	writer::Writer,
+	reader::Reader,
+	patch::Patch,
+};
 
 //---------------------------------------------------------------------------------------------------- Info
 /// Metadata about a [`Writer::commit()`]
@@ -14,8 +20,8 @@ use crate::{Timestamp, CommitOwned, Writer, Reader, Commit};
 ///
 /// It is returned from commit-like functions.
 pub struct CommitInfo {
-	/// How many function's were applied in this [`Commit`]?
-	pub functions: usize,
+	/// How many patches's were applied in this [`Commit`]?
+	pub patches: usize,
 	/// How many [`Commit`]'s is the [`Writer`] now ahead of
 	/// compared to the [`Reader`]'s latest head [`Commit`]?
 	pub timestamp_diff: usize,
@@ -29,14 +35,20 @@ pub struct CommitInfo {
 /// It is returned from push-like functions.
 pub struct PushInfo {
 	/// The new [`Timestamp`] of the head [`Commit`]
+	///
+	/// This will be the same as the [`Writer`]'s local timestamp
+	/// if `push()` didn't actually do anything (up-to-date with readers).
 	pub timestamp: Timestamp,
 	/// How many [`Commit`]'s were pushed?
+	///
+	/// This will be `0` if `push()` didn't actually do anything (up-to-date with readers).
 	pub commits: usize,
 	/// Did the [`Writer`] get to cheaply reclaim old
 	/// data and re-apply the `Patch`'s?
 	///
-	/// If this is `false`, it means the `Writer`
-	/// expensively cloned the data directly.
+	/// If this is `false`, it means either
+	/// - The `Writer` expensively cloned the data directly OR
+	/// - `push()` didn't have any changes to push (up-to-date with readers)
 	pub reclaimed: bool,
 }
 
@@ -67,11 +79,11 @@ pub struct PullInfo<T> {
 ///
 /// If you only need 1 or a few of these fields, consider
 /// using their individual methods instead.
-pub struct StatusInfo<'a, T, Patch> {
+pub struct StatusInfo<'a, T> {
 	/// [`Writer::staged`]
-	pub staged_functions: &'a Vec<Patch>,
-	/// [`Writer::committed_functions`]
-	pub committed_functions: &'a Vec<Patch>,
+	pub staged_patches: &'a Vec<Patch<T>>,
+	/// [`Writer::committed_patches`]
+	pub committed_patches: &'a Vec<Patch<T>>,
 	/// [`Writer::head`]
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]
