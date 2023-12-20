@@ -47,13 +47,9 @@ use crate::{
 /// - Repeat
 ///
 /// ```rust
-/// use someday::{
-/// 	{Writer,Reader,Commit,CommitOwned,CommitRef},
-/// 	patch::PatchString,
-/// };
+/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef,Patch};
 ///
-/// // Create a Reader/Writer pair that can "apply"
-/// // the `PatchString` patch to `String`'s.
+/// // Create a Reader/Writer pair of a `String`.
 /// let (reader, writer) = someday::new("".into());
 ///
 /// // To clarify the types of these things:
@@ -69,7 +65,7 @@ use crate::{
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
-///	let mut writer: Writer<String, PatchString> = writer;
+///	let mut writer: Writer<String> = writer;
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(writer.timestamp(), 0);
@@ -90,10 +86,9 @@ use crate::{
 /// 	// and real code probably wouldn't do this, although
 /// 	// just for the example...
 /// 	loop {
-/// 		writer
-/// 			.add(PatchString::PushStr("abc".into()))
-/// 			.commit_and()
-/// 			.push();
+/// 		writer.add(Patch::Fn(|w, _| w.push_str("abc")));
+/// 		writer.commit();
+/// 		writer.push();
 /// 	}
 /// });
 ///
@@ -164,9 +159,8 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
 	/// // Create a Reader/Writer pair.
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Both Reader and Writer are at timestamp 0 and see no changes.
 	/// assert_eq!(w.timestamp(), 0);
@@ -175,7 +169,9 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Writer commits some changes locally.
-	/// w.add(PatchString::Assign("hello".into())).commit();
+	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.commit();
+	///
 	/// // Writer sees local changes.
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello");
@@ -183,7 +179,7 @@ where
 	/// // Reader does not, because Writer did not `push()`.
 	/// let head: CommitRef<String> = r.head();
 	/// assert_eq!(head.timestamp(), 0);
-	/// assert_eq!(head.data(),      "");
+	/// assert_eq!(head.data(), "");
 	///
 	/// // Writer pushs to the Readers.
 	/// w.push();
@@ -191,7 +187,7 @@ where
 	/// // Now Readers see changes.
 	/// let head: CommitRef<String> = r.head();
 	/// assert_eq!(head.timestamp(), 1);
-	/// assert_eq!(head.data(),      "hello");
+	/// assert_eq!(head.data(), "hello");
 	/// ```
 	pub fn head(&self) -> CommitRef<T> {
 		// May be slower for readers,
@@ -261,7 +257,7 @@ where
 	/// ## Example
 	/// ```rust
 	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// /* Let's just pretend the Writer
 	///   is off doing some other things */

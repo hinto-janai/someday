@@ -4,7 +4,7 @@
 /// TODO
 pub enum Patch<T> {
 	/// TODO
-	Box(Box<dyn FnMut(&mut T, &T) + 'static>),
+	Box(Box<dyn FnMut(&mut T, &T) + 'static + Send>),
 	/// TODO
 	Fn(fn(&mut T, &T))
 }
@@ -23,7 +23,7 @@ impl<T> Patch<T> {
 //---------------------------------------------------------------------------------------------------- Trait Impl
 impl<T, F> From<F> for Patch<T>
 where
-	F: FnMut(&mut T, &T) + 'static
+	F: FnMut(&mut T, &T) + 'static + Send
 {
 	#[inline]
 	fn from(patch: F) -> Self {

@@ -1,6 +1,6 @@
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
-use crate::{Writer,Reader,Timestamp};
+use crate::{Writer,Reader,Timestamp,Patch};
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -13,8 +13,8 @@ use crate::{Writer,Reader,Timestamp};
 /// of being shared like [`CommitRef`], it is fully owned.
 ///
 /// ```rust
-/// # use someday::{*,patch::*};
-/// let (reader, _) = someday::new::<String, PatchString>("hello".into());
+/// # use someday::*;
+/// let (reader, _) = someday::new::<String>("hello".into());
 ///
 /// // This is a ref-counted String.
 /// let reference: CommitRef<String> = reader.head();
@@ -156,8 +156,8 @@ impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 ///
 /// [`CommitRef`] also implements convenience traits like [`PartialEq`] for your `T`:
 /// ```rust
-/// # use someday::{*,patch::*};
-/// let (reader, _) = someday::new::<String, PatchString>("hello".into());
+/// # use someday::*;
+/// let (reader, _) = someday::new::<String>("hello".into());
 ///
 /// let commit: CommitRef<String> = reader.head();
 ///
@@ -313,7 +313,7 @@ pub trait Commit<T>: private::Sealed {
 	/// Starts at 0, and increments by 1 every time [`Writer::commit()`] is called.
 	///
 	/// This means this also represents how many
-	/// [`Patch`](Apply)'s were applied to your data.
+	/// [`Patch`]'s were applied to your data.
 	///
 	/// See [`Writer`] & [`Reader`] for more timestamp documentation.
 	fn timestamp(&self) -> Timestamp;

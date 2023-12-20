@@ -43,9 +43,8 @@ and the [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html):
 
 The code:
 ```rust
-use someday::patch::PatchVec;
 use someday::{
-	Apply,
+	Patch,
 	Writer,Reader,
 	Commit,CommitRef,
 	CommitInfo,PushInfo,
@@ -63,7 +62,7 @@ assert_eq!(commit, vec!["a"]);
 assert_eq!(commit.timestamp(), 0);
 
 // Writer writes some data, but does not commit.
-w.add(PatchVec::Push("b"));
+w.add(Patch::Fn(|w, _| w.push("b")));
 // Nothing committed, data still the same everywhere.
 let data: &Vec<&str> = w.data();
 assert_eq!(*data, vec!["a"]);
@@ -74,7 +73,7 @@ assert_eq!(w.staged().len(), 1);
 assert_eq!(r.head(), vec!["a"]);
 
 // Writer writes some more data.
-w.add(PatchVec::Push("c"));
+w.add(Patch::Fn(|w, _| w.push("c")));
 // Readers still see old data.
 assert_eq!(r.head(), vec!["a"]);
 

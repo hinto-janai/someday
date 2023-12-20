@@ -41,10 +41,7 @@ use crate::{
 /// - Pushing those changes to the [`Reader`]'s
 ///
 /// ```rust
-/// use someday::{
-/// 	{Writer,Reader,Commit,CommitOwned,CommitRef},
-/// 	patch::PatchString,
-/// };
+/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef,Patch};
 ///
 /// // Create a Reader/Writer pair that can "apply"
 /// // the `PatchString` patch to `String`'s.
@@ -61,7 +58,7 @@ use crate::{
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
-///	let mut w: Writer<String, PatchString> = w;
+///	let mut w: Writer<String> = w;
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(w.timestamp(), 0);
@@ -70,10 +67,10 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // The Writer can add many `Patch`'s
-/// w.add(PatchString::PushStr("abc".into()));
-/// w.add(PatchString::PushStr("def".into()));
-/// w.add(PatchString::PushStr("ghi".into()));
-/// w.add(PatchString::PushStr("jkl".into()));
+/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+/// w.add(Patch::Fn(|w, _| w.push_str("def")));
+/// w.add(Patch::Fn(|w, _| w.push_str("ghi")));
+/// w.add(Patch::Fn(|w, _| w.push_str("jkl")));
 ///
 /// // But `add()`'ing does not actually modify the
 /// // local (Writer) or remote (Readers) data, it
@@ -84,21 +81,16 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // We can see our "staged" functions here.
-/// let staged: &mut Vec<PatchString> = w.staged();
+/// let staged: &mut Vec<Patch<String>> = w.staged();
 /// assert_eq!(staged.len(), 4);
-/// assert_eq!(staged[0], PatchString::PushStr("abc".into()));
-/// assert_eq!(staged[1], PatchString::PushStr("def".into()));
-/// assert_eq!(staged[2], PatchString::PushStr("ghi".into()));
-/// assert_eq!(staged[3], PatchString::PushStr("jkl".into()));
 ///
 /// // Let's actually remove a patch.
 /// let removed = staged.remove(3);
-/// assert_eq!(removed, PatchString::PushStr("jkl".into()));
 ///
 /// // Okay, now let's commit locally.
 /// let commit_info = w.commit();
-/// // We applied 3 functions in total.
-/// assert_eq!(commit_info.functions, 3);
+/// // We applied 3 patches in total.
+/// assert_eq!(commit_info.patches, 3);
 /// // And added 1 commit (timestamp).
 /// assert_eq!(w.timestamp(), 1);
 ///
@@ -179,8 +171,7 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Create 100 more readers.
 	/// let readers: Vec<Reader<usize>> = vec![w.reader(); 100];
@@ -205,15 +196,15 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // No changes yet.
 	/// assert_eq!(*w.data(), 0);
 	/// assert_eq!(r.head(),  0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(PatchUsize::Add(1)).commit();
+	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.commit();
 	///
 	/// //  Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
@@ -230,11 +221,11 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (_, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (_, mut w) = someday::new::<usize>(0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(PatchUsize::Add(1)).commit();
+	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.commit();
 	///
 	/// // Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
@@ -258,21 +249,21 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (_, mut w) = someday::new::<usize, PatchUsize>(500);
+	/// let (_, mut w) = someday::new::<usize>(500);
 	///
 	/// // No changes yet.
 	/// let commit: &CommitOwned<usize> = w.head();
 	/// assert_eq!(commit.timestamp, 0);
-	/// assert_eq!(commit.data,      500);
+	/// assert_eq!(commit.data, 500);
 	///
 	/// // Writer commits some changes.
-	/// w.add(PatchUsize::Add(1)).commit();
+	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.commit();
 	///
 	/// // Head commit is now changed.
 	/// let commit: &CommitOwned<usize> = w.head();
 	/// assert_eq!(commit.timestamp, 1);
-	/// assert_eq!(commit.data,      501);
+	/// assert_eq!(commit.data, 501);
 	/// ```
 	pub fn head(&self) -> &CommitOwned<T> {
 		// INVARIANT: `local` must be initialized after push()
@@ -288,21 +279,22 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (_, mut w) = someday::new::<usize, PatchUsize>(500);
+	/// let (_, mut w) = someday::new::<usize>(500);
 	///
 	/// // No changes yet.
 	/// let commit: &CommitOwned<usize> = w.head_remote();
 	/// assert_eq!(commit.timestamp(), 0);
-	/// assert_eq!(*commit.data(),     500);
+	/// assert_eq!(*commit.data(), 500);
 	///
 	/// // Writer commits & pushes some changes.
-	/// w.add(PatchUsize::Add(1)).commit_and().push();
+	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.commit();
+	/// w.push();
 	///
 	/// // Reader's head commit is now changed.
 	/// let commit: &CommitOwned<usize> = w.head_remote();
 	/// assert_eq!(commit.timestamp(), 1);
-	/// assert_eq!(*commit.data(),     501);
+	/// assert_eq!(*commit.data(), 501);
 	/// ```
 	pub fn head_remote(&self) -> &CommitOwned<T> {
 		&*self.remote
@@ -319,8 +311,7 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Reader gets a reference.
 	/// let reader: CommitRef<usize> = r.head();
@@ -353,11 +344,10 @@ where
 	///
 	/// ```
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Add a patch.
-	/// w.add(PatchUsize::Add(1));
+	/// w.add(Patch::Fn(|w, _| *w += 1));
 	///
 	/// // It hasn't been applied yet.
 	/// assert_eq!(w.staged().len(), 1);
@@ -395,14 +385,15 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use someday::patch::*;
-	/// let (r, mut w) = someday::new::<usize, PatchUsize>(0);
+	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Timestamp is 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // And and commit a patch.
-	/// w.add(PatchUsize::Add(123)).commit();
+	/// w.add(Patch::Fn(|w, _| *w += 123));
+	/// w.commit();
+	///
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(*w.head(), 123);
 	/// ```
@@ -465,9 +456,9 @@ where
 	/// check to see if there are changes to push:
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	/// w.add(PatchString::PushStr("abc".into()));
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String>("".into());
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	///
 	/// if w.ahead() {
 	/// 	// won't happen, not yet committed
@@ -510,10 +501,10 @@ where
 	/// hold onto old data for a brief moment.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{sync::*,thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	/// w.add(PatchString::PushStr("abc".into()));
+	/// let (r, mut w) = someday::new::<String>("".into());
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// # let barrier  = Arc::new(Barrier::new(2));
@@ -558,9 +549,9 @@ where
 	/// on the [`Reader`]'s to drop old copies of data.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{sync::*,thread::*,time::*,collections::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// # let barrier  = Arc::new(Barrier::new(2));
 	/// # let other_b = barrier.clone();
@@ -581,7 +572,8 @@ where
 	/// // Commit.
 	/// // Now the `Writer` is ahead by 1 commit, while
 	/// // the `Reader` is hanging onto the old one.
-	/// w.add(PatchString::PushStr("abc".into())).commit();
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
 	///
 	///	// Pass in a closure, so that we can do
 	/// // arbitrary things in the meanwhile...!
@@ -640,10 +632,10 @@ where
 	/// will be unlikely.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
-	/// w.add(PatchString::PushStr("abc".into()));
+	/// let (r, mut w) = someday::new::<String>("".into());
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// let commit = r.head();
@@ -738,9 +730,12 @@ where
 		// we're in a lot of trouble and will lock `Reader`'s.
 
 		if reclaimed {
-			// Re-apply functions to this old data.
-			// FIXME
-			// Apply::sync(self.patches_old.drain(..), &mut local.data, &self.remote.data);
+			// Re-apply patches to this old data.
+			self.patches_old
+				.drain(..)
+				.for_each(|mut patch| {
+					patch.apply(&mut local.data, &self.remote.data);
+				});
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
 		}
@@ -785,12 +780,13 @@ where
 	/// completely overwrite the [`Writer`]'s local data with it.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit local changes.
-	/// w.add(PatchString::PushStr("hello".into())).commit();
+	/// w.add(Patch::Fn(|w, _| w.push_str("hello")));
+	/// w.commit();
 	/// assert_eq!(w.head(), "hello");
 	///
 	/// // Reader's sees nothing
@@ -830,20 +826,19 @@ where
 	///
 	/// This increments the [`Writer`]'s local [`Timestamp`] by `1`.
 	///
-	/// A [`Patch`](Apply) that overwrites the data
+	/// A [`Patch`] that overwrites the data
 	/// applied with [`Writer::commit()`] would be
 	/// equivalent to this convenience function.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push changes.
-	/// w
-	/// 	.add(PatchString::PushStr("hello".into()))
-	/// 	.commit_and() // <- commit 1
-	/// 	.push();
+	/// w.add(Patch::Fn(|w, _| w.push_str("hello")));
+	/// w.commit(); // <- commit 1
+	/// w.push();
 	///
 	/// assert_eq!(w.timestamp(), 1);
 	///
@@ -852,9 +847,12 @@ where
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
-	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 2
-	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 3
-	/// w.add(PatchString::Assign("hello".into())).commit(); // <- commit 4
+	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.commit(); // <- commit 2
+	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.commit(); // <- commit 3
+	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.commit(); // <- commit 4
 	/// assert_eq!(w.committed_patches().len(), 3);
 	///
 	/// // Overwrite the Writer with arbitrary data.
@@ -880,10 +878,11 @@ where
 		self.patches_old.clear();
 
 		// INVARIANT: `local` must be initialized after push()
+		let timestamp = self.timestamp() + 1;
 		let old_data = self.local.take().unwrap();
 
 		self.local = Some(CommitOwned {
-			timestamp: self.timestamp() + 1,
+			timestamp,
 			data
 		});
 
@@ -925,12 +924,14 @@ where
 	/// to push the latest commit, then tag it.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push a change.
-	/// w.add(PatchString::PushStr("a".into())).commit_and().push();
+	/// w.add(Patch::Fn(|w, _| w.push_str("a")));
+	/// w.commit();
+	/// w.push();
 	///
 	///	// Tag that change, and clone it (this is cheap).
 	/// let tag = CommitRef::clone(w.tag());
@@ -941,7 +942,9 @@ where
 	///
 	/// // Push a whole bunch changes.
 	/// for _ in 0..100 {
-	/// 	w.add(PatchString::PushStr("b".into())).commit_and().push();
+	/// 	w.add(Patch::Fn(|w, _| w.push_str("b")));
+	/// 	w.commit();
+	/// 	w.push();
 	/// }
 	///	assert_eq!(w.timestamp(), 101);
 	///	assert_eq!(r.timestamp(), 101);
@@ -989,20 +992,19 @@ where
 	/// The elements are visited in ascending key order.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// // Tag this "aaa" commit.
 	/// writer.tag();
 	///
 	/// // Push and tag a whole bunch changes.
 	/// for i in 1..100 {
-	/// 	writer
-	/// 		.add(PatchString::Assign("bbb".into()))
-	/// 		.commit_and()
-	/// 		.push_and()
-	/// 		.tag();
+	/// 	writer.add(Patch::Fn(|w, _| *w = "bbb".into()));
+	/// 	writer.commit();
+	/// 	writer.push();
+	/// 	writer.tag();
 	/// }
 	///
 	/// assert_eq!(writer.tags().len(), 100);
@@ -1042,9 +1044,9 @@ where
 	/// This calls [`BTreeMap::remove()`] on this [`Writer`]'s internal tags.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag = CommitRef::clone(&writer.tag());
 	///
@@ -1064,9 +1066,9 @@ where
 	/// This calls [`BTreeMap::pop_first()`] on this [`Writer`]'s internal tags.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag_0 = CommitRef::clone(&writer.tag());
 	/// let tag_1 = CommitRef::clone(&writer.tag());
@@ -1088,9 +1090,9 @@ where
 	/// This calls [`BTreeMap::pop_last()`] on this [`Writer`]'s internal tags.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut writer) = someday::new::<String, PatchString>("aaa".into());
+	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag_0 = CommitRef::clone(&writer.tag());
 	/// let tag_1 = CommitRef::clone(&writer.tag());
@@ -1117,12 +1119,13 @@ where
 	/// Note that this includes non-[`push()`](Writer::push)'ed [`Writer`] data.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit but don't push.
-	/// w.add(PatchString::PushStr("abc".into())).commit();
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
 	///
 	/// // Writer and Reader's commit is different.
 	/// assert!(w.diff());
@@ -1148,13 +1151,14 @@ where
 	/// Note that this does not check the data itself, only the [`Timestamp`].
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit 10 times but don't push.
 	/// for i in 0..10 {
-	/// 	w.add(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// 	w.commit();
 	/// }
 	///
 	/// // Writer at timestamp 10.
@@ -1177,13 +1181,14 @@ where
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit 10 times.
 	/// for i in 0..10 {
-	/// 	w.add(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// 	w.commit();
 	/// }
 	/// // At timestamp 10.
 	/// assert_eq!(w.timestamp(), 10);
@@ -1208,9 +1213,9 @@ where
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
 	/// assert_eq!(w.timestamp(), 0);
@@ -1238,15 +1243,16 @@ where
 	/// -like operation is called, and it will never be less than the [`Reader`]'s [`Timestamp`].
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(PatchString::PushStr("abc".into())).commit();
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
 	///
 	/// // At timestamp 1.
 	/// assert_eq!(w.timestamp(), 1);
@@ -1267,15 +1273,16 @@ where
 	/// This will never be greater than the [`Writer`]'s timestamp.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(PatchString::PushStr("abc".into())).commit();
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
 	///
 	/// // Writer is at timestamp 1.
 	/// assert_eq!(w.timestamp(), 1);
@@ -1302,19 +1309,22 @@ where
 	/// In other words, it is: `writer_timestamp - reader_timestamp`
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add(PatchString::PushStr("abc".into())).commit_and().push();
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
+	/// w.push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	/// 	w.add(PatchString::PushStr("abc".into())).commit();
+	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// 	w.commit();
 	/// }
 	///
 	/// // Writer is at timestamp 5.
@@ -1344,12 +1354,12 @@ where
 	/// Dropping the [`std::vec::Drain`] will drop the `Patch`'s.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes, but don't commit.
-	/// w.add(PatchString::PushStr("abc".into()));
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// assert_eq!(w.staged().len(), 1);
 	///
 	///	// Restore changes.
@@ -1379,22 +1389,19 @@ where
 	/// [`push()`](Writer::push)'ed are safely stored internally by the [`Writer`].
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes.
-	/// let change = PatchString::PushStr("abc".into());
-	/// w.add(change.clone());
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	///
 	/// // We see and mutate the staged changes.
 	/// assert_eq!(w.staged().len(), 1);
-	/// assert_eq!(w.staged()[0], change);
 	///
 	/// // Let's actually remove that change.
 	/// let removed = w.staged().remove(0);
 	/// assert_eq!(w.staged().len(), 0);
-	/// assert_eq!(change, removed);
 	/// ```
 	pub fn staged(&mut self) -> &mut Vec<Patch<T>> {
 		&mut self.patches
@@ -1427,18 +1434,16 @@ where
 	/// [`push()`](Writer::push)'ed yet and the `Writer` may need them in the future.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// let change = PatchString::PushStr("abc".into());
-	/// w.add(change.clone());
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// // We can see but not mutate functions.
 	/// assert_eq!(w.committed_patches().len(), 1);
-	/// assert_eq!(w.committed_patches()[0], change);
 	/// ```
 	pub fn committed_patches(&self) -> &Vec<Patch<T>> {
 		&self.patches_old
@@ -1449,9 +1454,9 @@ where
 	/// the current [`Reader`] head [`Commit`]?
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // The Writer, `w` holds 2 strong counts.
 	/// assert_eq!(w.head_readers(), 2);
@@ -1489,9 +1494,9 @@ where
 	/// to the data, it counts how many [`Reader`] objects are in existence.
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // 2 Reader's (the Writer counts as a Reader).
 	/// assert_eq!(w.reader_count(), 2);
@@ -1537,9 +1542,9 @@ where
 	/// 2. The already committed `Patch`'s
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut w) = someday::with_capacity::<String, PatchString>("".into(), 16);
+	/// let (_, mut w) = someday::new_with_capacity::<String>("".into(), 16);
 	///
 	/// // Capacity is 16.
 	/// assert_eq!(w.committed_patches().capacity(), 16);
@@ -1547,11 +1552,12 @@ where
 	///
 	/// // Commit 32 `Patch`'s
 	/// for i in 0..32 {
-	/// 	w.add(PatchString::Assign("".into())).commit();
+	/// 	w.add(Patch::Fn(|w, _| *w = "".into()));
+	/// 	w.commit();
 	/// }
 	/// // Stage 16 `Patch`'s
 	/// for i in 0..16 {
-	/// 	w.add(PatchString::Assign("".into()));
+	/// 	w.add(Patch::Fn(|w, _| *w = "".into()));
 	/// }
 	///
 	/// // Commit capacity is now 32.
@@ -1561,7 +1567,9 @@ where
 	/// assert_eq!(w.staged().capacity(), 16);
 	///
 	/// // Commit, push, shrink.
-	/// w.commit_and().push_and().shrink_to_fit();
+	/// w.commit();
+	/// w.push();
+	/// w.shrink_to_fit();
 	///
 	/// // They're now empty and taking 0 space.
 	/// assert_eq!(w.committed_patches().capacity(), 0);
@@ -1581,18 +1589,16 @@ where
 	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
 	///
 	/// ```rust
-	/// # use someday::{*,patch::*};
+	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// let committed_change = PatchString::PushStr("a".into());
-	/// w.add(committed_change.clone());
+	/// w.add(Patch::Fn(|w, _| w.push_str("a")));
 	/// w.commit();
 	///
-	/// // Add but don't commit
-	/// let staged_change = PatchString::PushStr("b".into());
-	/// w.add(staged_change.clone());
+	/// // Add but don't commit.
+	/// w.add(Patch::Fn(|w, _| w.push_str("b")));
 	///
 	/// let (
 	/// 	writer_data,
@@ -1603,8 +1609,8 @@ where
 	///
 	/// assert_eq!(writer_data, "a");
 	/// assert_eq!(reader_data, ""); // We never `push()`'ed, so Readers saw nothing.
-	/// assert_eq!(staged_changes[0], staged_change);
-	/// assert_eq!(committed_changes[0], committed_change);
+	/// assert_eq!(staged_changes.len(), 1);
+	/// assert_eq!(committed_changes.len(), 1);
 	/// ```
 	pub fn into_inner(self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch<T>>, Vec<Patch<T>>) {
 		(
@@ -1658,10 +1664,11 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// let (_, w1) = someday::default::<usize, PatchUsize>();
-	/// let w2      = Writer::<usize, PatchUsize>::default();
+	/// let (_, w1) = someday::default::<usize>();
+	/// let w2      = Writer::<usize>::default();
 	///
-	/// assert_eq!(w1, w2);
+	/// assert_eq!(*w1.data(), 0);
+	/// assert_eq!(*w2.data(), 0);
 	/// ```
 	fn default() -> Self {
 		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };

@@ -76,20 +76,20 @@ pub use writer::Writer;
 ///
 /// ## Example
 /// ```rust
-/// use someday::patch::PatchVec;
+/// use someday::Patch;
 ///
 /// let v = vec![];
-/// let (r, mut w) = someday::new(v);
+/// let (r, mut w) = someday::new::<Vec<&str>>(v);
 ///
 /// // Writer writes some data, but does not commit.
-/// w.add(PatchVec::Push("a"));
+/// w.add(Patch::Fn(|w, _| w.push("a")));
 /// // Timestamp is still 0.
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(PatchVec::Push("b"));
+/// w.add(Patch::Fn(|w, _| w.push("b")));
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(PatchVec::Push("b"));
+/// w.add(Patch::Fn(|w, _| w.push("b")));
 /// assert_eq!(w.timestamp(), 0);
 ///
 /// // Now we commit.
@@ -118,9 +118,7 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 ///
 /// ## Example
 /// ```rust
-/// use someday::patch::PatchString;
-///
-/// let (r, mut w) = someday::new::<String, PatchString>("".into());
+/// let (reader, mut writer) = someday::new::<String>("".into());
 /// ```
 pub fn new<T>(data: T) -> (Reader<T>, Writer<T>)
 where
@@ -142,10 +140,8 @@ where
 ///
 /// ## Example
 /// ```rust
-/// use someday::patch::PatchString;
-///
 /// // Can fit 128 functions without re-allocating.
-/// let (r, mut w) = someday::with_capacity::<String, PatchString>("".into(), 128);
+/// let (r, mut w) = someday::new_with_capacity::<String>("".into(), 128);
 /// assert_eq!(w.staged().capacity(), 128);
 /// assert_eq!(w.committed_patches().capacity(), 128);
 /// ```
@@ -164,9 +160,7 @@ where
 ///
 /// ## Example
 /// ```rust
-/// use someday::patch::PatchString;
-///
-/// let (r, mut w) = someday::default::<String, PatchString>();
+/// let (r, mut w) = someday::default::<String>();
 /// assert_eq!(*w.data(), "");
 /// assert_eq!(r.head(), "");
 /// ```
@@ -183,10 +177,8 @@ where
 ///
 /// ## Example
 /// ```rust
-/// use someday::patch::PatchString;
-///
 /// // Can fit 128 functions without re-allocating.
-/// let (r, mut w) = someday::default_with_capacity::<String, PatchString>(128);
+/// let (r, mut w) = someday::default_with_capacity::<String>(128);
 /// assert_eq!(w.staged().capacity(), 128);
 /// assert_eq!(w.committed_patches().capacity(), 128);
 /// ```
