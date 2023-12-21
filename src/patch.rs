@@ -31,6 +31,30 @@ pub enum Patch<T> {
 
 impl<T> Patch<T> {
 	#[inline]
+	/// Short-hand for `Patch::Box(Box::new(f))`
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, mut w) = someday::new::<i32>(0);
+	///
+	/// // These 2 are the exact same,
+	/// // the 1st is just shorter.
+	/// w.add(Patch::boxed(|w, _| {
+	/// 	*w = 123;
+	/// }));
+	///
+	/// w.add(Patch::Box(Box::new(|w, _| {
+	/// 	*w = 123;
+	/// })));
+	/// ```
+	pub fn boxed<F>(f: F) -> Self
+	where
+		F: FnMut(&mut T, &T) + 'static + Send
+	{
+		Self::Box(Box::new(f))
+	}
+
+	#[inline]
 	// Apply the patch (function) to the writer data T.
 	pub(crate) fn apply(&mut self, w: &mut T, r: &T) {
 		match self {
@@ -41,12 +65,3 @@ impl<T> Patch<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- Trait Impl
-impl<T, F> From<F> for Patch<T>
-where
-	F: FnMut(&mut T, &T) + 'static + Send
-{
-	#[inline]
-	fn from(patch: F) -> Self {
-		Self::Box(Box::new(patch))
-	}
-}
