@@ -1,3 +1,5 @@
+//! Writer<T>
+
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
 	sync::{Arc,
@@ -52,11 +54,11 @@ use crate::{
 /// // amount of time very cheaply.
 /// let r: Reader<String> = r;
 /// for _ in 0..10_000 {
-/// 	let another_reader = r.clone(); // akin to Arc::clone()
+///     let another_reader = r.clone(); // akin to Arc::clone()
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
-///	let mut w: Writer<String> = w;
+/// let mut w: Writer<String> = w;
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(w.timestamp(), 0);
@@ -116,41 +118,41 @@ pub struct Writer<T>
 where
 	T: Clone,
 {
-	// The writer's local mutually
-	// exclusive copy of the data.
-	//
-	// This is an `Option` only because there's
-	// a brief moment in `push()` where we need
-	// to send off `local`, but we can't yet swap it
-	// with the old data.
-	//
-	// It will be `None` in-between those moments and
-	// the invariant is that is MUST be `Some` before
-	// `push()` is over.
+	/// The writer's local mutually
+	/// exclusive copy of the data.
+	///
+	/// This is an `Option` only because there's
+	/// a brief moment in `push()` where we need
+	/// to send off `local`, but we can't yet swap it
+	/// with the old data.
+	///
+	/// It will be `None` in-between those moments and
+	/// the invariant is that is MUST be `Some` before
+	/// `push()` is over.
 	pub(super) local: Option<CommitOwned<T>>,
 
-	// The current data the remote `Reader`'s can see.
+	/// The current data the remote `Reader`'s can see.
 	pub(super) remote: Arc<CommitOwned<T>>,
 
-	// The AtomicPtr that `Reader`'s enter through.
-	// Calling `.load()` would load the `remote` above.
+	/// The AtomicPtr that `Reader`'s enter through.
+	/// Calling `.load()` would load the `remote` above.
 	pub(super) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
 
-	// Patches that have not yet been applied.
+	/// Patches that have not yet been applied.
 	pub(super) patches: Vec<Patch<T>>,
 
-	// Patches that were already applied,
-	// that must be re-applied to the old `T`.
+	/// Patches that were already applied,
+	/// that must be re-applied to the old `T`.
 	pub(super) patches_old: Vec<Patch<T>>,
 
-	// This signifies to the `Reader`'s that the
-	// `Writer` is currently attempting to swap data.
-	//
-	// `Reader`'s can cooperate by sleeping
-	// for a bit when they see this as `true`
+	/// This signifies to the `Reader`'s that the
+	/// `Writer` is currently attempting to swap data.
+	///
+	/// `Reader`'s can cooperate by sleeping
+	/// for a bit when they see this as `true`
 	pub(super) swapping: Arc<AtomicBool>,
 
-	// Tags.
+	/// Tags.
 	pub(super) tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
 
@@ -182,6 +184,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// View the [`Writer`]'s _local_ data
 	///
 	/// This is the `Writer`'s local data that may or may
@@ -237,6 +240,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// View the [`Writer`]'s local "head" [`Commit`]
 	///
 	/// This is the latest, and local `Commit` from the `Writer`.
@@ -358,6 +362,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Apply all the [`Patch`]'s that were [`add()`](Writer::add)'ed
 	///
 	/// The new [`Commit`] created from this will become
@@ -457,7 +462,7 @@ where
 	/// `Reader`'s will atomically be able to access the
 	/// the new `Commit` before this function is over.
 	///
-	///	The [`Patch`]'s that were not [`commit()`](Writer::commit)'ed will not be
+	/// The [`Patch`]'s that were not [`commit()`](Writer::commit)'ed will not be
 	/// pushed and will remain in the [`staged()`](Writer::staged) vector of patches.
 	///
 	/// The [`PushInfo`] object returned is just a container
@@ -479,14 +484,14 @@ where
 	/// w.commit();
 	///
 	/// if w.ahead() {
-	/// 	let push_info = w.push();
-	/// 	// We pushed 1 commit.
-	/// 	assert_eq!(push_info.timestamp, 1);
-	/// 	assert_eq!(push_info.commits, 1);
-	/// 	assert_eq!(push_info.reclaimed, true);
+	///     let push_info = w.push();
+	///     // We pushed 1 commit.
+	///     assert_eq!(push_info.timestamp, 1);
+	///     assert_eq!(push_info.commits, 1);
+	///     assert_eq!(push_info.reclaimed, true);
 	/// } else {
-	/// 	// this branch cannot happen
-	/// 	unreachable!();
+	///     // this branch cannot happen
+	///     unreachable!();
 	/// }
 	/// ```
 	pub fn push(&mut self) -> PushInfo {
@@ -516,10 +521,10 @@ where
 	/// let commit = r.head();
 	/// spawn(move || {
 	///     # other_b.wait();
-	/// 	// This `Reader` is holding onto the old data.
-	/// 	let moved = commit;
-	/// 	// But will let go after 1 millisecond.
-	/// 	sleep(Duration::from_millis(1));
+	///     // This `Reader` is holding onto the old data.
+	///     let moved = commit;
+	///     // But will let go after 1 millisecond.
+	///     sleep(Duration::from_millis(1));
 	/// });
 	///
 	/// # barrier.wait();
@@ -535,6 +540,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// This function is the same as [`Writer::push()`]
 	/// but it will execute the function `F` in the meanwhile before
 	/// attempting to reclaim the old [`Reader`] data.
@@ -558,10 +564,10 @@ where
 	/// let head = r.head();
 	/// spawn(move || {
 	///     # other_b.wait();
-	/// 	// This `Reader` is holding onto the old data.
-	/// 	let moved = head;
-	/// 	// But will let go after 100 milliseconds.
-	/// 	sleep(Duration::from_millis(100));
+	///     // This `Reader` is holding onto the old data.
+	///     let moved = head;
+	///     // But will let go after 100 milliseconds.
+	///     sleep(Duration::from_millis(100));
 	/// });
 	///
 	/// # barrier.wait();
@@ -575,19 +581,19 @@ where
 	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
-	///	// Pass in a closure, so that we can do
+	/// // Pass in a closure, so that we can do
 	/// // arbitrary things in the meanwhile...!
 	/// let (push_info, return_value) = w.push_do(|| {
-	/// 	// While we're waiting, let's get some work done.
-	/// 	// Add a bunch of data to this HashMap.
-	/// 	(0..1_000).for_each(|i| {
-	/// 		hashmap.insert(i, format!("{i}"));
-	/// 	});
-	/// 	// Add some data to the vector.
-	/// 	(0..1_000).for_each(|_| {
-	///			vec.push(format!("aaaaaaaaaaaaaaaa"));
-	/// 	}); // <- `push_do()` returns `()`
-	/// 	# sleep(Duration::from_secs(1));
+	///     // While we're waiting, let's get some work done.
+	///     // Add a bunch of data to this HashMap.
+	///     (0..1_000).for_each(|i| {
+	///         hashmap.insert(i, format!("{i}"));
+	///     });
+	///     // Add some data to the vector.
+	///     (0..1_000).for_each(|_| {
+	///         vec.push(format!("aaaaaaaaaaaaaaaa"));
+	///     }); // <- `push_do()` returns `()`
+	///     # sleep(Duration::from_secs(1));
 	/// });     // although we could return anything
 	///         // and it would be binded to `return_value`
 	///
@@ -596,7 +602,7 @@ where
 	/// // and we can probably cheaply reclaim our
 	/// // old data back.
 	///
-	///	// And yes, looks like we got it back cheaply:
+	/// // And yes, looks like we got it back cheaply:
 	/// assert_eq!(push_info.reclaimed, true);
 	///
 	/// // And we did some work
@@ -639,9 +645,9 @@ where
 	///
 	/// let commit = r.head();
 	/// spawn(move || {
-	/// 	// This `Reader` will hold onto the old data forever.
-	/// 	let moved = commit;
-	/// 	loop { std::thread::park(); }
+	///     // This `Reader` will hold onto the old data forever.
+	///     let moved = commit;
+	///     loop { std::thread::park(); }
 	/// });
 	///
 	/// // Always clone data, don't wait.
@@ -656,7 +662,7 @@ where
 		self.push_inner::<true, ()>(None, None::<fn()>).0
 	}
 
-	// Generic function to handle all the different types of pushes.
+	/// Generic function to handle all the different types of pushes.
 	fn push_inner<const CLONE: bool, R>(
 		&mut self,
 		duration: Option<Duration>,
@@ -677,7 +683,7 @@ where
 		// that we're about to start reclaiming.
 		if !CLONE { self.swapping.store(true, Ordering::Release); }
 
-		// SAFETY: we're temporarily "taking" our `self.local`.
+		// INVARIANT: we're temporarily "taking" our `self.local`.
 		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
 		let local = self.local.take().unwrap();
@@ -740,15 +746,16 @@ where
 		// INVARIANT:
 		// `self.swapping` must be `false` before we
 		// return or else we will lock `Reader`'s
-		debug_assert!(!self.swapping.load(Ordering::SeqCst));
+		debug_assert!(
+			!self.swapping.load(Ordering::SeqCst),
+			"Writer's `swapping` is still true even after swap"
+		);
 
 		if reclaimed {
 			// Re-apply patches to this old data.
-			self.patches_old
-				.drain(..)
-				.for_each(|mut patch| {
-					patch.apply(&mut local.data, &self.remote.data);
-				});
+			for mut patch in self.patches_old.drain(..) {
+				patch.apply(&mut local.data, &self.remote.data);
+			}
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
 		}
@@ -768,6 +775,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Conditionally overwrite the [`Writer`]'s local [`Commit`] with the current [`Reader`] `Commit`
 	///
 	/// If the `Writer` and `Reader` are [`Writer::synced()`], this will return `None`.
@@ -805,7 +813,7 @@ where
 	/// let pull_status: PullInfo<String> = w.pull().unwrap();
 	/// assert_eq!(pull_status.old_writer_data, "hello");
 	///
-	///	// We're back to square 1.
+	/// // We're back to square 1.
 	/// assert_eq!(w.head(), "");
 	///
 	/// // If we try to pull again, nothing will happen
@@ -838,6 +846,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Overwrite the [`Writer`]'s local data with `data`.
 	///
 	/// The `Writer`'s old local data is returned.
@@ -880,7 +889,7 @@ where
 	/// // Committed functions were deleted.
 	/// assert_eq!(w.committed_patches().len(), 0);
 	///
-	///	// Push that change.
+	/// // Push that change.
 	/// w.push();
 	///
 	/// // Readers see change.
@@ -941,7 +950,7 @@ where
 	/// w.commit();
 	/// w.push();
 	///
-	///	// Tag that change, and clone it (this is cheap).
+	/// // Tag that change, and clone it (this is cheap).
 	/// let tag = CommitRef::clone(w.tag());
 	///
 	/// // This tag is the same as the Reader's head Commit.
@@ -950,12 +959,12 @@ where
 	///
 	/// // Push a whole bunch changes.
 	/// for _ in 0..100 {
-	/// 	w.add(Patch::Fn(|w, _| w.push_str("b")));
-	/// 	w.commit();
-	/// 	w.push();
+	///     w.add(Patch::Fn(|w, _| w.push_str("b")));
+	///     w.commit();
+	///     w.push();
 	/// }
-	///	assert_eq!(w.timestamp(), 101);
-	///	assert_eq!(r.timestamp(), 101);
+	/// assert_eq!(w.timestamp(), 101);
+	/// assert_eq!(r.timestamp(), 101);
 	///
 	/// // Writer is still holding onto the tag, so remove it.
 	/// let removed_tag = w.tag_remove(tag.timestamp()).unwrap();
@@ -1008,10 +1017,10 @@ where
 	///
 	/// // Push and tag a whole bunch changes.
 	/// for i in 1..100 {
-	/// 	writer.add(Patch::Fn(|w, _| *w = "bbb".into()));
-	/// 	writer.commit();
-	/// 	writer.push();
-	/// 	writer.tag();
+	///     writer.add(Patch::Fn(|w, _| *w = "bbb".into()));
+	///     writer.commit();
+	///     writer.push();
+	///     writer.tag();
 	/// }
 	///
 	/// assert_eq!(writer.tags().len(), 100);
@@ -1111,6 +1120,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Commit`] is different than the [`Reader`]'s
 	///
 	/// Compares the `Commit` that the `Reader`'s can
@@ -1140,6 +1150,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Timestamp`] is greater than the [`Reader`]'s `Timestamp`
 	///
 	/// Compares the timestamp of the `Reader`'s currently available
@@ -1157,8 +1168,8 @@ where
 	///
 	/// // Commit 10 times but don't push.
 	/// for i in 0..10 {
-	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
-	/// 	w.commit();
+	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.commit();
 	/// }
 	///
 	/// // Writer at timestamp 10.
@@ -1176,6 +1187,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Timestamp`] is greater than an arbitrary [`Commit`]'s `Timestamp`
 	///
 	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -1186,16 +1198,16 @@ where
 	///
 	/// // Commit 10 times.
 	/// for i in 0..10 {
-	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
-	/// 	w.commit();
+	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.commit();
 	/// }
 	/// // At timestamp 10.
 	/// assert_eq!(w.timestamp(), 10);
 	///
 	/// // Create fake `CommitOwned`
 	/// let fake_commit = CommitOwned {
-	/// 	timestamp: 1,
-	/// 	data: String::new(),
+	///     timestamp: 1,
+	///     data: String::new(),
 	/// };
 	///
 	/// // Writer is ahead of that commit.
@@ -1207,6 +1219,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Timestamp`] is less than an arbitrary [`Commit`]'s `Timestamp`
 	///
 	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -1220,8 +1233,8 @@ where
 	///
 	/// // Create fake `CommitOwned`
 	/// let fake_commit = CommitOwned {
-	/// 	timestamp: 1000,
-	/// 	data: String::new(),
+	///     timestamp: 1000,
+	///     data: String::new(),
 	/// };
 	///
 	/// // Writer is behind that commit.
@@ -1233,6 +1246,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Get the current [`Timestamp`] of the [`Writer`]'s local [`Commit`]
 	///
 	/// This returns the number indicating the `Writer`'s data's version.
@@ -1297,6 +1311,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Get the difference between the [`Writer`]'s and [`Reader`]'s [`Timestamp`]
 	///
 	/// This returns the number indicating how many commits the
@@ -1318,8 +1333,8 @@ where
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
-	/// 	w.commit();
+	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.commit();
 	/// }
 	///
 	/// // Writer is at timestamp 5.
@@ -1355,8 +1370,8 @@ where
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
-	/// 	w.commit();
+	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.commit();
 	/// }
 	///
 	/// // Writer is at timestamp 5.
@@ -1390,7 +1405,7 @@ where
 	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	/// assert_eq!(w.staged().len(), 1);
 	///
-	///	// Restore changes.
+	/// // Restore changes.
 	/// let drain = w.restore();
 	/// assert_eq!(drain.count(), 1);
 	/// ```
@@ -1443,7 +1458,7 @@ where
 	/// Therefore the `Timestamp` and `CommitRef` data can be relied upon.
 	///
 	/// These "tags" are created with [`Writer::tag()`].
-	pub fn tags(&self) -> &BTreeMap<Timestamp, CommitRef<T>> {
+	pub const fn tags(&self) -> &BTreeMap<Timestamp, CommitRef<T>> {
 		&self.tags
 	}
 
@@ -1465,7 +1480,7 @@ where
 	/// // We can see but not mutate functions.
 	/// assert_eq!(w.committed_patches().len(), 1);
 	/// ```
-	pub fn committed_patches(&self) -> &Vec<Patch<T>> {
+	pub const fn committed_patches(&self) -> &Vec<Patch<T>> {
 		&self.patches_old
 	}
 
@@ -1486,16 +1501,16 @@ where
 	/// // do not have strong references to the
 	/// // underlying data, so they don't count.
 	/// for i in 0..8 {
-	/// 	let reader = w.reader();
-	/// 	std::mem::forget(reader);
+	///     let reader = w.reader();
+	///     std::mem::forget(reader);
 	/// }
 	/// let r = w.reader();
 	/// assert_eq!(w.head_readers(), 2);
 	///
 	/// // Leak the actual data 8 times.
 	/// for i in 0..8 {
-	/// 	let head: CommitRef<String> = r.head();
-	/// 	std::mem::forget(head);
+	///     let head: CommitRef<String> = r.head();
+	///     std::mem::forget(head);
 	/// }
 	///
 	/// // Now there are 10 strong references.
@@ -1523,8 +1538,8 @@ where
 	///
 	/// // Create and leak 8 Reader's.
 	/// for i in 0..8 {
-	/// 	let reader = r.clone();
-	/// 	std::mem::forget(reader);
+	///     let reader = r.clone();
+	///     std::mem::forget(reader);
 	/// }
 	///
 	/// // Now there are 10.
@@ -1572,12 +1587,12 @@ where
 	///
 	/// // Commit 32 `Patch`'s
 	/// for i in 0..32 {
-	/// 	w.add(Patch::Fn(|w, _| *w = "".into()));
-	/// 	w.commit();
+	///     w.add(Patch::Fn(|w, _| *w = "".into()));
+	///     w.commit();
 	/// }
 	/// // Stage 16 `Patch`'s
 	/// for i in 0..16 {
-	/// 	w.add(Patch::Fn(|w, _| *w = "".into()));
+	///     w.add(Patch::Fn(|w, _| *w = "".into()));
 	/// }
 	///
 	/// // Commit capacity is now 32.
@@ -1600,6 +1615,7 @@ where
 		self.patches_old.shrink_to_fit();
 	}
 
+	#[allow(clippy::missing_panics_doc)]
 	/// Consume this [`Writer`] and return the inner components
 	///
 	/// In left-to-right order, this returns:
@@ -1621,10 +1637,10 @@ where
 	/// w.add(Patch::Fn(|w, _| w.push_str("b")));
 	///
 	/// let (
-	/// 	writer_data,
-	/// 	reader_data,
-	/// 	staged_changes,
-	/// 	committed_changes,
+	///     writer_data,
+	///     reader_data,
+	///     staged_changes,
+	///     committed_changes,
 	/// ) = w.into_inner();
 	///
 	/// assert_eq!(writer_data, "a");
@@ -1632,6 +1648,7 @@ where
 	/// assert_eq!(staged_changes.len(), 1);
 	/// assert_eq!(committed_changes.len(), 1);
 	/// ```
+	#[allow(clippy::type_complexity)]
 	pub fn into_inner(self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch<T>>, Vec<Patch<T>>) {
 		(
 			self.local.unwrap(),
@@ -1661,7 +1678,7 @@ where
 			.field("arc", &self.arc)
 			.field("swapping", &self.swapping)
 			.field("tags", &self.tags)
-			.finish()
+			.finish_non_exhaustive()
 	}
 }
 
@@ -1687,7 +1704,7 @@ where
 		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 		let swapping = Arc::new(AtomicBool::new(false));
 
-		Writer {
+		Self {
 			local: Some(local),
 			remote,
 			arc,

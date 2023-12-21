@@ -1,8 +1,11 @@
+//! Patch<T> (functions to apply to T)
+
 //---------------------------------------------------------------------------------------------------- Use
 #[allow(unused_imports)] // docs
 use crate::{Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Patch
+#[non_exhaustive]
 /// The patches (functions) that will be applied to your data `T`
 ///
 /// These are the patches that you use with
@@ -20,10 +23,11 @@ use crate::{Writer,Reader};
 /// # use someday::*;
 /// let (_, mut w) = someday::new::<i32>(0);
 /// w.add(Patch::Fn(|w, _| {
-/// 	*w = 123;
+///     *w = 123;
 /// }));
 /// ```
 pub enum Patch<T> {
+	#[allow(clippy::type_complexity)]
 	/// A heap allocated, dynamically dispatched function
 	Box(Box<dyn FnMut(&mut T, &T) + 'static + Send>),
 	/// A function pointer
@@ -41,11 +45,11 @@ impl<T> Patch<T> {
 	/// // These 2 are the exact same,
 	/// // the 1st is just shorter.
 	/// w.add(Patch::boxed(|w, _| {
-	/// 	*w = 123;
+	///     *w = 123;
 	/// }));
 	///
 	/// w.add(Patch::Box(Box::new(|w, _| {
-	/// 	*w = 123;
+	///     *w = 123;
 	/// })));
 	/// ```
 	pub fn boxed<F>(f: F) -> Self
@@ -56,7 +60,7 @@ impl<T> Patch<T> {
 	}
 
 	#[inline]
-	// Apply the patch (function) to the writer data T.
+	/// Apply the patch (function) to the writer data T.
 	pub(crate) fn apply(&mut self, w: &mut T, r: &T) {
 		match self {
 			Self::Box(f) => f(w, r),

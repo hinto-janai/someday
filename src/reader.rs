@@ -1,3 +1,5 @@
+//! Reader<T>
+
 //---------------------------------------------------------------------------------------------------- Use
 use std::{sync::{
 	Arc,
@@ -32,8 +34,8 @@ use crate::Patch;
 /// The main object [`CommitRef`], returned from the main function [`Reader::head()`] is more or less:
 /// ```rust
 /// struct CommitRef<T> {
-/// 	timestamp: usize,
-/// 	data: std::sync::Arc<T>,
+///     timestamp: usize,
+///     data: std::sync::Arc<T>,
 /// }
 /// ```
 /// so as long as that [`CommitRef`] is alive, the data will stay alive.
@@ -60,14 +62,14 @@ use crate::Patch;
 /// // time very cheaply.
 /// let reader: Reader<String> = reader;
 /// for _ in 0..100 {
-/// 	// Pretty cheap operation.
-/// 	let another_reader = reader.clone();
-/// 	// We can send Reader's to other threads.
-/// 	std::thread::spawn(move || assert_eq!(another_reader.head(), ""));
+///     // Pretty cheap operation.
+///     let another_reader = reader.clone();
+///     // We can send Reader's to other threads.
+///     std::thread::spawn(move || assert_eq!(another_reader.head(), ""));
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
-///	let mut writer: Writer<String> = writer;
+/// let mut writer: Writer<String> = writer;
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(writer.timestamp(), 0);
@@ -78,19 +80,19 @@ use crate::Patch;
 /// // Move the Writer into another thread
 /// // and make it do some work in the background.
 /// std::thread::spawn(move || {
-/// 	// 1. Append to string
-/// 	// 2. Commit it
-/// 	// 3. Push so that Readers can see
-/// 	// 4. Repeat
-/// 	//
-/// 	// This is looping at an extremely fast rate
-/// 	// and real code probably wouldn't do this, although
-/// 	// just for the example...
-/// 	loop {
-/// 		writer.add(Patch::Fn(|w, _| w.push_str("abc")));
-/// 		writer.commit();
-/// 		writer.push();
-/// 	}
+///     // 1. Append to string
+///     // 2. Commit it
+///     // 3. Push so that Readers can see
+///     // 4. Repeat
+///     //
+///     // This is looping at an extremely fast rate
+///     // and real code probably wouldn't do this, although
+///     // just for the example...
+///     loop {
+///         writer.add(Patch::Fn(|w, _| w.push_str("abc")));
+///         writer.commit();
+///         writer.push();
+///     }
 /// });
 /// # std::thread::sleep(std::time::Duration::from_secs(1));
 ///
@@ -110,18 +112,18 @@ use crate::Patch;
 /// let mut last_head: CommitRef<String> = reader.head();
 /// let mut new_head:  CommitRef<String> = reader.head();
 /// for _ in 0..10 {
-/// 	last_head = reader.head();
+///     last_head = reader.head();
 ///
-/// 	// Wait just a little...
-/// 	std::thread::sleep(std::time::Duration::from_millis(10));
-/// 	# // CI makes this non-reliable, add more sleep time.
-/// 	# std::thread::sleep(std::time::Duration::from_millis(90));
+///     // Wait just a little...
+///     std::thread::sleep(std::time::Duration::from_millis(10));
+///     # // CI makes this non-reliable, add more sleep time.
+///     # std::thread::sleep(std::time::Duration::from_millis(90));
 ///
-/// 	new_head = reader.head();
+///     new_head = reader.head();
 ///
-/// 	// We got new data!
-/// 	assert!(last_head != new_head);
-/// 	assert!(last_head.timestamp() < new_head.timestamp());
+///     // We got new data!
+///     assert!(last_head != new_head);
+///     assert!(last_head.timestamp() < new_head.timestamp());
 /// }
 ///
 /// // We can hold onto these `CommitRef`'s _forever_
@@ -137,7 +139,11 @@ pub struct Reader<T>
 where
 	T: Clone,
 {
+	/// The atomic pointer to the `Arc` that all readers enter through.
+	///
+	/// This is `swap()` updated by the `Writer`.
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
+	/// Is the `Writer` currently in the process of swapping the above pointer?
 	pub(super) swapping: Arc<AtomicBool>,
 }
 
@@ -146,6 +152,7 @@ where
 	T: Clone,
 {
 	#[inline]
+	#[must_use]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`].
 	///
 	/// This function will never block.
@@ -206,6 +213,7 @@ where
 	}
 
 	#[inline]
+	#[must_use]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but wait a little to cooperate.
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
@@ -237,6 +245,7 @@ where
 	}
 
 	#[inline]
+	#[must_use]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but do something in the meanwhile if we can't.
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
@@ -268,20 +277,20 @@ where
 	/// let mut hello_world   = String::from("hello");
 	/// let mut one_two_three = vec![0, 0, 0];
 	///
-	///	// Pass in a closure, so that we can do
+	/// // Pass in a closure, so that we can do
 	/// // arbitrary things in the meanwhile...!
 	/// let (commit, return_value) = r.head_do(|reader| {
-	/// 	// While we're waiting, let's get some work done.
-	/// 	// Mutate this string.
-	/// 	hello_world.push_str(" world");
-	/// 	// Mutate this vector.
-	/// 	one_two_three[0] = 1;
-	/// 	one_two_three[1] = 2;
-	/// 	one_two_three[2] = 3; // <- `head_do()` returns `()`
+	///     // While we're waiting, let's get some work done.
+	///     // Mutate this string.
+	///     hello_world.push_str(" world");
+	///     // Mutate this vector.
+	///     one_two_three[0] = 1;
+	///     one_two_three[1] = 2;
+	///     one_two_three[2] = 3; // <- `head_do()` returns `()`
 	/// });                       // although we could return anything
 	///                           // and it would be binded to `return_value`
 	///
-	///	// We have our commit:
+	/// // We have our commit:
 	/// assert_eq!(commit.timestamp(), 0);
 	/// // And we did some work
 	/// // while waiting to get it:
@@ -304,6 +313,7 @@ where
 	}
 
 	#[inline]
+	#[must_use]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`] ASAP, but while cooperating
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
@@ -317,21 +327,23 @@ where
 		loop {
 			if !self.swapping() {
 				return self.head();
-			} else {
-				std::hint::spin_loop();
 			}
+
+			std::hint::spin_loop();
 		}
 	}
 
 	#[inline]
+	#[must_use]
 	/// Attempt to acquire the latest [`CommitRef`] pushed by the [`Writer`]
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
 	/// trying to reclaim old data, this function will return `None`.
 	pub fn head_try(&self) -> Option<CommitRef<T>> {
-		match self.swapping() {
-			false => Some(self.head()),
-			true => None,
+		if self.swapping() {
+			None
+		} else {
+			Some(self.head())
 		}
 	}
 
@@ -349,6 +361,7 @@ where
 		self.head().behind(commit)
 	}
 
+	#[must_use]
 	/// Get the current [`Timestamp`] of the [`Reader`]'s head [`Commit`]
 	///
 	/// This returns the number indicating the [`Reader`]'s data's version.
@@ -359,6 +372,7 @@ where
 		self.head().timestamp()
 	}
 
+	#[must_use]
 	/// Acquire a [`CommitOwned`] that owns the underlying data
 	///
 	/// This will expensively clone the underlying data `T`.
@@ -366,6 +380,7 @@ where
 		self.head().into_commit_owned()
 	}
 
+	#[must_use]
 	/// How many [`Reader`]'s are there?
 	///
 	/// This is the same as [`Writer::reader_count()`].
@@ -374,6 +389,7 @@ where
 	}
 
 	#[inline]
+	#[must_use]
 	/// Is the [`Writer`] currently swapping data?
 	///
 	/// This indicates if the [`Writer`] very recently [`Writer::push()`]'ed

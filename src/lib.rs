@@ -15,7 +15,6 @@
 	for_loops_over_fallibles,
 	large_assignments,
 	overlapping_range_endpoints,
-	private_in_public,
 	semicolon_in_expressions_from_macros,
 	redundant_semicolons,
 	unconditional_recursion,
@@ -36,16 +35,45 @@
 	unsafe_code,
 )]
 #![deny(
+	clippy::all,
+	clippy::correctness,
+	clippy::suspicious,
+	clippy::style,
+	clippy::complexity,
+	clippy::perf,
+	clippy::pedantic,
+	clippy::restriction,
+	clippy::nursery,
+	clippy::cargo,
 	unused_comparisons,
 	nonstandard_style,
 )]
+#![allow(
+	clippy::single_char_lifetime_names,
+	clippy::implicit_return,
+	clippy::std_instead_of_alloc,
+	clippy::std_instead_of_core,
+	clippy::unwrap_used,
+	clippy::min_ident_chars,
+	clippy::absolute_paths,
+	clippy::missing_inline_in_public_items,
+	clippy::arithmetic_side_effects,
+	clippy::unwrap_in_result,
+	clippy::pattern_type_mismatch,
+	clippy::shadow_reuse,
+	clippy::shadow_unrelated,
+	clippy::missing_trait_methods,
+	clippy::pub_use,
+	clippy::pub_with_shorthand,
+	clippy::blanket_clippy_restriction_lints,
+)]
 
 //---------------------------------------------------------------------------------------------------- Mod
-pub mod commit;
-pub use commit::*;
+mod commit;
+pub use commit::{Commit,CommitOwned,CommitRef};
 
-pub mod info;
-pub use info::*;
+mod info;
+pub use info::{PullInfo,PushInfo,CommitInfo,StatusInfo};
 
 mod reader;
 pub use reader::Reader;
@@ -103,9 +131,12 @@ pub use writer::Writer;
 pub type Timestamp = usize;
 
 //---------------------------------------------------------------------------------------------------- Free functions
+/// The default `Vec` capacity for the
+/// `Patch`'s when using using `new()`.
 pub(crate) const INIT_VEC_LEN: usize = 16;
 
 #[inline]
+#[must_use]
 /// Create a new [`Writer`] & [`Reader`] pair
 ///
 /// See their documentation for writing and reading functions.
@@ -128,6 +159,7 @@ where
 }
 
 #[inline]
+#[must_use]
 /// Create a new [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
 ///
 /// This is the same as [`crate::new()`] although the
@@ -152,6 +184,8 @@ where
 	new_internal::<T>(data, capacity)
 }
 
+#[inline]
+#[must_use]
 /// Create a default [`Writer`] & [`Reader`] pair
 ///
 /// This is the same as [`crate::new()`] but it does not
@@ -171,6 +205,8 @@ where
 	new_internal::<T>(Default::default(), INIT_VEC_LEN)
 }
 
+#[inline]
+#[must_use]
 /// Create a default [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
 ///
 /// This is the same as [`crate::default`] combined with [`crate::with_capacity`].
@@ -189,6 +225,7 @@ where
 	new_internal::<T>(Default::default(), capacity)
 }
 
+/// Internal generic functions used by all `new()` functions above.
 fn new_internal<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
 where
 	T: Clone,

@@ -7,10 +7,12 @@ use crate::{Reader,Timestamp};
 use crate::{Writer,Patch};
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[derive(Copy,Clone,Debug,Hash,PartialEq,PartialOrd)]
+#[derive(Copy,Clone,Debug,Hash,PartialEq,PartialOrd,Eq,Ord)]
 /// Owned snapshot of some data `T` and its [`Timestamp`]
 ///
 /// This is a [`Commit`] of data received from the operations
@@ -101,6 +103,7 @@ impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
 	}
 }
 
+/// Implement traits on `CommitOwned`
 macro_rules! impl_traits {
 	($target:ty => $($from:ty),* $(,)?) => {
 		$(
@@ -150,10 +153,11 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- CommitRef
+#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[derive(Clone,Debug,Hash,PartialEq,PartialOrd)]
+#[derive(Clone,Debug,Hash,PartialEq,PartialOrd,Eq,Ord)]
 /// Cheaply cloneable snapshot of some data `T` and its [`Timestamp`]
 ///
 /// This is a [`Commit`] of data received from operations
@@ -182,6 +186,7 @@ pub struct CommitRef<T>
 where
 	T: Clone
 {
+	/// Shared pointer to a `CommitOwned<T>.
 	pub(super) inner: Arc<CommitOwned<T>>,
 }
 
@@ -190,6 +195,7 @@ where
 	T: Clone
 {
 	#[inline]
+	#[must_use]
 	/// How many other shared instances of this [`CommitRef`] exist?
 	///
 	/// This is akin to [`Arc::strong_count`].
@@ -202,6 +208,7 @@ where
 	///
 	/// This is akin to [`Arc::try_unwrap`].
 	///
+	/// # Errors
 	/// This attempts to take ownership of the backing data
 	/// inside this [`CommitRef`]. If there are other references
 	/// ([`CommitRef::count()`]) then this function will fail
@@ -210,7 +217,7 @@ where
 	/// If there are no other references, this will cheaply
 	/// acquire ownership of the `T` data.
 	pub fn try_unwrap(self) -> Result<CommitOwned<T>, Self> {
-		Arc::try_unwrap(self.inner).map_err(|inner| CommitRef { inner })
+		Arc::try_unwrap(self.inner).map_err(|inner| Self { inner })
 	}
 }
 
@@ -258,6 +265,7 @@ impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
 	}
 }
 
+/// Implement traits on `CommitRef`.
 macro_rules! impl_traits {
 	($target:ty => $($from:ty),* $(,)?) => {
 		$(
@@ -313,6 +321,7 @@ impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- Commit
+#[allow(clippy::module_name_repetitions)]
 /// Objects that act like a `Commit`
 ///
 /// Notably:
@@ -418,7 +427,9 @@ impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for CommitOwned<T> {
 	}
 }
 
+/// Sealed trait module
 mod private {
+	/// Sealed trait, prevents non-pub(crate) impls
 	pub trait Sealed {}
 	impl<T: Clone> Sealed for crate::CommitOwned<T> {}
 	impl<T: Clone> Sealed for crate::CommitRef<T> {}
@@ -428,11 +439,11 @@ impl<T> Commit<T> for CommitRef<T>
 where
 	T: Clone,
 {
-	#[inline(always)]
+	#[inline]
 	fn timestamp(&self) -> Timestamp {
 		self.inner.timestamp
 	}
-	#[inline(always)]
+	#[inline]
 	fn data(&self) -> &T {
 		&self.inner.data
 	}
@@ -473,11 +484,11 @@ impl<T> Commit<T> for CommitOwned<T>
 where
 	T: Clone,
 {
-	#[inline(always)]
+	#[inline]
 	fn timestamp(&self) -> Timestamp {
 		self.timestamp
 	}
-	#[inline(always)]
+	#[inline]
 	fn data(&self) -> &T {
 		&self.data
 	}
@@ -492,12 +503,12 @@ where
 		self.data
 	}
 
-	#[inline(always)]
-	fn to_commit_owned(&self) -> CommitOwned<T> {
+	#[inline]
+	fn to_commit_owned(&self) -> Self {
 		self.clone()
 	}
-	#[inline(always)]
-	fn into_commit_owned(self) -> CommitOwned<T> {
+	#[inline]
+	fn into_commit_owned(self) -> Self {
 		self
 	}
 }

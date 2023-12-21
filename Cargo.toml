@@ -8,7 +8,11 @@ documentation = "https://docs.rs/someday"
 repository = "https://github.com/hinto-janai/someday"
 readme = "README.md"
 keywords = ["mvcc", "lock-free", "atomic", "multi-version", "concurrency"]
+categories = ["concurrency"]
 license = "MIT"
+ignore = [
+	"examples"
+]
 
 [package.metadata.docs.rs]
 all-features = true
