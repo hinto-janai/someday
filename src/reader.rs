@@ -386,8 +386,57 @@ where
 	}
 }
 
+//---------------------------------------------------------------------------------------------------- Trait Impl
 impl<T: Clone> From<&Writer<T>> for Reader<T> {
 	fn from(value: &Writer<T>) -> Self {
 		value.reader()
+	}
+}
+
+#[cfg(feature = "serde")]
+impl<T> serde::Serialize for Reader<T>
+where
+	T: Clone + serde::Serialize
+{
+	/// This will call `head()`, then serialize your `T`.
+	///
+	/// `T::serialize(self.head().as_ref(), serializer)`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (r, _) = someday::new(String::from("hello"));
+	///
+	/// let json = serde_json::to_string(&r).unwrap();
+	/// assert_eq!(json, "\"hello\"");
+	/// ```
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        T::serialize(self.head().as_ref(), serializer)
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<T> bincode::Encode for Reader<T>
+where
+	T: Clone + bincode::Encode
+{
+	/// This will call `head()`, then serialize your `T`.
+	///
+	/// `T::encode(self.head().as_ref(), encoder)`
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (r, _) = someday::new(String::from("hello"));
+	/// let config = bincode::config::standard();
+	///
+	/// let bytes = bincode::encode_to_vec(&r, config).unwrap();
+	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
+	/// ```
+	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+		T::encode(self.head().as_ref(), encoder)
 	}
 }

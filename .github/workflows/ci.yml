@@ -34,7 +34,7 @@ jobs:
         key: ${{ matrix.os }}
 
     - name: Clippy
-      run: cargo clippy --release
+      run: cargo clippy --release --all-features
 
     - name: Test
-      run: cargo test --release
+      run: cargo test --release --all-features

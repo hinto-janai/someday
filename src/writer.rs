@@ -1724,3 +1724,105 @@ impl<T: Clone> AsRef<T> for Writer<T> {
 		&self.local.as_ref().unwrap().data
 	}
 }
+
+#[cfg(feature = "serde")]
+impl<T> serde::Serialize for Writer<T>
+where
+	T: Clone + serde::Serialize
+{
+	/// This will call `data()`, then serialize your `T`.
+	///
+	/// `T::serialize(self.data(), serializer)`
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	///
+	/// let json = serde_json::to_string(&w).unwrap();
+	/// assert_eq!(json, "\"hello\"");
+	/// ```
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+		T::serialize(self.data(), serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T> serde::Deserialize<'de> for Writer<T>
+where
+	T: Clone + serde::Deserialize<'de>
+{
+	/// This will deserialize your data `T` directly into a `Writer`.
+	///
+	/// `T::deserialize(deserializer).map(|t| crate::new(t).1)`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	///
+	/// let json = serde_json::to_string(&w).unwrap();
+	/// assert_eq!(json, "\"hello\"");
+	///
+	/// let writer: Writer<String> = serde_json::from_str(&json).unwrap();
+	/// assert_eq!(writer.data(), "hello");
+	/// ```
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>
+	{
+		T::deserialize(deserializer).map(|t| crate::new(t).1)
+	}
+}
+
+#[cfg(feature = "bincode")]
+impl<T> bincode::Encode for Writer<T>
+where
+	T: Clone + bincode::Encode
+{
+	/// This will call `data()`, then serialize your `T`.
+	///
+	/// `T::encode(self.data(), encoder)`
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	/// let config = bincode::config::standard();
+	///
+	/// let bytes = bincode::encode_to_vec(&w, config).unwrap();
+	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
+	/// ```
+	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+		T::encode(self.data(), encoder)
+	}
+}
+
+#[cfg(feature = "bincode")]
+impl<T> bincode::Decode for Writer<T>
+where
+	T: Clone + bincode::Decode
+{
+	/// This will deserialize your data `T` directly into a `Writer`.
+	///
+	/// `T::decode(decoder).map(|t| crate::new(t).1)`
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	/// let config = bincode::config::standard();
+	///
+	/// let bytes = bincode::encode_to_vec(&w, config).unwrap();
+	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
+	///
+	/// let writer: Writer<String> = bincode::decode_from_slice(&bytes, config).unwrap().0;
+	/// assert_eq!(writer.data(), "hello");
+	/// ```
+	fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+		T::decode(decoder).map(|t| crate::new(t).1)
+	}
+}
