@@ -42,7 +42,6 @@
 
 //---------------------------------------------------------------------------------------------------- Mod
 pub mod info;
-pub use info::{CommitInfo, PushInfo, PullInfo, StatusInfo};
 
 mod reader;
 pub use reader::Reader;
@@ -111,8 +110,8 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 /// See their documentation for writing and reading functions.
 ///
 /// This pre-allocates `16` capacity for the internal
-/// [`Vec`]'s holding onto the `Patch`'s that have and
-/// haven't been [`Apply`].
+/// [`Vec`]'s holding onto the [`Patch`]'s that have and
+/// haven't been applied.
 ///
 /// Use [`with_capacity()`] to set a custom capacity.
 ///
@@ -128,14 +127,14 @@ where
 }
 
 #[inline]
-/// Create a new [`Writer`] & [`Reader`] pair with a specified [`Apply`] capacity
+/// Create a new [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
 ///
 /// This is the same as [`crate::new()`] although the
 /// the input `capacity` determines how much capacity the
-/// [`Apply`] vectors will start out with.
+/// [`Patch`] vectors will start out with.
 ///
 /// Use this if you are planning to [`Writer::add()`]
-/// many `Patch`'s before [`Writer::commit()`]'ing, so that
+/// many [`Patch`]'s before [`Writer::commit()`]'ing, so that
 /// the internal [`Vec`]'s don't need to reallocate so often.
 ///
 /// ## Example
@@ -171,7 +170,7 @@ where
 	new_internal::<T>(Default::default(), INIT_VEC_LEN)
 }
 
-/// Create a default [`Writer`] & [`Reader`] pair with a specified [`Apply`] capacity
+/// Create a default [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
 ///
 /// This is the same as [`crate::default`] combined with [`crate::with_capacity`].
 ///

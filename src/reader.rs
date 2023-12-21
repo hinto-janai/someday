@@ -8,6 +8,7 @@ use std::{sync::{
 }, time::Duration};
 use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
+	patch::Patch,
 	Timestamp,
 	Writer,
 };
@@ -77,10 +78,9 @@ use crate::{
 /// // and make it do some work in the background.
 /// std::thread::spawn(move || {
 /// 	// 1. Append to string
-/// 	// 2. Add the change
-/// 	// 3. Commit it
-/// 	// 4. Push it so the Readers can see
-/// 	// 5. Repeat
+/// 	// 2. Commit it
+/// 	// 3. Push so that Readers can see
+/// 	// 4. Repeat
 /// 	//
 /// 	// This is looping at an extremely fast rate
 /// 	// and real code probably wouldn't do this, although
@@ -91,7 +91,6 @@ use crate::{
 /// 		writer.push();
 /// 	}
 /// });
-///
 /// # std::thread::sleep(std::time::Duration::from_secs(1));
 ///
 /// // Even though the Writer _just_ started
@@ -107,8 +106,8 @@ use crate::{
 /// // We can continually call `.head()` and keep
 /// // retrieving the latest data. Doing this
 /// // will _not_ block the Writer from continuing.
-/// let mut last_head = reader.head();
-/// let mut new_head  = reader.head();
+/// let mut last_head: CommitRef<String> = reader.head();
+/// let mut new_head:  CommitRef<String> = reader.head();
 /// for _ in 0..10 {
 /// 	last_head = reader.head();
 ///
@@ -214,10 +213,11 @@ where
 	///
 	/// Realistically, `duration` can be a small number as
 	/// the time it takes [`Writer`] to "push" new data is very small.
-	/// (1 new `Arc` and an atomic pointer swap)..
+	/// (1 new `Arc` and an atomic pointer swap).
 	///
 	/// `std::time::Duration::from_millis(1)` will most likely be more
-	/// than enough time for the [`Writer`] to finish.
+	/// than enough time for the [`Writer`] to finish (depending on how
+	/// long it takes [`Writer`] to re-apply all your [`Patch`]'s).
 	///
 	/// This will forcefully call [`head()`](Reader::head) after
 	/// sleeping regardless if the [`Writer`] is pushing.
@@ -312,10 +312,6 @@ where
 	/// Realistically, this function will only spin for a brief moment
 	/// as the time it takes [`Writer`] to "push" new data is very small
 	/// (1 new `Arc` and an atomic pointer swap).
-	///
-	/// Nominally, this function will usually take anywhere from
-	/// the order of `0.000001` ~ `0.00001` seconds to return
-	/// (although, it is not guaranteed to).
 	pub fn head_spin(&self) -> CommitRef<T> {
 		loop {
 			if !self.swapping() {

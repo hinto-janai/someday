@@ -4,7 +4,7 @@ use crate::{Writer,Reader};
 //---------------------------------------------------------------------------------------------------- Patch
 /// The patches (functions) that will be applied to your data `T`
 ///
-/// These are the patches (functions) that you use with
+/// These are the patches that you use with
 /// [`Writer::add`] that will modify your data, `T`.
 ///
 /// The 2 inputs you can play with are:

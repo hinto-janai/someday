@@ -29,19 +29,21 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`
 ///
-/// [`Writer`] applies your provided functions onto your data `T`
-/// and can [`push()`](Writer::push) that data off to [`Reader`]'s atomically.
+/// The [`Writer`]:
+/// 1. Stores your [`Patch`]'s (functions) with [`add()`](Writer::add)
+/// 2. Actually applies them to `T` by [`commit()`](Writer::commit)'ing
+/// 3. Can [`push()`](Writer::push) so that [`Reader`]'s can see the changes
 ///
 /// ## Usage
 /// This example covers the typical usage of a `Writer`:
-/// - Creating some [`Reader`]'s
+/// - Creating some `Reader`'s
 /// - Adding some `Patch`'s
 /// - Viewing the staged `Patch`'s, modifying them
 /// - Committing those changes
-/// - Pushing those changes to the [`Reader`]'s
+/// - Pushing those changes to the `Reader`'s
 ///
 /// ```rust
-/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef,Patch};
+/// use someday::{*,info::*};
 ///
 /// // Create a Reader/Writer pair that can "apply"
 /// // the `PatchString` patch to `String`'s.
@@ -49,12 +51,11 @@ use crate::{
 ///
 /// // To clarify the types of these things:
 /// // This is the Reader.
-/// // It can clone itself infinite amount of
-/// // time very cheaply.
+/// // It can clone itself an infinite
+/// // amount of time very cheaply.
 /// let r: Reader<String> = r;
 /// for _ in 0..10_000 {
-/// 	// pretty cheap operation.
-/// 	let another_reader = r.clone();
+/// 	let another_reader = r.clone(); // akin to Arc::clone()
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
@@ -74,21 +75,21 @@ use crate::{
 ///
 /// // But `add()`'ing does not actually modify the
 /// // local (Writer) or remote (Readers) data, it
-/// // just "stages" those for a `commit()`.
+/// // just "stages" them.
 /// assert_eq!(w.timestamp(), 0);
 /// assert_eq!(r.timestamp(), 0);
 /// assert_eq!(w.data(), "");
 /// assert_eq!(r.head(), "");
 ///
-/// // We can see our "staged" functions here.
+/// // We can see our "staged" patches here.
 /// let staged: &mut Vec<Patch<String>> = w.staged();
 /// assert_eq!(staged.len(), 4);
 ///
 /// // Let's actually remove a patch.
-/// let removed = staged.remove(3);
+/// staged.remove(3); // w.push_str("jkl")
 ///
 /// // Okay, now let's commit locally.
-/// let commit_info = w.commit();
+/// let commit_info: CommitInfo = w.commit();
 /// // We applied 3 patches in total.
 /// assert_eq!(commit_info.patches, 3);
 /// // And added 1 commit (timestamp).
@@ -102,7 +103,7 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // Now we push.
-/// let push_info = w.push();
+/// let push_info: PushInfo = w.push();
 /// // We pushed 1 commit in total.
 /// assert_eq!(push_info.commits, 1);
 /// // Our staged functions are now gone.
@@ -164,10 +165,10 @@ where
 	#[inline]
 	/// Cheaply construct a [`Reader`] connected to this [`Writer`]
 	///
-	/// This creates a new [`Reader`] that can read all the
-	/// data [`push()`](Writer::push)'ed from this [`Writer`].
+	/// This creates a new `Reader` that can read all the
+	/// data [`push()`](Writer::push)'ed from this `Writer`.
 	///
-	/// There is no limit on concurrent [`Reader`]'s.
+	/// There is no limit on concurrent `Reader`'s.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -189,10 +190,11 @@ where
 	/// This is the `Writer`'s local data that may or may
 	/// not have been [`push()`](Writer::push)'ed yet.
 	///
-	/// [`commit()`](Writer::commit)'ing will affect this data.
+	/// [`commit()`](Writer::commit)'ing will apply the
+	/// [`add()`](Writer::add)'ed [`Patch`]'s directly to this data.
 	///
-	/// If [`push()`](Writer::push) is called, this would be the
-	/// new data that [`Reader`]'s would see.
+	/// If `push()` is called, this would be the
+	/// new data that `Reader`'s would see.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -240,12 +242,12 @@ where
 	#[inline]
 	/// View the [`Writer`]'s local "head" [`Commit`]
 	///
-	/// This is the latest, and local [`Commit`] from the [`Writer`].
+	/// This is the latest, and local `Commit` from the `Writer`.
 	///
 	/// Calling [`commit()`](Writer::commit) would make that new
-	/// [`Commit`] be the return value for this function.
+	/// `Commit` be the return value for this function.
 	///
-	/// `Reader`'s may or may not see this [`Commit`] yet.
+	/// [`Reader`]'s may or may not see this `Commit` yet.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -273,9 +275,9 @@ where
 	#[inline]
 	/// View the [`Reader`]'s latest "head" [`Commit`]
 	///
-	/// This is the latest [`Commit`] the [`Reader`]'s can see.
+	/// This is the latest `Commit` the `Reader`'s can see.
 	///
-	/// Calling [`push()`](Writer::push) would update the [`Reader`]'s head [`Commit`].
+	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -303,11 +305,11 @@ where
 	#[inline]
 	/// Cheaply acquire ownership of the [`Reader`]'s latest "head" [`Commit`]
 	///
-	/// This is the latest [`Commit`] the [`Reader`]'s can see.
+	/// This is the latest `Commit` the `Reader`'s can see.
 	///
-	/// Calling [`push()`](Writer::push) would update the [`Reader`]'s head [`Commit`].
+	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
 	///
-	/// This is an shared "owned" [`Commit`] (it uses [`Arc`] internally).
+	/// This is an shared "owned" `Commit` (it uses [`Arc`] internally).
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -332,15 +334,13 @@ where
 	}
 
 	#[inline]
-	/// Add a `Patch` to apply to the data `T`
+	/// Add a [`Patch`] to apply to the data `T`
 	///
 	/// This does not execute the `Patch` immediately,
 	/// it will only store it for later usage.
 	///
-	/// [`Commit`]-like operations are when these functions
-	/// are [`Apply`]'ed to your data.
-	///
-	/// This returns `self` for method chaining.
+	/// [`Commit`]-like operations are when these
+	/// functions are applied to your data, e.g. [`Writer::commit()`].
 	///
 	/// ```
 	/// # use someday::*;
@@ -361,27 +361,19 @@ where
 	}
 
 	#[inline]
-	/// [`Apply`] all the `Patch`'s that were [`add()`](Writer::add)'ed
-	///
-	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`,
-	/// but only if there were `Patch`'s to actually [`Apply`]. In other
-	/// words, if you did not call [`add()`](Writer::add) before this,
-	/// [`commit()`](Writer::commit) will do nothing.
-	///
-	/// This immediately calls [`Apply::apply`] with
-	/// your `Patch`'s onto your data `T`.
+	/// Apply all the [`Patch`]'s that were [`add()`](Writer::add)'ed
 	///
 	/// The new [`Commit`] created from this will become
-	/// the [`Writer`]'s new [`Writer::head()`].
+	/// the `Writer`'s new [`Writer::head()`].
 	///
-	/// You can [`commit()`](Writer::commit) multiple times and
-	/// it will only affect the [`Writer`]'s local data.
+	/// You can `commit()` multiple times and it will
+	/// only affect the `Writer`'s local data.
 	///
 	/// You can choose when to publish those changes to
-	/// the [`Reader`]'s with [`push()`](Writer::push()).
+	/// the [`Reader`]'s with [`Writer::push()`].
 	///
 	/// The [`CommitInfo`] object returned is just a container
-	/// for some metadata about the [`commit()`](Writer::commit) operation.
+	/// for some metadata about the `commit()` operation.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -390,12 +382,36 @@ where
 	/// // Timestamp is 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
-	/// // And and commit a patch.
+	/// // Add and commit a patch.
 	/// w.add(Patch::Fn(|w, _| *w += 123));
 	/// w.commit();
 	///
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(*w.head(), 123);
+	/// ```
+	///
+	/// # Timestamp
+	/// This will increment the [`Writer`]'s local [`Timestamp`] by `1`,
+	/// but only if there were `Patch`'s to actually apply. In other
+	/// words, if you did not call [`add()`](Writer::add) before this,
+	/// [`commit()`](Writer::commit) will do nothing.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<usize>(0);
+	///
+	/// // Timestamp is 0.
+	/// assert_eq!(w.timestamp(), 0);
+	///
+	/// // We didn't `add()` anything, but commit anyway.
+	/// let commit_info = w.commit();
+	/// assert_eq!(commit_info.patches, 0);
+	/// assert_eq!(commit_info.timestamp_diff, 0);
+	///
+	/// // There was nothing to commit,
+	/// // so our timestamp did not change.
+	/// assert_eq!(w.timestamp(), 0);
+	/// assert_eq!(*w.head(), 0);
 	/// ```
 	pub fn commit(&mut self) -> CommitInfo {
 		let patch_len = self.patches.len();
@@ -406,16 +422,15 @@ where
 				patches: 0,
 				timestamp_diff: self.timestamp_diff(),
 			};
-		} else {
-			// INVARIANT: `local` must be initialized after push()
-			self.local.as_mut().unwrap().timestamp += 1;
 		}
+
+		// INVARIANT: `local` must be initialized after push()
+		self.local.as_mut().unwrap().timestamp += 1;
 
 		// Pre-allocate some space for the new patches.
 		self.patches_old.reserve_exact(patch_len);
 
 		// Apply the patches and add to the old vector.
-		// for mut patch in self.patches.drain(..) {
 		for mut patch in self.patches.drain(..) {
 			patch.apply(
 				// INVARIANT: `local` must be initialized after push()
@@ -432,18 +447,18 @@ where
 	}
 
 	#[inline]
-	/// Unconditionally push [`Writer`]'s local _committed_ data to the [`Reader`]'s.
+	/// Conditionally push [`Writer`]'s local _committed_ data to the [`Reader`]'s.
 	///
-	/// This will push changes even if there are no new [`Commit`]'s.
+	/// This will only push changes if there are new [`Commit`]'s
+	/// (i.e if [`Writer::synced`] returns `true`).
+	///
 	/// This may be expensive as there are other operations in this
 	/// function (memory reclaiming, re-applying patches).
 	///
-	/// This will return how many [`Commit`]'s the [`Writer`]'s pushed
-	/// (aka, how times [`Writer::commit()`] or [`Writer::overwrite()`] or
-	/// one of the variants were called)
+	/// This will return how many `Commit`'s the `Writer`'s pushed.
 	///
-	/// [`Reader`]'s will atomically be able to access the
-	/// the new [`Commit`] before this function is over.
+	/// `Reader`'s will atomically be able to access the
+	/// the new `Commit` before this function is over.
 	///
 	///	The [`Patch`]'s that were not [`commit()`](Writer::commit)'ed will not be
 	/// pushed and will remain in the [`staged()`](Writer::staged) vector of patches.
@@ -451,36 +466,33 @@ where
 	/// The [`PushInfo`] object returned is just a container
 	/// for some metadata about the [`push()`](Writer::push) operation.
 	///
-	/// ## Usage
-	/// This function should most likely be combined with a
-	/// check to see if there are changes to push:
-	///
 	/// ```rust
 	/// # use someday::*;
 	/// let (r, mut w) = someday::new::<String>("".into());
 	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
 	///
-	/// if w.ahead() {
-	/// 	// won't happen, not yet committed
-	/// 	unreachable!();
-	/// 	// this call would be wasteful
-	/// 	w.push();
-	/// }
+	/// // This call does nothing since
+	/// // we haven't committed anything.
+	/// let push_info = w.push();
+	/// assert_eq!(push_info.timestamp, 0);
+	/// assert_eq!(push_info.commits, 0);
+	/// assert_eq!(push_info.reclaimed, false);
 	///
 	/// // Now there are commits to push.
 	/// w.commit();
 	///
 	/// if w.ahead() {
-	/// 	let commit_info = w.push();
+	/// 	let push_info = w.push();
 	/// 	// We pushed 1 commit.
-	/// 	assert_eq!(commit_info.commits, 1);
+	/// 	assert_eq!(push_info.timestamp, 1);
+	/// 	assert_eq!(push_info.commits, 1);
+	/// 	assert_eq!(push_info.reclaimed, true);
 	/// } else {
-	/// 	// won't happen
+	/// 	// this branch cannot happen
 	/// 	unreachable!();
 	/// }
 	/// ```
 	pub fn push(&mut self) -> PushInfo {
-		self.swapping_true();
 		self.push_inner::<false, ()>(None, None::<fn(&Self)>).0
 	}
 
@@ -489,15 +501,10 @@ where
 	/// but it will [`std::thread::sleep()`] for at least `duration`
 	/// amount of time to wait to reclaim the old [`Reader`]'s data.
 	///
-	/// The `usize` returned is how many [`Commit`]'s the [`Writer`]'s pushed
-	/// (aka, how times [`Writer::commit()`] or [`Writer::overwrite()`] or
-	/// one of the variants were called) and the `bool` returned is
-	/// if the old data was successfully reclaimed or not.
-	///
-	/// If `duration` has passed, the [`Writer`] will expensively
+	/// If `duration` has passed, the [`Writer`] will
 	/// clone the data as normal and continue on.
 	///
-	/// This is useful if you know your [`Reader`]'s only
+	/// This is useful if you know your `Reader`'s only
 	/// hold onto old data for a brief moment.
 	///
 	/// ```rust
@@ -527,7 +534,6 @@ where
 	/// assert_eq!(commit_info.reclaimed, true);
 	/// ```
 	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
-		self.swapping_true();
 		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>).0
 	}
 
@@ -539,14 +545,14 @@ where
 	/// This can be any arbitrary code, although the function
 	/// is provided with the same [`Writer`], `&self`.
 	///
-	/// The generic `R` is the return value of the function, although
-	/// leaving it blank and having a non-returning function will
+	/// The generic `R` is the return value of the function.
+	/// Leaving it blank and having a non-returning function will
 	/// be enough inference that the return value is `()`.
 	///
 	/// Basically: "run the function `F` while we're waiting"
 	///
 	/// This is useful to get some work done before waiting
-	/// on the [`Reader`]'s to drop old copies of data.
+	/// on the `Reader`'s to drop old copies of data.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -609,7 +615,6 @@ where
 	where
 		F: FnOnce(&Self) -> R
 	{
-		self.swapping_true();
 		let (push_info, r) = self.push_inner::<false, R>(None, Some(f));
 
 		// INVARIANT: we _know_ `R` will be a `Some`
@@ -620,14 +625,14 @@ where
 
 	#[inline]
 	/// This function is the same as [`Writer::push()`]
-	/// but it will **always** expensively clone the data
+	/// but it will **always** clone the data
 	/// and not attempt to reclaim any old data.
 	///
-	/// This is useful if you think reclaiming old data
-	/// and re-applying your commits would take longer
-	/// than just cloning the data itself.
+	/// This is useful if you know reclaiming old data
+	/// and re-applying your commits would take longer and/or
+	/// be more expensive just cloning the data itself.
 	///
-	/// Or if you know your [`Reader`]'s will be holding
+	/// Or if you know your `Reader`'s will be holding
 	/// onto the data for a long time, and reclaiming data
 	/// will be unlikely.
 	///
@@ -657,12 +662,27 @@ where
 		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
 	}
 
+	// Generic function to handle all the different types of pushes.
 	fn push_inner<const CLONE: bool, R>(
 		&mut self,
 		duration: Option<Duration>,
 		function: Option<impl FnOnce(&Self) -> R>,
 	) -> (PushInfo, Option<R>)
 	{
+		// Early return if no commits.
+		if self.synced() {
+			let return_value = function.map(|f| f(&self));
+			return (PushInfo {
+				timestamp: self.timestamp(),
+				commits: 0,
+				reclaimed: false,
+			}, return_value);
+		}
+
+		// Set atomic bool to indicate to `Reader`'s
+		// that we're about to start reclaiming.
+		if !CLONE { self.swapping.store(true, Ordering::Release); }
+
 		// SAFETY: we're temporarily "taking" our `self.local`.
 		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
@@ -670,7 +690,7 @@ where
 		// Swap the reader's `arc_swap` with our new local.
 		let old = self.arc.swap(Arc::new(local));
 
-		if !CLONE { self.swapping_false(); }
+		if !CLONE { self.swapping.store(false, Ordering::Release); }
 
 		// To keep the "swapping" phase as small
 		// as possible to not block `Reader`'s, these
@@ -679,8 +699,6 @@ where
 		// `self.arc` now returns the new data.
 		self.remote = self.arc.load_full();
 		let timestamp_diff = self.remote.timestamp - old.timestamp;
-
-		// Re-acquire a local copy of data.
 
 		// Return early if the user wants to deep-clone no matter what.
 		if CLONE {
@@ -725,9 +743,10 @@ where
 			},
 		};
 
-		// INVARIANT: ALL the branches above must
-		// set `self.swapping` to `false` or else
-		// we're in a lot of trouble and will lock `Reader`'s.
+		// INVARIANT:
+		// `self.swapping` must be `false` before we
+		// return or else we will lock `Reader`'s
+		debug_assert_eq!(self.swapping.load(Ordering::SeqCst), false);
 
 		if reclaimed {
 			// Re-apply patches to this old data.
@@ -755,33 +774,29 @@ where
 	}
 
 	#[inline]
-	/// Unconditionally overwrite the [`Writer`]'s local [`Commit`] with the current [`Reader`] [`Commit`]
+	/// Conditionally overwrite the [`Writer`]'s local [`Commit`] with the current [`Reader`] `Commit`
 	///
-	/// The [`Writer`]'s old local [`Commit`] is returned.
+	/// If the `Writer` and `Reader` are [`Writer::synced()`], this will return `None`.
 	///
-	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
-	///
-	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
+	/// If the `Writer` is ahead of the `Reader`, this will:
+	/// - Discard all [`Patch`]'s that have been already [`commit()`](Writer::commit)'ed
+	/// - Keep staged `Patch`'s that haven't been `commit()`
+	/// - Return `Some(PullInfo)`
 	///
 	/// The [`PullInfo`] object returned is just a container
 	/// for some metadata about the [`pull()`](Writer::pull) operation.
 	///
+	/// ## Timestamp
+	/// If this pull is successful (the `Writer` and `Reader` aren't in sync),
+	/// this will reset your `Writer`'s [`Timestamp`] to whatever your `Reader`'s was.
+	///
 	/// ## ⚠️ Warning
-	/// This overwrites your [`Writer`]'s data!
+	/// This overwrites your `Writer`'s data!
 	///
 	/// Like a `git pull --force`!
 	///
-	/// It will also reset your [`Writer`]'s [`Timestamp`] to whatever your [`Reader`]'s was.
-	///
-	/// Like [`Writer::push()`], this will not check for any data
-	/// or timestamp differences.
-	///
-	/// Regardless if the [`Reader`] has old or new data, this will
-	/// completely overwrite the [`Writer`]'s local data with it.
-	///
 	/// ```rust
-	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
+	/// # use someday::{*,info::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit local changes.
@@ -793,46 +808,56 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Pull from the Reader.
-	/// let pull_status = w.pull();
+	/// let pull_status: PullInfo<String> = w.pull().unwrap();
 	/// assert_eq!(pull_status.old_writer_data, "hello");
 	///
 	///	// We're back to square 1.
 	/// assert_eq!(w.head(), "");
+	///
+	/// // If we try to pull again, nothing will happen
+	/// // since we are already synced with `Reader`s.
+	/// assert!(w.pull().is_none());
 	/// ```
-	pub fn pull(&mut self) -> PullInfo<T> {
-		// Delete old functions, we won't need
-		// them anymore since we just overwrote
-		// our data anyway.
-		self.patches_old.clear();
+	pub fn pull(&mut self) -> Option<PullInfo<T>> {
+		// Early return if we're synced.
+		if self.synced() {
+			return None;
+		}
+
+		// INVARIANT: if we're not synced, that
+		// means `timestamp_diff` is non-zero.
+		let commits_reverted = std::num::NonZeroUsize::new(self.timestamp_diff()).unwrap();
 
 		// INVARIANT: `local` must be initialized after push()
 		let old_writer_data = self.local.take().unwrap();
 		self.local = Some((*self.remote).clone());
 
-		PullInfo {
-			commits_reverted: self.timestamp_diff(),
+		// Delete old functions, we won't need
+		// them anymore since we just overwrote
+		// our data anyway.
+		self.patches_old.clear();
+
+		Some(PullInfo {
+			commits_reverted,
 			old_writer_data,
-		}
+		})
 	}
 
 	#[inline]
 	/// Overwrite the [`Writer`]'s local data with `data`.
 	///
-	/// The [`Writer`]'s old local data is returned.
+	/// The `Writer`'s old local data is returned.
 	///
-	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
+	/// All [`Patch`]'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
 	///
-	/// This increments the [`Writer`]'s local [`Timestamp`] by `1`.
-	///
-	/// A [`Patch`] that overwrites the data
-	/// applied with [`Writer::commit()`] would be
+	/// A `Patch` that overwrites the data
+	/// applied with `commit()` would be
 	/// equivalent to this convenience function.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push changes.
@@ -871,6 +896,9 @@ where
 	/// assert_eq!(w.timestamp(), 5);
 	/// assert_eq!(r.timestamp(), 5);
 	/// ```
+	///
+	/// ## Timestamp
+	/// This increments the `Writer`'s local `Timestamp` by `1`.
 	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
@@ -892,40 +920,26 @@ where
 	#[inline]
 	/// Store the latest [`Reader`] head [`Commit`] (cheaply)
 	///
-	/// This stores the latest [`Reader`] [`Commit`]
-	/// (aka, whatever [`Reader::head()`] would return)
-	/// into the [`Writer`]'s local storage.
+	/// This stores the latest `Reader` `Commit` into the [`Writer`]'s local storage.
 	///
 	/// These tags can be inspected later with [`Writer::tags()`].
 	///
-	/// If [`Writer::tag()`] is never used, it will never allocate space.
+	/// If `Writer::tag()` is never used, it will never allocate space.
 	///
 	/// This returns the tagged [`CommitRef`] that was stored.
 	///
-	/// ## Why does this exist?
-	/// You could store your own collection of [`CommitRef`]'s alongside
-	/// your [`Writer`] and achieve similar results, however there are
-	/// benefits to [`Writer`] coming with one built-in:
+	/// # Why does this exist?
+	/// You could store your own collection of `CommitRef`'s alongside
+	/// your `Writer` and achieve similar results, however there are
+	/// benefits to `Writer` coming with one built-in:
 	///
-	/// 1. It logically associates [`Commit`]'s with a certain [`Writer`]
-	/// 2. The invariant that all [`Commit`]'s tagged are/were valid [`Commit`]'s
-	/// to both the [`Writer`] and [`Reader`] is always upheld as the [`Writer`]
-	/// does not provide mutable access to the inner [`Commit`] data or [`Timestamp`]'s
-	///
-	/// ## Note
-	/// This stores the **Reader's** latest [`Commit`], not the Writer's.
-	///
-	/// The reason why the [`Writer`]'s commit cannot be tagged is that
-	/// the [`Writer`]'s commit is a local, mutable, non-shared `CommitOwned<T>`
-	/// instead of a shared `CommitRef<T>`, thus tagging it would require
-	/// cloning it into another "shared" copy, which may be expensive.
-	///
-	/// You can always [`Writer::push_and()`] + [`Writer::tag()`]
-	/// to push the latest commit, then tag it.
+	/// 1. It logically associates `Commit`'s with a certain `Writer`
+	/// 2. The invariant that all `Commit`'s tagged are/were valid `Commit`'s
+	/// to both the `Writer` and `Reader` is always upheld as the `Writer`
+	/// does not provide mutable access to the inner `Commit` data or [`Timestamp`]'s
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push a change.
@@ -980,7 +994,7 @@ where
 	#[inline]
 	/// Clear all the stored [`Writer`] tags
 	///
-	/// This calls [`BTreeMap::clear()`] on this [`Writer`]'s internal tags.
+	/// This calls [`BTreeMap::clear()`] on this `Writer`'s internal tags.
 	pub fn tag_clear(&mut self) {
 		self.tags.clear();
 	}
@@ -993,7 +1007,6 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// // Tag this "aaa" commit.
@@ -1041,11 +1054,10 @@ where
 	#[inline]
 	/// Remove a stored tag from the [`Writer`]
 	///
-	/// This calls [`BTreeMap::remove()`] on this [`Writer`]'s internal tags.
+	/// This calls [`BTreeMap::remove()`] on this `Writer`'s internal tags.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag = CommitRef::clone(&writer.tag());
@@ -1063,11 +1075,10 @@ where
 	///
 	/// The [`CommitRef`] returned is the _oldest_ one (smallest [`Timestamp`]).
 	///
-	/// This calls [`BTreeMap::pop_first()`] on this [`Writer`]'s internal tags.
+	/// This calls [`BTreeMap::pop_first()`] on this `Writer`'s internal tags.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag_0 = CommitRef::clone(&writer.tag());
@@ -1087,11 +1098,10 @@ where
 	///
 	/// The [`CommitRef`] returned is the _latest_ one (largest [`Timestamp`]).
 	///
-	/// This calls [`BTreeMap::pop_last()`] on this [`Writer`]'s internal tags.
+	/// This calls [`BTreeMap::pop_last()`] on this `Writer`'s internal tags.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut writer) = someday::new::<String>("aaa".into());
 	///
 	/// let tag_0 = CommitRef::clone(&writer.tag());
@@ -1109,18 +1119,15 @@ where
 	#[inline]
 	/// If the [`Writer`]'s local [`Commit`] is different than the [`Reader`]'s
 	///
-	/// Compares the [`Commit`] that the [`Reader`]'s can
-	/// currently access with the [`Writer`]'s current local [`Commit`].
+	/// Compares the `Commit` that the `Reader`'s can
+	/// currently access with the `Writer`'s current local `Commit`.
 	///
 	/// This returns `true` if both:
 	/// - The data is different
 	/// - The [`Timestamp`] is different
 	///
-	/// Note that this includes non-[`push()`](Writer::push)'ed [`Writer`] data.
-	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit but don't push.
@@ -1139,20 +1146,19 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s local [`Timestamp`] is greater than the [`Reader`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is greater than the [`Reader`]'s `Timestamp`
 	///
-	/// Compares the timestamp of the [`Reader`]'s currently available
-	/// data with the [`Writer`]'s current local timestamp.
+	/// Compares the timestamp of the `Reader`'s currently available
+	/// data with the `Writer`'s current local timestamp.
 	///
-	/// This returns `true` if the [`Writer`]'s timestamp
-	/// is greater than [`Reader`]'s timestamp (which means
-	/// [`Writer`] is ahead of the [`Reader`]'s)
+	/// This returns `true` if the `Writer`'s timestamp
+	/// is greater than `Reader`'s timestamp (which means
+	/// [`Writer` is ahead of the [`Reader`]'s)
 	///
-	/// Note that this does not check the data itself, only the [`Timestamp`].
+	/// Note that this does not check the data itself, only the `Timestamp`.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit 10 times but don't push.
@@ -1176,13 +1182,12 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s local [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is greater than an arbitrary [`Commit`]'s `Timestamp`
 	///
-	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit 10 times.
@@ -1208,13 +1213,12 @@ where
 	}
 
 	#[inline]
-	/// If the [`Writer`]'s local [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
+	/// If the [`Writer`]'s local [`Timestamp`] is less than an arbitrary [`Commit`]'s `Timestamp`
 	///
-	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
@@ -1237,14 +1241,13 @@ where
 	#[inline]
 	/// Get the current [`Timestamp`] of the [`Writer`]'s local [`Commit`]
 	///
-	/// This returns the number indicating the [`Writer`]'s data's version.
+	/// This returns the number indicating the `Writer`'s data's version.
 	///
 	/// This number starts at `0`, increments by `1` every time a [`Writer::commit()`]
-	/// -like operation is called, and it will never be less than the [`Reader`]'s [`Timestamp`].
+	/// -like operation is called, and it will never be less than the [`Reader`]'s `Timestamp`.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
@@ -1268,13 +1271,12 @@ where
 	#[inline]
 	/// Get the current [`Timestamp`] of the [`Reader`]'s "head" [`Commit`]
 	///
-	/// This returns the number indicating the [`Reader`]'s data's version.
+	/// This returns the number indicating the `Reader`'s data's version.
 	///
 	/// This will never be greater than the [`Writer`]'s timestamp.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
@@ -1304,13 +1306,12 @@ where
 	/// Get the difference between the [`Writer`]'s and [`Reader`]'s [`Timestamp`]
 	///
 	/// This returns the number indicating how many commits the
-	/// [`Writer`] is ahead on compared to the [`Reader`]'s.
+	/// `Writer` is ahead on compared to the `Reader`'s.
 	///
 	/// In other words, it is: `writer_timestamp - reader_timestamp`
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // At timestamp 0.
@@ -1340,22 +1341,55 @@ where
 		self.local.as_ref().unwrap().timestamp - self.remote.timestamp
 	}
 
+	#[inline]
+	/// Is the [`Writer`]'s and [`Reader`]'s [`Timestamp`] the same?
+	///
+	/// This returns `true` if the `Writer` and `Reader`'s timestamp
+	/// are the same, indicating they have same data and are in-sync.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// // At timestamp 0.
+	/// assert_eq!(w.timestamp(), 0);
+	///
+	/// // Push 1 change.
+	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.commit();
+	/// w.push();
+	///
+	/// // Commit 5 changes locally.
+	/// for i in 0..5 {
+	/// 	w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// 	w.commit();
+	/// }
+	///
+	/// // Writer is at timestamp 5.
+	/// assert_eq!(w.timestamp(), 6);
+	/// // Reader's are still at timestamp 1.
+	/// assert_eq!(r.timestamp(), 1);
+	///
+	/// // They aren't in sync.
+	/// assert_eq!(w.synced(), false);
+	/// // Now they are.
+	/// w.push();
+	/// assert_eq!(w.synced(), true);
+	/// ```
+	pub fn synced(&self) -> bool {
+		self.timestamp_diff() == 0
+	}
+
 	/// Restore all the staged changes.
 	///
-	/// This removes all the `Patch`'s that haven't yet been [`commit()`](Writer::commit)'ed.
+	/// This removes all the [`Patch`]'s that haven't yet been [`commit()`](Writer::commit)'ed.
 	///
 	/// Calling `Writer::staged().drain(..)` would be equivalent.
-	///
-	/// If there are `Patch`'s, this function will remove
-	/// and return them as a [`std::vec::Drain`] iterator.
-	///
-	/// If there are no `Patch`'s, this will return [`None`].
 	///
 	/// Dropping the [`std::vec::Drain`] will drop the `Patch`'s.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes, but don't commit.
@@ -1364,33 +1398,25 @@ where
 	///
 	///	// Restore changes.
 	/// let drain = w.restore();
-	/// match drain {
-	/// 	Some(removed) => assert_eq!(removed.count(), 1),
-	/// 	_ => unreachable!(),
-	/// }
+	/// assert_eq!(drain.count(), 1);
 	/// ```
-	pub fn restore(&mut self) -> Option<std::vec::Drain<'_, Patch<T>>> {
-		if self.patches.is_empty() {
-			None
-		} else {
-			Some(self.patches.drain(..))
-		}
+	pub fn restore(&mut self) -> std::vec::Drain<'_, Patch<T>> {
+		self.patches.drain(..)
 	}
 
 	#[inline]
-	/// All the `Patch`'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
+	/// All the [`Patch`]'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
 	///
 	/// You are allowed to do anything to these `Patch`'s as they haven't
-	/// been committed yet and the `Writer` does not necessarily  need them.
+	/// been committed yet and the [`Writer`] does not necessarily need them.
 	///
 	/// You can use something like `.staged().drain(..)` to get back all the `Patch`'s.
 	///
 	/// All the `Patch`'s that have been [`commit()`](Writer::commit)'ed but not yet
-	/// [`push()`](Writer::push)'ed are safely stored internally by the [`Writer`].
+	/// [`push()`](Writer::push)'ed are safely stored internally by the `Writer`.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes.
@@ -1408,19 +1434,19 @@ where
 	}
 
 	#[inline]
-	/// Output all the tagged [`Commit`]'s
+	/// Return all tagged [`Commit`]'s
 	///
 	/// This returns a [`BTreeMap`] where the:
-	/// - Key is the [`Commit`]'s [`Timestamp`], and the
+	/// - Key is the `Commit`'s [`Timestamp`], and the
 	/// - Value is the shared [`CommitRef`] object itself
 	///
 	/// Mutable access to these tags are restricted in a way
 	/// such that these tags are guaranteed to have been valid
-	/// [`Commit`]'s that were [`push()`](Writer::push)'ed to the [`Reader`]'s.
+	/// `Commit`'s that were [`push()`](Writer::push)'ed to the [`Reader`]'s.
 	///
 	/// Aka, these tags will never be arbitrary data.
 	///
-	/// Therefore the [`Timestamp`] and [`CommitRef`] data can be relied upon.
+	/// Therefore the `Timestamp` and `CommitRef` data can be relied upon.
 	///
 	/// These "tags" are created with [`Writer::tag()`].
 	pub fn tags(&self) -> &BTreeMap<Timestamp, CommitRef<T>> {
@@ -1428,7 +1454,7 @@ where
 	}
 
 	#[inline]
-	/// All the `Patch`'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
+	/// All the [`Patch`]'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
 	///
 	/// You are not allowed to mutate these `Patch`'s as they haven't been
 	/// [`push()`](Writer::push)'ed yet and the `Writer` may need them in the future.
@@ -1451,7 +1477,7 @@ where
 
 	#[inline]
 	/// How many [`Reader`]'s are _currently_ accessing
-	/// the current [`Reader`] head [`Commit`]?
+	/// the current `Reader` head [`Commit`]?
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -1491,7 +1517,7 @@ where
 	/// How many [`Reader`]'s are there?
 	///
 	/// Unlike [`Writer::head_readers()`], this doesn't count references
-	/// to the data, it counts how many [`Reader`] objects are in existence.
+	/// to the current data, it counts how many `Reader` objects are in existence.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -1517,7 +1543,7 @@ where
 	/// Get the current status on the [`Writer`] and [`Reader`]
 	///
 	/// This is a bag of various metadata about the current
-	/// state of the [`Writer`] and [`Reader`].
+	/// state of the `Writer` and `Reader`.
 	///
 	/// If you only need 1 or a few of the fields in [`StatusInfo`],
 	/// consider using their individual methods instead.
@@ -1534,10 +1560,10 @@ where
 		}
 	}
 
-	/// Shrinks the capacity of the `Patch` [`Vec`]'s as much as possible
+	/// Shrinks the capacity of the [`Patch`] [`Vec`]'s as much as possible
 	///
 	/// This calls [`Vec::shrink_to_fit()`] on the 2
-	/// internal [`Vec`]'s in [`Writer`] holding:
+	/// internal `Vec`'s in [`Writer`] holding:
 	/// 1. The currently staged `Patch`'s
 	/// 2. The already committed `Patch`'s
 	///
@@ -1583,7 +1609,7 @@ where
 	/// Consume this [`Writer`] and return the inner components
 	///
 	/// In left-to-right order, this returns:
-	/// 1. The [`Writer`]'s local data
+	/// 1. The `Writer`'s local data
 	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
 	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
 	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
@@ -1627,15 +1653,6 @@ impl<T> Writer<T>
 where
 	T: Clone
 {
-	#[inline]
-	fn swapping_true(&mut self) {
-		self.swapping.store(true, Ordering::Relaxed);
-	}
-
-	#[inline]
-	fn swapping_false(&mut self) {
-		self.swapping.store(false, Ordering::Release);
-	}
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
@@ -1644,7 +1661,7 @@ where
 	T: Clone + std::fmt::Debug,
 {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("CommitOwned")
+		f.debug_struct("Writer")
 			.field("local", &self.local)
 			.field("remote", &self.remote)
 			.field("arc", &self.arc)
