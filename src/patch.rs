@@ -14,21 +14,10 @@ use crate::{Writer,Reader};
 /// This "patch" can either be a boxed dynamically dispatched function
 /// (e.g, a capturing closure) or a regular function pointer.
 ///
-/// By default, [`Patch::from`] will box functions, so:
-/// ```rust
-/// # use someday::*;
-/// let (_, mut w) = someday::new::<i32>();
-/// w.add(|w, _| {
-/// 	*w = 123;
-/// });
-/// ```
-/// will convert that closure into a `Box<dyn FnMut(&mut T, &T) + 'static + Send>)`
-/// (assuming the compiler doesn't optimize out the allocation and dynamic dispatch).
-///
 /// If you have a non-capturing closure, you can make sure it isn't being boxed like so:
 /// ```rust
 /// # use someday::*;
-/// let (_, mut w) = someday::new::<i32>();
+/// let (_, mut w) = someday::new::<i32>(0);
 /// w.add(Patch::Fn(|w, _| {
 /// 	*w = 123;
 /// }));

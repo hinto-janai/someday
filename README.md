@@ -83,32 +83,29 @@ use someday::{
 	CommitInfo,PushInfo,
 };
 
-// Create a vector.
-let v = vec!["a"];
-
-// Create Reader/Writer for the vector `v`.
-let (r, mut w) = someday::new(v);
+// Create Reader/Writer for the string "hello".
+let (r, mut w) = someday::new("hello".to_string());
 
 // The readers see the data.
-let commit: CommitRef<Vec<&str>> = r.head();
-assert_eq!(commit, vec!["a"]);
+let commit: CommitRef<String> = r.head();
+assert_eq!(commit, "hello");
 assert_eq!(commit.timestamp(), 0);
 
 // Writer writes some data, but does not commit.
-w.add(Patch::Fn(|w, _| w.push("b")));
+w.add(Patch::Fn(|w, _| w.push_str(" world")));
 // Nothing committed, data still the same everywhere.
-let data: &Vec<&str> = w.data();
-assert_eq!(*data, vec!["a"]);
-// Patches not yet commit:
+let data: &String = w.data();
+assert_eq!(*data, "hello");
+// Patches not yet committed:
 assert_eq!(w.staged().len(), 1);
 
 // Readers still see old data.
-assert_eq!(r.head(), vec!["a"]);
+assert_eq!(r.head(), "hello");
 
 // Writer writes some more data.
-w.add(Patch::Fn(|w, _| w.push("c")));
+w.add(Patch::Fn(|w, _| w.push_str("!")));
 // Readers still see old data.
-assert_eq!(r.head(), vec!["a"]);
+assert_eq!(r.head(), "hello");
 
 // Writer commits their patches.
 let commit_info: CommitInfo = w.commit();
@@ -117,7 +114,7 @@ let commit_info: CommitInfo = w.commit();
 assert_eq!(commit_info.patches, 2);
 
 // Readers still see old data.
-assert_eq!(r.head(), vec!["a"]);
+assert_eq!(r.head(), "hello");
 
 // Writer finally reveals those
 // changes by calling `push()`.
@@ -125,8 +122,8 @@ let push_info: PushInfo = w.push();
 assert_eq!(push_info.commits, 1);
 
 // Now readers see updates.
-let commit: CommitRef<Vec<&str>> = r.head();
-assert_eq!(commit, vec!["a", "b", "c"]);
+let commit: CommitRef<String> = r.head();
+assert_eq!(commit, "hello world!");
 // Each call to `.commit()` added 1 to the timestamp.
 assert_eq!(commit.timestamp(), 1);
 ```
