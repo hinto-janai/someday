@@ -127,3 +127,19 @@ assert_eq!(commit, "hello world!");
 // Each call to `.commit()` added 1 to the timestamp.
 assert_eq!(commit.timestamp(), 1);
 ```
+
+## Features
+These features are for (de)serialization.
+
+You can directly (de)serialize your data `T` from a:
+- [`Writer<T>`](https://docs.rs/someday/latest/someday/struct.Writer.html)
+- [`Reader<T>`](https://docs.rs/someday/latest/someday/struct.Reader.html)
+- [`Commit<T>`](https://docs.rs/someday/latest/someday/trait.Commit.html)
+
+In the `Writer/Reader` pair, only the `Writer` can be deserialized as the `Writer` can produce `Reader`'s, but not vice-versa. It does not make much sense to deserialize into a `Reader` that has no relation with any `Writer`.
+
+| Feature   | Purpose |
+|-----------|---------|
+| `serde`   | Enables [`serde`](https://docs.rs/serde)'s `Serialize` & `Deserialize`
+| `bincode` | Enables [`bincode 2.0.0-rc.3`](https://docs.rs/bincode/2.0.0-rc.3/bincode/index.html)'s `Encode` & `Decode`
+| `borsh`   | Enables [`borsh`](https://docs.rs/borsh)'s `BorshSerialize` & `BorshDeserialize`
