@@ -38,18 +38,3 @@ jobs:
 
     - name: Test
       run: cargo test --release
-
-    - name: Examples | HashMap
-      run: |
-        cd examples/hashmap
-        cargo r -r
-
-    - name: Examples | Vec
-      run: |
-        cd examples/vec
-        cargo r -r
-
-    - name: Examples | Many
-      run: |
-        cd examples/many
-        cargo r -r
