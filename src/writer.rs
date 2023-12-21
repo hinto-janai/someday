@@ -490,7 +490,7 @@ where
 	/// }
 	/// ```
 	pub fn push(&mut self) -> PushInfo {
-		self.push_inner::<false, ()>(None, None::<fn(&Self)>).0
+		self.push_inner::<false, ()>(None, None::<fn()>).0
 	}
 
 	#[inline]
@@ -531,16 +531,13 @@ where
 	/// assert_eq!(commit_info.reclaimed, true);
 	/// ```
 	pub fn push_wait(&mut self, duration: Duration) -> PushInfo {
-		self.push_inner::<false, ()>(Some(duration), None::<fn(&Self)>).0
+		self.push_inner::<false, ()>(Some(duration), None::<fn()>).0
 	}
 
 	#[inline]
 	/// This function is the same as [`Writer::push()`]
 	/// but it will execute the function `F` in the meanwhile before
 	/// attempting to reclaim the old [`Reader`] data.
-	///
-	/// This can be any arbitrary code, although the function
-	/// is provided with the same [`Writer`], `&self`.
 	///
 	/// The generic `R` is the return value of the function.
 	/// Leaving it blank and having a non-returning function will
@@ -580,7 +577,7 @@ where
 	///
 	///	// Pass in a closure, so that we can do
 	/// // arbitrary things in the meanwhile...!
-	/// let (push_info, return_value) = w.push_do(|w| {
+	/// let (push_info, return_value) = w.push_do(|| {
 	/// 	// While we're waiting, let's get some work done.
 	/// 	// Add a bunch of data to this HashMap.
 	/// 	(0..1_000).for_each(|i| {
@@ -610,7 +607,7 @@ where
 	/// ```
 	pub fn push_do<F, R>(&mut self, f: F) -> (PushInfo, R)
 	where
-		F: FnOnce(&Self) -> R
+		F: FnOnce() -> R
 	{
 		let (push_info, r) = self.push_inner::<false, R>(None, Some(f));
 
@@ -656,19 +653,19 @@ where
 		// If we're always cloning, there's no
 		// need to block Reader's for reclamation
 		// so don't set `swapping`.
-		self.push_inner::<true, ()>(None, None::<fn(&Self)>).0
+		self.push_inner::<true, ()>(None, None::<fn()>).0
 	}
 
 	// Generic function to handle all the different types of pushes.
 	fn push_inner<const CLONE: bool, R>(
 		&mut self,
 		duration: Option<Duration>,
-		function: Option<impl FnOnce(&Self) -> R>,
+		function: Option<impl FnOnce() -> R>,
 	) -> (PushInfo, Option<R>)
 	{
 		// Early return if no commits.
 		if self.synced() {
-			let return_value = function.map(|f| f(self));
+			let return_value = function.map(|f| f());
 			return (PushInfo {
 				timestamp: self.timestamp(),
 				commits: 0,
@@ -710,7 +707,7 @@ where
 
 		// If the user wants to execute a function
 		// while waiting, do so and get the return value.
-		let return_value = function.map(|f| f(self));
+		let return_value = function.map(|f| f());
 
 		// Try to reclaim data.
 		let (mut local, reclaimed) = match Arc::try_unwrap(old) {
