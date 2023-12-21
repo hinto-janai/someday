@@ -1,6 +1,8 @@
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
-use crate::{Writer,Reader,Timestamp,Patch};
+use crate::{Reader,Timestamp};
+#[allow(unused_imports)] // docs
+use crate::{Writer,Patch};
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -89,7 +91,7 @@ impl<T: PartialEq<[u8]>> PartialEq<[u8]> for CommitOwned<T> {
 
 impl<T: PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		self.data.partial_cmp(&other)
+		self.data.partial_cmp(other)
 	}
 }
 
@@ -239,7 +241,7 @@ impl<T: PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
 
 impl<T: PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		self.inner.data.partial_cmp(&other)
+		self.inner.data.partial_cmp(other)
 	}
 }
 

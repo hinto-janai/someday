@@ -6,11 +6,11 @@
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
-	commit::{Commit, CommitOwned},
-	writer::Writer,
-	reader::Reader,
+	commit::{CommitOwned},
 	patch::Patch,
 };
+#[allow(unused_imports)] // docs
+use crate::{Commit,Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Info
 /// Metadata about a [`Writer::commit()`]

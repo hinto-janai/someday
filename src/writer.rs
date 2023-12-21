@@ -8,10 +8,7 @@ use std::{
 	},
 	time::Duration,
 	borrow::Borrow,
-	collections::btree_map::{
-		BTreeMap,Entry,
-	},
-	marker::PhantomData,
+	collections::BTreeMap,
 };
 
 use crate::{
@@ -299,7 +296,7 @@ where
 	/// assert_eq!(*commit.data(), 501);
 	/// ```
 	pub fn head_remote(&self) -> &CommitOwned<T> {
-		&*self.remote
+		&self.remote
 	}
 
 	#[inline]
@@ -671,7 +668,7 @@ where
 	{
 		// Early return if no commits.
 		if self.synced() {
-			let return_value = function.map(|f| f(&self));
+			let return_value = function.map(|f| f(self));
 			return (PushInfo {
 				timestamp: self.timestamp(),
 				commits: 0,
@@ -713,7 +710,7 @@ where
 
 		// If the user wants to execute a function
 		// while waiting, do so and get the return value.
-		let return_value = function.map(|f| f(&self));
+		let return_value = function.map(|f| f(self));
 
 		// Try to reclaim data.
 		let (mut local, reclaimed) = match Arc::try_unwrap(old) {
@@ -746,7 +743,7 @@ where
 		// INVARIANT:
 		// `self.swapping` must be `false` before we
 		// return or else we will lock `Reader`'s
-		debug_assert_eq!(self.swapping.load(Ordering::SeqCst), false);
+		debug_assert!(!self.swapping.load(Ordering::SeqCst));
 
 		if reclaimed {
 			// Re-apply patches to this old data.
@@ -1693,7 +1690,7 @@ where
 		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 		let swapping = Arc::new(AtomicBool::new(false));
 
-		let writer = Writer {
+		Writer {
 			local: Some(local),
 			remote,
 			arc,
@@ -1701,9 +1698,7 @@ where
 			patches_old: Vec::with_capacity(INIT_VEC_LEN),
 			swapping,
 			tags: BTreeMap::new(),
-		};
-
-		writer
+		}
 	}
 }
 

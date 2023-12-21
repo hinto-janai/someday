@@ -8,10 +8,11 @@ use std::{sync::{
 }, time::Duration};
 use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
-	patch::Patch,
 	Timestamp,
 	Writer,
 };
+#[allow(unused_imports)] // docs
+use crate::Patch;
 
 //---------------------------------------------------------------------------------------------------- Reader
 /// Reader(s) who can atomically read some data `T`
