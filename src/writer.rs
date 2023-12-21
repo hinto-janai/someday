@@ -1785,8 +1785,6 @@ where
 {
 	/// This will call `data()`, then serialize your `T`.
 	///
-	/// `T::encode(self.data(), encoder)`
-	///
 	/// ```rust
 	/// # use someday::*;
 	///
@@ -1808,8 +1806,6 @@ where
 {
 	/// This will deserialize your data `T` directly into a `Writer`.
 	///
-	/// `T::decode(decoder).map(|t| crate::new(t).1)`
-	///
 	/// ```rust
 	/// # use someday::*;
 	///
@@ -1824,5 +1820,49 @@ where
 	/// ```
 	fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
 		T::decode(decoder).map(|t| crate::new(t).1)
+	}
+}
+
+#[cfg(feature = "borsh")]
+impl<T> borsh::BorshSerialize for Writer<T>
+where
+	T: Clone + borsh::BorshSerialize
+{
+	/// This will call `data()`, then serialize your `T`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	///
+	/// let bytes = borsh::to_vec(&w).unwrap();
+	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
+	/// ```
+	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+		T::serialize(self.data(), writer)
+	}
+}
+
+
+#[cfg(feature = "borsh")]
+impl<T> borsh::BorshDeserialize for Writer<T>
+where
+	T: Clone + borsh::BorshDeserialize
+{
+	/// This will deserialize your data `T` directly into a `Writer`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (_, w) = someday::new(String::from("hello"));
+	///
+	/// let bytes = borsh::to_vec(&w).unwrap();
+	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
+	///
+	/// let writer: Writer<String> = borsh::from_slice(&bytes).unwrap();
+	/// assert_eq!(writer.data(), "hello");
+	/// ```
+	fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
+		T::deserialize_reader(reader).map(|t| crate::new(t).1)
 	}
 }

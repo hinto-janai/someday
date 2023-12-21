@@ -9,6 +9,7 @@ use crate::{Writer,Patch};
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[derive(Copy,Clone,Debug,Hash,PartialEq,PartialOrd)]
 /// Owned snapshot of some data `T` and its [`Timestamp`]
 ///
@@ -32,7 +33,10 @@ use crate::{Writer,Patch};
 /// // The String's destructor will run here.
 /// drop(owned);
 /// ```
-pub struct CommitOwned<T> {
+pub struct CommitOwned<T>
+where
+	T: Clone
+{
 	/// Timestamp of this [`Commit`].
 	///
 	/// Starts at 0, and increments by 1 every time a `commit`-like
@@ -44,7 +48,7 @@ pub struct CommitOwned<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- CommitOwned Trait
-impl<T> TryFrom<CommitRef<T>> for CommitOwned<T> {
+impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	type Error = CommitRef<T>;
 
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
@@ -54,44 +58,44 @@ impl<T> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	}
 }
 
-impl<T> std::ops::Deref for CommitOwned<T> {
+impl<T: Clone> std::ops::Deref for CommitOwned<T> {
 	type Target = T;
 	fn deref(&self) -> &Self::Target {
 		&self.data
 	}
 }
 
-impl<T> AsRef<T> for CommitOwned<T> {
+impl<T: Clone> AsRef<T> for CommitOwned<T> {
 	fn as_ref(&self) -> &T {
 		&self.data
 	}
 }
 
-impl<T> std::borrow::Borrow<T> for CommitOwned<T> {
+impl<T: Clone> std::borrow::Borrow<T> for CommitOwned<T> {
 	fn borrow(&self) -> &T {
 		&self.data
 	}
 }
 
-impl<T: PartialEq<T>> PartialEq<T> for CommitOwned<T> {
+impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitOwned<T> {
 	fn eq(&self, other: &T) -> bool {
 		self.data == *other
 	}
 }
 
-impl<T: PartialEq<str>> PartialEq<str> for CommitOwned<T> {
+impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitOwned<T> {
 	fn eq(&self, other: &str) -> bool {
 		self.data == *other
 	}
 }
 
-impl<T: PartialEq<[u8]>> PartialEq<[u8]> for CommitOwned<T> {
+impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitOwned<T> {
 	fn eq(&self, other: &[u8]) -> bool {
 		self.data == *other
 	}
 }
 
-impl<T: PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
+impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
 		self.data.partial_cmp(other)
 	}
@@ -139,7 +143,7 @@ impl_traits! { [u8] =>
 	std::rc::Rc<[u8]>,
 }
 
-impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
+impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Display::fmt(&self.data, f)
 	}
@@ -148,6 +152,7 @@ impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 //---------------------------------------------------------------------------------------------------- CommitRef
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[derive(Clone,Debug,Hash,PartialEq,PartialOrd)]
 /// Cheaply cloneable snapshot of some data `T` and its [`Timestamp`]
 ///
@@ -173,11 +178,17 @@ impl<T: std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 /// let string = commit.to_string();
 /// assert_eq!(string, "hello");
 /// ```
-pub struct CommitRef<T> {
+pub struct CommitRef<T>
+where
+	T: Clone
+{
 	pub(super) inner: Arc<CommitOwned<T>>,
 }
 
-impl<T> CommitRef<T> {
+impl<T> CommitRef<T>
+where
+	T: Clone
+{
 	#[inline]
 	/// How many other shared instances of this [`CommitRef`] exist?
 	///
@@ -204,44 +215,44 @@ impl<T> CommitRef<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
-impl<T> std::ops::Deref for CommitRef<T> {
+impl<T: Clone> std::ops::Deref for CommitRef<T> {
 	type Target = T;
 	fn deref(&self) -> &Self::Target {
 		&self.inner.data
 	}
 }
 
-impl<T> AsRef<T> for CommitRef<T> {
+impl<T: Clone> AsRef<T> for CommitRef<T> {
 	fn as_ref(&self) -> &T {
 		&self.inner.data
 	}
 }
 
-impl<T> std::borrow::Borrow<T> for CommitRef<T> {
+impl<T: Clone> std::borrow::Borrow<T> for CommitRef<T> {
 	fn borrow(&self) -> &T {
 		&self.inner.data
 	}
 }
 
-impl<T: PartialEq<T>> PartialEq<T> for CommitRef<T> {
+impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitRef<T> {
 	fn eq(&self, other: &T) -> bool {
 		self.inner.data == *other
 	}
 }
 
-impl<T: PartialEq<str>> PartialEq<str> for CommitRef<T> {
+impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitRef<T> {
 	fn eq(&self, other: &str) -> bool {
 		self.inner.data == *other
 	}
 }
 
-impl<T: PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
+impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
 	fn eq(&self, other: &[u8]) -> bool {
 		self.inner.data == *other
 	}
 }
 
-impl<T: PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
+impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
 		self.inner.data.partial_cmp(other)
 	}
@@ -289,7 +300,7 @@ impl_traits! { [u8] =>
 	std::rc::Rc<[u8]>,
 }
 
-impl<T: std::fmt::Display> std::fmt::Display for CommitRef<T> {
+impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitRef<T> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Display::fmt(&self.inner.data, f)
 	}
@@ -311,7 +322,11 @@ impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 /// [`CommitRef`] & [`CommitOwned`] both implement this.
 ///
 /// This trait is sealed and cannot be implemented for types outside of `someday`.
-pub trait Commit<T>: private::Sealed {
+pub trait Commit<T>
+where
+	Self: private::Sealed,
+	T: Clone,
+{
 	/// The timestamp of this [`CommitRef`].
 	///
 	/// Starts at 0, and increments by 1 every time [`Writer::commit()`] is called.
@@ -405,8 +420,8 @@ impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for CommitOwned<T> {
 
 mod private {
 	pub trait Sealed {}
-	impl<T> Sealed for crate::CommitOwned<T> {}
-	impl<T> Sealed for crate::CommitRef<T> {}
+	impl<T: Clone> Sealed for crate::CommitOwned<T> {}
+	impl<T: Clone> Sealed for crate::CommitRef<T> {}
 }
 
 impl<T> Commit<T> for CommitRef<T>

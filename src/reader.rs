@@ -440,3 +440,23 @@ where
 		T::encode(self.head().as_ref(), encoder)
 	}
 }
+
+#[cfg(feature = "borsh")]
+impl<T> borsh::BorshSerialize for Reader<T>
+where
+	T: Clone + borsh::BorshSerialize
+{
+	/// This will call `head()`, then serialize your `T`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	///
+	/// let (r, _) = someday::new(String::from("hello"));
+	///
+	/// let bytes = borsh::to_vec(&r).unwrap();
+	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
+	/// ```
+	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+		T::serialize(self.head().as_ref(), writer)
+	}
+}

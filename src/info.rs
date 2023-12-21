@@ -6,13 +6,16 @@
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
-	commit::{CommitOwned},
+	commit::CommitOwned,
 	patch::Patch,
 };
 #[allow(unused_imports)] // docs
 use crate::{Commit,Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Info
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 /// Metadata about a [`Writer::commit()`]
 ///
 /// This is a container for holding the metadata
@@ -27,6 +30,9 @@ pub struct CommitInfo {
 	pub timestamp_diff: usize,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 /// Metadata about a [`Writer::push()`]
 ///
 /// This is a container for holding the metadata
@@ -52,13 +58,19 @@ pub struct PushInfo {
 	pub reclaimed: bool,
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 /// Metadata about a [`Writer::pull()`]
 ///
 /// This is a container for holding the metadata
 /// [`Writer`] pull operations produce.
 ///
 /// It is returned from pull-like functions.
-pub struct PullInfo<T> {
+pub struct PullInfo<T>
+where
+	T: Clone
+{
 	/// How many [`Commit`]'s did the [`Writer`] go backwards?
 	///
 	/// For example, if the [`Writer`]'s [`Timestamp`] is `5`
@@ -79,7 +91,10 @@ pub struct PullInfo<T> {
 ///
 /// If you only need 1 or a few of these fields, consider
 /// using their individual methods instead.
-pub struct StatusInfo<'a, T> {
+pub struct StatusInfo<'a, T>
+where
+	T: Clone
+{
 	/// [`Writer::staged`]
 	pub staged_patches: &'a Vec<Patch<T>>,
 	/// [`Writer::committed_patches`]
