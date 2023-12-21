@@ -1,3 +1,5 @@
+//! Snapshots of data with timestamps
+
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
 use crate::{Reader,Timestamp};

@@ -41,13 +41,14 @@
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
+pub mod commit;
+pub use commit::*;
+
 pub mod info;
+pub use info::*;
 
 mod reader;
 pub use reader::Reader;
-
-mod commit;
-pub use commit::{Commit, CommitRef, CommitOwned};
 
 mod patch;
 pub use patch::Patch;
