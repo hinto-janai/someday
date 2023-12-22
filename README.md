@@ -143,3 +143,6 @@ In the `Writer/Reader` pair, only the `Writer` can be deserialized as the `Write
 | `serde`      | Enables [`serde`](https://docs.rs/serde)'s `Serialize` & `Deserialize`
 | `bincode`    | Enables [`bincode 2.0.0-rc.3`](https://docs.rs/bincode/2.0.0-rc.3/bincode/index.html)'s `Encode` & `Decode`
 | `borsh`      | Enables [`borsh`](https://docs.rs/borsh)'s `BorshSerialize` & `BorshDeserialize`
+
+## MSRV
+The Minimum Supported Rust Version is `1.70.0`.

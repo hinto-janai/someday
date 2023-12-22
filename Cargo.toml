@@ -13,6 +13,7 @@ license = "MIT"
 ignore = [
 	"examples"
 ]
+rust-version =  "1.70.0"
 
 [package.metadata.docs.rs]
 all-features = true
