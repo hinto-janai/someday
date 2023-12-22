@@ -52,6 +52,7 @@ where
 impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	type Error = CommitRef<T>;
 
+	#[inline]
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
 	/// if you are the only one holding onto it.
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
@@ -61,42 +62,49 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 
 impl<T: Clone> std::ops::Deref for CommitOwned<T> {
 	type Target = T;
+	#[inline]
 	fn deref(&self) -> &Self::Target {
 		&self.data
 	}
 }
 
 impl<T: Clone> AsRef<T> for CommitOwned<T> {
+	#[inline]
 	fn as_ref(&self) -> &T {
 		&self.data
 	}
 }
 
 impl<T: Clone> std::borrow::Borrow<T> for CommitOwned<T> {
+	#[inline]
 	fn borrow(&self) -> &T {
 		&self.data
 	}
 }
 
 impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &T) -> bool {
 		self.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &str) -> bool {
 		self.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &[u8]) -> bool {
 		self.data == *other
 	}
 }
 
 impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
+	#[inline]
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
 		self.data.partial_cmp(other)
 	}
@@ -107,12 +115,15 @@ macro_rules! impl_traits {
 	($target:ty => $($from:ty),* $(,)?) => {
 		$(
 			impl PartialEq<&$target> for CommitOwned<$from> {
+				#[inline]
 				fn eq(&self, other: &&$target) -> bool {
 					let s: &$target = &self.data;
 					s == *other
 				}
 			}
+
 			impl PartialOrd<&$target> for CommitOwned<$from> {
+				#[inline]
 				fn partial_cmp(&self, other: &&$target) -> Option<std::cmp::Ordering> {
 					let s: &$target = &self.data;
 					s.partial_cmp(*other)
@@ -120,12 +131,14 @@ macro_rules! impl_traits {
 			}
 
 			impl AsRef<$target> for CommitOwned<$from> {
+				#[inline]
 				fn as_ref(&self) -> &$target {
 					self.data.as_ref()
 				}
 			}
 
 			impl std::borrow::Borrow<$target> for CommitOwned<$from> {
+				#[inline]
 				fn borrow(&self) -> &$target {
 					self.data.as_ref()
 				}
@@ -223,42 +236,49 @@ where
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> std::ops::Deref for CommitRef<T> {
 	type Target = T;
+	#[inline]
 	fn deref(&self) -> &Self::Target {
 		&self.inner.data
 	}
 }
 
 impl<T: Clone> AsRef<T> for CommitRef<T> {
+	#[inline]
 	fn as_ref(&self) -> &T {
 		&self.inner.data
 	}
 }
 
 impl<T: Clone> std::borrow::Borrow<T> for CommitRef<T> {
+	#[inline]
 	fn borrow(&self) -> &T {
 		&self.inner.data
 	}
 }
 
 impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitRef<T> {
+	#[inline]
 	fn eq(&self, other: &T) -> bool {
 		self.inner.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitRef<T> {
+	#[inline]
 	fn eq(&self, other: &str) -> bool {
 		self.inner.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
+	#[inline]
 	fn eq(&self, other: &[u8]) -> bool {
 		self.inner.data == *other
 	}
 }
 
 impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
+	#[inline]
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
 		self.inner.data.partial_cmp(other)
 	}
@@ -269,12 +289,14 @@ macro_rules! impl_traits {
 	($target:ty => $($from:ty),* $(,)?) => {
 		$(
 			impl PartialEq<&$target> for CommitRef<$from> {
+				#[inline]
 				fn eq(&self, other: &&$target) -> bool {
 					let s: &$target = &self.inner.data;
 					s == *other
 				}
 			}
 			impl PartialOrd<&$target> for CommitRef<$from> {
+				#[inline]
 				fn partial_cmp(&self, other: &&$target) -> Option<std::cmp::Ordering> {
 					let s: &$target = &self.inner.data;
 					s.partial_cmp(*other)
@@ -282,12 +304,14 @@ macro_rules! impl_traits {
 			}
 
 			impl AsRef<$target> for CommitRef<$from> {
+				#[inline]
 				fn as_ref(&self) -> &$target {
 					self.inner.data.as_ref()
 				}
 			}
 
 			impl std::borrow::Borrow<$target> for CommitRef<$from> {
+				#[inline]
 				fn borrow(&self) -> &$target {
 					self.inner.data.as_ref()
 				}
@@ -314,6 +338,7 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitRef<T> {
 }
 
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
+	#[inline]
 	fn from(reader: &Reader<T>) -> Self {
 		reader.head()
 	}
@@ -409,18 +434,21 @@ where
 }
 
 impl<T: Clone + PartialEq> PartialEq<CommitRef<T>> for &CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &CommitRef<T>) -> bool {
 		**self == **other.inner
 	}
 }
 
 impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for &CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &&CommitRef<T>) -> bool {
 		**self == **other.inner
 	}
 }
 
 impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for CommitOwned<T> {
+	#[inline]
 	fn eq(&self, other: &&CommitRef<T>) -> bool {
 		**self == **other.inner
 	}
@@ -467,6 +495,7 @@ where
 			data: self.inner.data.clone(),
 		}
 	}
+
 	#[inline]
 	fn into_commit_owned(self) -> CommitOwned<T> where T: Clone {
 		match Arc::try_unwrap(self.inner) {

@@ -68,6 +68,7 @@
 	clippy::blanket_clippy_restriction_lints,
 	clippy::exhaustive_structs,
 	clippy::exhaustive_enums,
+	clippy::panic,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod

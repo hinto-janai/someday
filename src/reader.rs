@@ -207,9 +207,7 @@ where
 		// (writer will clone all the
 		// time because there are always
 		// strong arc references).
-		CommitRef {
-			inner: arc_swap::Guard::into_inner(self.arc.load()),
-		}
+		CommitRef { inner: arc_swap::Guard::into_inner(self.arc.load()) }
 	}
 
 	#[inline]
@@ -347,6 +345,7 @@ where
 		}
 	}
 
+	#[inline]
 	/// If the [`Reader`]'s current [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -354,6 +353,7 @@ where
 		self.head().ahead(commit)
 	}
 
+	#[inline]
 	/// If the [`Reader`]'s current [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
@@ -361,6 +361,7 @@ where
 		self.head().behind(commit)
 	}
 
+	#[inline]
 	#[must_use]
 	/// Get the current [`Timestamp`] of the [`Reader`]'s head [`Commit`]
 	///
@@ -372,6 +373,7 @@ where
 		self.head().timestamp()
 	}
 
+	#[inline]
 	#[must_use]
 	/// Acquire a [`CommitOwned`] that owns the underlying data
 	///
@@ -380,6 +382,7 @@ where
 		self.head().into_commit_owned()
 	}
 
+	#[inline]
 	#[must_use]
 	/// How many [`Reader`]'s are there?
 	///
@@ -404,6 +407,7 @@ where
 
 //---------------------------------------------------------------------------------------------------- Trait Impl
 impl<T: Clone> From<&Writer<T>> for Reader<T> {
+	#[inline]
 	fn from(value: &Writer<T>) -> Self {
 		value.reader()
 	}
@@ -414,6 +418,7 @@ impl<T> serde::Serialize for Reader<T>
 where
 	T: Clone + serde::Serialize
 {
+	#[inline]
 	/// This will call `head()`, then serialize your `T`.
 	///
 	/// `T::serialize(self.head().as_ref(), serializer)`.
@@ -439,6 +444,7 @@ impl<T> bincode::Encode for Reader<T>
 where
 	T: Clone + bincode::Encode
 {
+	#[inline]
 	/// This will call `head()`, then serialize your `T`.
 	///
 	/// `T::encode(self.head().as_ref(), encoder)`
@@ -462,6 +468,7 @@ impl<T> borsh::BorshSerialize for Reader<T>
 where
 	T: Clone + borsh::BorshSerialize
 {
+	#[inline]
 	/// This will call `head()`, then serialize your `T`.
 	///
 	/// ```rust

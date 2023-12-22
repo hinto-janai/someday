@@ -214,8 +214,7 @@ where
 	/// assert_eq!(r.head(), 0);
 	/// ```
 	pub fn data(&self) -> &T {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap()
+		self.local_as_ref()
 	}
 
 	#[inline]
@@ -268,9 +267,8 @@ where
 	/// assert_eq!(commit.timestamp, 1);
 	/// assert_eq!(commit.data, 501);
 	/// ```
-	pub fn head(&self) -> &CommitOwned<T> {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap()
+	pub const fn head(&self) -> &CommitOwned<T> {
+		self.local_as_ref()
 	}
 
 	#[inline]
@@ -426,8 +424,7 @@ where
 			};
 		}
 
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_mut().unwrap().timestamp += 1;
+		self.local_as_mut().timestamp += 1;
 
 		// Pre-allocate some space for the new patches.
 		self.patches_old.reserve_exact(patch_len);
@@ -435,7 +432,10 @@ where
 		// Apply the patches and add to the old vector.
 		for mut patch in self.patches.drain(..) {
 			patch.apply(
-				// INVARIANT: `local` must be initialized after push()
+				// We can't use `self.local_as_mut()` here
+				// We can't have `&mut self` and `&self`.
+				//
+				// INVARIANT: local must be initialized after push()
 				&mut self.local.as_mut().unwrap().data,
 				&self.remote.data,
 			);
@@ -1145,8 +1145,7 @@ where
 	where T:
 		PartialEq<T>
 	{
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().diff(&*self.remote)
+		self.local_as_ref().diff(&*self.remote)
 	}
 
 	#[inline]
@@ -1182,8 +1181,7 @@ where
 	/// assert!(w.ahead());
 	/// ```
 	pub fn ahead(&self) -> bool {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().ahead(&*self.remote)
+		self.local_as_ref().ahead(&*self.remote)
 	}
 
 	#[inline]
@@ -1214,8 +1212,7 @@ where
 	/// assert!(w.ahead_of(&fake_commit));
 	/// ```
 	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().ahead(commit)
+		self.local_as_ref().ahead(commit)
 	}
 
 	#[inline]
@@ -1241,8 +1238,7 @@ where
 	/// assert!(w.behind(&fake_commit));
 	/// ```
 	pub fn behind(&self, commit: &impl Commit<T>) -> bool {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().behind(commit)
+		self.local_as_ref().behind(commit)
 	}
 
 	#[inline]
@@ -1271,9 +1267,8 @@ where
 	/// // are still at timestamp 0.
 	/// assert_eq!(r.timestamp(), 0);
 	/// ```
-	pub fn timestamp(&self) -> Timestamp {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().timestamp
+	pub const fn timestamp(&self) -> Timestamp {
+		self.local_as_ref().timestamp
 	}
 
 	#[inline]
@@ -1346,8 +1341,7 @@ where
 	/// assert_eq!(w.timestamp_diff(), 5);
 	/// ```
 	pub fn timestamp_diff(&self) -> usize {
-		// INVARIANT: `local` must be initialized after push()
-		self.local.as_ref().unwrap().timestamp - self.remote.timestamp
+		self.local_as_ref().timestamp - self.remote.timestamp
 	}
 
 	#[inline]
@@ -1651,6 +1645,7 @@ where
 	#[allow(clippy::type_complexity)]
 	pub fn into_inner(self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch<T>>, Vec<Patch<T>>) {
 		(
+			// INVARIANT: local must be initialized after push()
 			self.local.unwrap(),
 			CommitRef { inner: self.remote },
 			self.patches,
@@ -1664,6 +1659,42 @@ impl<T> Writer<T>
 where
 	T: Clone
 {
+	#[allow(clippy::option_if_let_else,clippy::inline_always)]
+	#[inline(always)]
+	/// Borrow `self.local`.
+	const fn local_as_ref(&self) -> &CommitOwned<T> {
+		// INVARIANT: `local` must be initialized after push()
+		match self.local.as_ref() {
+			Some(local) => local,
+			_ => panic!("writer.local was not initialized after push()"),
+		}
+	}
+
+	#[allow(clippy::option_if_let_else,clippy::inline_always)]
+	#[inline(always)]
+	/// Borrow `self.local`.
+	fn local_as_mut(&mut self) -> &mut CommitOwned<T> {
+		// INVARIANT: `local` must be initialized after push()
+		match self.local.as_mut() {
+			Some(local) => local,
+			_ => panic!("writer.local was not initialized after push()"),
+		}
+	}
+
+	#[allow(clippy::option_if_let_else,clippy::inline_always)]
+	#[inline(always)]
+	/// Same as `local_as_mut()`, but field specific so we
+	/// can around taking `&mut self` when we need
+	/// `&` to `self` as well.
+	///
+	/// INVARIANT: This function is ONLY for this `self.local` purpose.
+	fn local_field(local: &mut Option<CommitOwned<T>>) -> &mut CommitOwned<T> {
+		// INVARIANT: `local` must be initialized after push()
+		match local {
+			Some(local) => local,
+			_ => panic!("writer.local was not initialized after push()"),
+		}
+	}
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
@@ -1721,24 +1752,21 @@ impl<T: Clone> std::ops::Deref for Writer<T> {
 
 	#[inline]
 	fn deref(&self) -> &Self::Target {
-		// INVARIANT: `local` must be initialized after push()
-		&self.local.as_ref().unwrap().data
+		&self.local_as_ref().data
 	}
 }
 
 impl<T: Clone> Borrow<T> for Writer<T> {
 	#[inline]
 	fn borrow(&self) -> &T {
-		// INVARIANT: `local` must be initialized after push()
-		&self.local.as_ref().unwrap().data
+		&self.local_as_ref().data
 	}
 }
 
 impl<T: Clone> AsRef<T> for Writer<T> {
 	#[inline]
 	fn as_ref(&self) -> &T {
-		// INVARIANT: `local` must be initialized after push()
-		&self.local.as_ref().unwrap().data
+		&self.local_as_ref().data
 	}
 }
 
@@ -1747,6 +1775,7 @@ impl<T> serde::Serialize for Writer<T>
 where
 	T: Clone + serde::Serialize
 {
+	#[inline]
 	/// This will call `data()`, then serialize your `T`.
 	///
 	/// `T::serialize(self.data(), serializer)`
@@ -1772,6 +1801,7 @@ impl<'de, T> serde::Deserialize<'de> for Writer<T>
 where
 	T: Clone + serde::Deserialize<'de>
 {
+	#[inline]
 	/// This will deserialize your data `T` directly into a `Writer`.
 	///
 	/// `T::deserialize(deserializer).map(|t| crate::new(t).1)`.
@@ -1800,6 +1830,7 @@ impl<T> bincode::Encode for Writer<T>
 where
 	T: Clone + bincode::Encode
 {
+	#[inline]
 	/// This will call `data()`, then serialize your `T`.
 	///
 	/// ```rust
@@ -1821,6 +1852,7 @@ impl<T> bincode::Decode for Writer<T>
 where
 	T: Clone + bincode::Decode
 {
+	#[inline]
 	/// This will deserialize your data `T` directly into a `Writer`.
 	///
 	/// ```rust
