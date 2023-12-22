@@ -13,7 +13,6 @@ use crate::{
 use crate::{Commit,Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Info
-#[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
@@ -32,7 +31,6 @@ pub struct CommitInfo {
 	pub timestamp_diff: usize,
 }
 
-#[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
@@ -62,7 +60,6 @@ pub struct PushInfo {
 	pub reclaimed: bool,
 }
 
-#[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
@@ -88,7 +85,6 @@ where
 	pub old_writer_data: CommitOwned<T>,
 }
 
-#[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 /// A variety of status info about the [`Writer`] and [`Reader`]
 ///

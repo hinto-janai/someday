@@ -66,14 +66,16 @@
 	clippy::pub_use,
 	clippy::pub_with_shorthand,
 	clippy::blanket_clippy_restriction_lints,
+	clippy::exhaustive_structs,
+	clippy::exhaustive_enums,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
-mod commit;
-pub use commit::{Commit,CommitOwned,CommitRef};
+pub mod commit;
+pub use commit::*;
 
-mod info;
-pub use info::{PullInfo,PushInfo,CommitInfo,StatusInfo};
+pub mod info;
+pub use info::*;
 
 mod reader;
 pub use reader::Reader;

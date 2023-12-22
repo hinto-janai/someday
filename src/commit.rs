@@ -7,7 +7,6 @@ use crate::{Reader,Timestamp};
 use crate::{Writer,Patch};
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
-#[non_exhaustive]
 #[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]

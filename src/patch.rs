@@ -5,7 +5,6 @@
 use crate::{Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Patch
-#[non_exhaustive]
 /// The patches (functions) that will be applied to your data `T`
 ///
 /// These are the patches that you use with
