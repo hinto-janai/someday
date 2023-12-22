@@ -1730,20 +1730,7 @@ where
 	/// assert_eq!(*w2.data(), 0);
 	/// ```
 	fn default() -> Self {
-		let local: CommitOwned<T>  = CommitOwned { timestamp: 0, data: Default::default() };
-		let remote = Arc::new(local.clone());
-		let arc    = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
-		let swapping = Arc::new(AtomicBool::new(false));
-
-		Self {
-			local: Some(local),
-			remote,
-			arc,
-			patches: Vec::with_capacity(INIT_VEC_LEN),
-			patches_old: Vec::with_capacity(INIT_VEC_LEN),
-			swapping,
-			tags: BTreeMap::new(),
-		}
+		crate::default().1
 	}
 }
 

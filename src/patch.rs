@@ -25,6 +25,38 @@ use crate::{Writer,Reader};
 ///     *w = 123;
 /// }));
 /// ```
+///
+/// ## ⚠️ Non-deterministic `Patch`
+/// The [`Patch`]'s you use with [`Writer::add`] **must be deterministic**.
+///
+/// The `Writer` may apply your `Patch` twice, so any state that gets
+/// modified or functions used in the `Patch` must result in the
+/// same values as the first time the `Patch` was called.
+///
+/// Here is a **non-deterministic** example:
+/// ```rust
+/// # use someday::*;
+/// # use std::sync::*;
+/// static STATE: Mutex<usize> = Mutex::new(1);
+///
+/// let (_, mut w) = someday::new::<usize>(0);
+///
+/// w.add(Patch::boxed(move |w, _| {
+///     let mut state = STATE.lock().unwrap();
+///     *state *= 10; // 1*10 the first time, 10*10 the second time...
+///     *w = *state;
+/// }));
+/// w.commit();
+/// w.push();
+///
+/// // ⚠️⚠️⚠️ !!!
+/// // The `Writer` reclaimed the old `Reader` data
+/// // and applied our `Patch` again, except, the output
+/// // was non-deterministic, so now the `Writer`
+/// // and `Reader` have non-matching data...
+/// assert_eq!(*w.data(), 100);
+/// assert_eq!(*w.reader().head(), 10);
+/// ```
 pub enum Patch<T> {
 	#[allow(clippy::type_complexity)]
 	/// A heap allocated, dynamically dispatched function
@@ -69,3 +101,9 @@ impl<T> Patch<T> {
 }
 
 //---------------------------------------------------------------------------------------------------- Trait Impl
+impl<T> From<fn(&mut T, &T)> for Patch<T> {
+	#[inline]
+	fn from(value: fn(&mut T, &T)) -> Self {
+		Self::Fn(value)
+	}
+}
