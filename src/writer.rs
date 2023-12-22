@@ -864,6 +864,115 @@ where
 
 	#[inline]
 	#[allow(clippy::missing_panics_doc)]
+	/// [`add()`](Writer::add), [`commit()`](Writer::commit), and [`push()`](Writer::push)
+	///
+	/// This function combines `add()`, `commit()`, `push()` together.
+	/// Since these actions are done together, return values are allowed
+	/// to be specified where they wouldn't otherwise be.
+	///
+	/// The input `Patch` no longer has to be `Send + 'static` either.
+	///
+	/// This allows you to specify any arbitrary return value from
+	/// your `Patch`'s, even return values from your `T` itself.
+	///
+	/// For example, if you'd like to receive a large chunk of data
+	/// from your `T` instead of throwing it away:
+	/// ```rust
+	/// # use someday::*;
+	/// // Very expensive data.
+	/// let vec = (0..100_000).map(|i| format!("{i}")).collect();
+	///
+	/// let (_, mut w) = someday::new::<Vec<String>>(vec);
+	/// assert_eq!(w.timestamp(), 0);
+	/// assert_eq!(w.timestamp_remote(), 0);
+	///
+	/// let (info, r1, r2) = w.add_commit_push(|w, _| {
+	///     // Swap our value, and get back the strings.
+	///     // This implicitly becomes our <Return> (Vec<String>).
+	///     std::mem::take(w)
+	/// });
+	///
+	/// // We got our 100,000 `String`'s back
+	/// // instead of dropping them!
+	/// let r1: Vec<String> = r1;
+	/// // If `Writer` reclaimed data and applied our
+	/// // `Patch` to it, it also got returned!
+	/// let r2: Option<Vec<String>> = r2;
+	/// // And, some push info.
+	/// let info: PushInfo = info;
+	///
+	/// // We got back our original strings.
+	/// for (i, string) in r1.into_iter().enumerate() {
+	///     assert_eq!(format!("{i}"), string);
+	/// }
+	///
+	/// // If the `Writer` reclaimed data,
+	/// // then `r2` will _always_ be a `Some`.
+	/// if info.reclaimed {
+	///     // This also contains 100,000 strings.
+	///     assert!(r2.is_some());
+	/// }
+	///
+	/// // And the `Patch` got applied to the `Writer`'s data.
+	/// assert!(w.data().is_empty());
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(w.timestamp_remote(), 1);
+	/// ```
+	///
+	/// # Generics
+	/// The generic inputs are:
+	/// - `Patch`
+	/// - `Return`
+	///
+	/// `Patch` is the same as [`Writer::add()`] however, it has a
+	/// `-> Return` value associated with it, this is defined by
+	/// you, using the `Return` generic.
+	///
+	/// # Returned Tuple
+	/// The returned tuple is contains the regular [`PushInfo`]
+	/// along with a `Return` and `Option<Return>`.
+	///
+	/// The `Return` is the data returned by operating on the `Writer`'s side
+	/// of the data.
+	///
+	/// The `Option<Return>` is `Some` if the `Writer` reclaimed the `Reader`'s
+	/// side of the data, and re-applied your `Patch` - it returns it instead
+	/// of dropping it. This means that if `PushInfo`'s `reclaimed` is
+	/// `true`, this `Option<Return>` will _always_ be `Some`.
+	///
+	/// # Timestamp
+	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	pub fn add_commit_push<Patch, Return>(&mut self, mut patch: Patch) -> (PushInfo, Return, Option<Return>)
+	where
+		// We're never storing this `Patch` so it
+		// doesn't have to be `Send + 'static`.
+		Patch: FnMut(&mut T, &T) -> Return
+	{
+		// Commit `Patch` to our local data.
+		self.local_as_mut().timestamp += 1;
+		let return_1 = patch(
+			&mut self.local.as_mut().unwrap().data,
+			&self.remote.data,
+		);
+
+		// Push all commits so far.
+		let push_info = self.push();
+
+		// If the `Writer` reclaimed data, we must re-apply
+		// since we did not push the Patch onto the `patches_old` Vec
+		// (since we want the return value).
+		let return_2 = push_info.reclaimed.then(|| {
+			patch(
+				&mut self.local.as_mut().unwrap().data,
+				&self.remote.data,
+			)
+		});
+
+		(push_info, return_1, return_2)
+	}
+
+	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// Conditionally overwrite the [`Writer`]'s local [`Commit`] with the current [`Reader`] `Commit`
 	///
 	/// If the `Writer` and `Reader` are [`Writer::synced()`], this will return `None`.
