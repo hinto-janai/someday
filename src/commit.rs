@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use crate::{Reader,Timestamp};
 #[allow(unused_imports)] // docs
-use crate::{Writer,Patch};
+use crate::Writer;
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
 #[allow(clippy::module_name_repetitions)]
@@ -365,7 +365,7 @@ where
 	/// Starts at 0, and increments by 1 every time [`Writer::commit()`] is called.
 	///
 	/// This means this also represents how many
-	/// [`Patch`]'s were applied to your data.
+	/// `Patch`'s were applied to your data.
 	///
 	/// See [`Writer`] & [`Reader`] for more timestamp documentation.
 	fn timestamp(&self) -> Timestamp;

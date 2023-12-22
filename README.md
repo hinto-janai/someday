@@ -50,7 +50,7 @@ and a writer that:
 `someday`'s API uses [`git`](https://git-scm.com) syntax and semantically does similar actions.
 
 The [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html):
-1. Calls [`add()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.add) to add a [`Patch`](https://docs.rs/someday/latest/someday/enum.Patch) to their data
+1. Calls [`add()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.add) to add a `Patch` (function) to their data
 2. Actually executes those changes by [`commit()`](https://docs.rs/someday/latest/someday/struct.Writer.html#commit.add)'ing
 3. Can see local or remote (reader) data whenever
 4. Can atomically [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) those changes to the [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s
@@ -77,7 +77,6 @@ and the [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html):
 The code:
 ```rust
 use someday::{
-	Patch,
 	Writer,Reader,
 	Commit,CommitRef,
 	CommitInfo,PushInfo,
@@ -92,7 +91,7 @@ assert_eq!(commit, "hello");
 assert_eq!(commit.timestamp(), 0);
 
 // Writer writes some data, but does not commit.
-w.add(Patch::Fn(|w, _| w.push_str(" world")));
+w.add(|w, _| w.push_str(" world"));
 // Nothing committed, data still the same everywhere.
 let data: &String = w.data();
 assert_eq!(*data, "hello");
@@ -103,7 +102,7 @@ assert_eq!(w.staged().len(), 1);
 assert_eq!(r.head(), "hello");
 
 // Writer writes some more data.
-w.add(Patch::Fn(|w, _| w.push_str("!")));
+w.add(|w, _| w.push_str("!"));
 // Readers still see old data.
 assert_eq!(r.head(), "hello");
 

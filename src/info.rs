@@ -7,7 +7,6 @@
 use crate::{
 	Timestamp,
 	commit::CommitOwned,
-	patch::Patch,
 };
 #[allow(unused_imports)] // docs
 use crate::{Commit,Writer,Reader};
@@ -85,7 +84,7 @@ where
 	pub old_writer_data: CommitOwned<T>,
 }
 
-#[allow(clippy::module_name_repetitions)]
+#[allow(clippy::module_name_repetitions, clippy::type_complexity)]
 /// A variety of status info about the [`Writer`] and [`Reader`]
 ///
 /// This is a bag of various metadata about the current
@@ -100,9 +99,9 @@ where
 	T: Clone
 {
 	/// [`Writer::staged`]
-	pub staged_patches: &'a Vec<Patch<T>>,
+	pub staged_patches: &'a Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
 	/// [`Writer::committed_patches`]
-	pub committed_patches: &'a Vec<Patch<T>>,
+	pub committed_patches: &'a Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
 	/// [`Writer::head`]
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]

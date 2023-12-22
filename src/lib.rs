@@ -81,9 +81,6 @@ pub use info::*;
 mod reader;
 pub use reader::Reader;
 
-mod patch;
-pub use patch::Patch;
-
 mod writer;
 pub use writer::Writer;
 
@@ -107,20 +104,19 @@ pub use writer::Writer;
 ///
 /// ## Example
 /// ```rust
-/// use someday::Patch;
 ///
 /// let v = vec![];
 /// let (r, mut w) = someday::new::<Vec<&str>>(v);
 ///
 /// // Writer writes some data, but does not commit.
-/// w.add(Patch::Fn(|w, _| w.push("a")));
+/// w.add(|w, _| w.push("a"));
 /// // Timestamp is still 0.
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(Patch::Fn(|w, _| w.push("b")));
+/// w.add(|w, _| w.push("b"));
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(Patch::Fn(|w, _| w.push("b")));
+/// w.add(|w, _| w.push("b"));
 /// assert_eq!(w.timestamp(), 0);
 ///
 /// // Now we commit.
@@ -145,7 +141,7 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 /// See their documentation for writing and reading functions.
 ///
 /// This pre-allocates `16` capacity for the internal
-/// [`Vec`]'s holding onto the [`Patch`]'s that have and
+/// [`Vec`]'s holding onto the `Patch`'s that have and
 /// haven't been applied.
 ///
 /// Use [`with_capacity()`] to set a custom capacity.
@@ -163,14 +159,14 @@ where
 
 #[inline]
 #[must_use]
-/// Create a new [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
+/// Create a new [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
 ///
 /// This is the same as [`crate::new()`] although the
 /// the input `capacity` determines how much capacity the
-/// [`Patch`] vectors will start out with.
+/// `Patch` vectors will start out with.
 ///
 /// Use this if you are planning to [`Writer::add()`]
-/// many [`Patch`]'s before [`Writer::commit()`]'ing, so that
+/// many `Patch`'s before [`Writer::commit()`]'ing, so that
 /// the internal [`Vec`]'s don't need to reallocate so often.
 ///
 /// ## Example
@@ -210,7 +206,7 @@ where
 
 #[inline]
 #[must_use]
-/// Create a default [`Writer`] & [`Reader`] pair with a specified [`Patch`] capacity
+/// Create a default [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
 ///
 /// This is the same as [`crate::default`] combined with [`crate::with_capacity`].
 ///

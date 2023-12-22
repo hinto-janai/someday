@@ -126,13 +126,13 @@ fn someday() -> f64 {
     // lock-free, cloning and re-acquiring data
     // if needed.
 	for i in 0..N {
-		writer.add(Patch::Fn(|many: &mut Many, _| {
+		writer.add(|many| {
             let i = many.vec.len() + 1;
             let string = format!("{i}");
             many.string.push_str(&string);
             many.hashmap.insert(i, i);
             many.vec.push(string);
-        }));
+        });
 		writer.commit();
 		writer.push();
 	}

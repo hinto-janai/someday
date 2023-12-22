@@ -105,9 +105,9 @@ fn someday() -> f64 {
     // lock-free, cloning and re-acquiring data
     // if needed.
 	for i in 0..N {
-		writer.add(Patch::boxed(move |vec: &mut Vec<usize>, _| {
+		writer.add(move |vec: &mut Vec<usize>, _| {
             vec.push(i);
-        }));
+        });
 		writer.commit();
 		writer.push();
 	}

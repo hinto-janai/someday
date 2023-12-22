@@ -13,8 +13,6 @@ use crate::{
 	Timestamp,
 	Writer,
 };
-#[allow(unused_imports)] // docs
-use crate::Patch;
 
 //---------------------------------------------------------------------------------------------------- Reader
 /// Reader(s) who can atomically read some data `T`
@@ -51,7 +49,7 @@ use crate::Patch;
 /// - Repeat
 ///
 /// ```rust
-/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef,Patch};
+/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef};
 ///
 /// // Create a Reader/Writer pair of a `String`.
 /// let (reader, writer) = someday::new("".into());
@@ -89,7 +87,7 @@ use crate::Patch;
 ///     // and real code probably wouldn't do this, although
 ///     // just for the example...
 ///     loop {
-///         writer.add(Patch::Fn(|w, _| w.push_str("abc")));
+///         writer.add(|w, _| w.push_str("abc"));
 ///         writer.commit();
 ///         writer.push();
 ///     }
@@ -176,7 +174,7 @@ where
 	/// assert_eq!(r.head(), "");
 	///
 	/// // Writer commits some changes locally.
-	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.add(|w, _| *w = "hello".into());
 	/// w.commit();
 	///
 	/// // Writer sees local changes.
@@ -224,7 +222,7 @@ where
 	///
 	/// `std::time::Duration::from_millis(1)` will most likely be more
 	/// than enough time for the [`Writer`] to finish (depending on how
-	/// long it takes [`Writer`] to re-apply all your [`Patch`]'s).
+	/// long it takes [`Writer`] to re-apply all your `Patch`'s).
 	///
 	/// This will forcefully call [`head()`](Reader::head) after
 	/// sleeping regardless if the [`Writer`] is pushing.

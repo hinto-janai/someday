@@ -16,7 +16,6 @@ use std::{
 use crate::{
 	INIT_VEC_LEN,
 	reader::Reader,
-	patch::Patch,
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
 	info::{
@@ -26,10 +25,11 @@ use crate::{
 };
 
 //---------------------------------------------------------------------------------------------------- Writer
+#[allow(clippy::type_complexity)]
 /// The single [`Writer`] of some data `T`
 ///
 /// The [`Writer`]:
-/// 1. Stores your [`Patch`]'s (functions) with [`add()`](Writer::add)
+/// 1. Stores your `Patch`'s (functions) with [`add()`](Writer::add)
 /// 2. Actually applies them to `T` by [`commit()`](Writer::commit)'ing
 /// 3. Can [`push()`](Writer::push) so that [`Reader`]'s can see the changes
 ///
@@ -67,10 +67,10 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // The Writer can add many `Patch`'s
-/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
-/// w.add(Patch::Fn(|w, _| w.push_str("def")));
-/// w.add(Patch::Fn(|w, _| w.push_str("ghi")));
-/// w.add(Patch::Fn(|w, _| w.push_str("jkl")));
+/// w.add(|w, _| w.push_str("abc"));
+/// w.add(|w, _| w.push_str("def"));
+/// w.add(|w, _| w.push_str("ghi"));
+/// w.add(|w, _| w.push_str("jkl"));
 ///
 /// // But `add()`'ing does not actually modify the
 /// // local (Writer) or remote (Readers) data, it
@@ -81,7 +81,7 @@ use crate::{
 /// assert_eq!(r.head(), "");
 ///
 /// // We can see our "staged" patches here.
-/// let staged: &mut Vec<Patch<String>> = w.staged();
+/// let staged = w.staged();
 /// assert_eq!(staged.len(), 4);
 ///
 /// // Let's actually remove a patch.
@@ -139,11 +139,11 @@ where
 	pub(super) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
 
 	/// Patches that have not yet been applied.
-	pub(super) patches: Vec<Patch<T>>,
+	pub(super) patches: Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
 
 	/// Patches that were already applied,
 	/// that must be re-applied to the old `T`.
-	pub(super) patches_old: Vec<Patch<T>>,
+	pub(super) patches_old: Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
 
 	/// This signifies to the `Reader`'s that the
 	/// `Writer` is currently attempting to swap data.
@@ -191,7 +191,7 @@ where
 	/// not have been [`push()`](Writer::push)'ed yet.
 	///
 	/// [`commit()`](Writer::commit)'ing will apply the
-	/// [`add()`](Writer::add)'ed [`Patch`]'s directly to this data.
+	/// [`add()`](Writer::add)'ed `Patch`'s directly to this data.
 	///
 	/// If `push()` is called, this would be the
 	/// new data that `Reader`'s would see.
@@ -205,7 +205,7 @@ where
 	/// assert_eq!(r.head(),  0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.add(|w, _| *w += 1);
 	/// w.commit();
 	///
 	/// //  Writer sees local change.
@@ -225,7 +225,7 @@ where
 	/// let (_, mut w) = someday::new::<usize>(0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.add(|w, _| *w += 1);
 	/// w.commit();
 	///
 	/// // Writer sees local change.
@@ -259,7 +259,7 @@ where
 	/// assert_eq!(commit.data, 500);
 	///
 	/// // Writer commits some changes.
-	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.add(|w, _| *w += 1);
 	/// w.commit();
 	///
 	/// // Head commit is now changed.
@@ -288,7 +288,7 @@ where
 	/// assert_eq!(*commit.data(), 500);
 	///
 	/// // Writer commits & pushes some changes.
-	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.add(|w, _| *w += 1);
 	/// w.commit();
 	/// w.push();
 	///
@@ -333,7 +333,7 @@ where
 	}
 
 	#[inline]
-	/// Add a [`Patch`] to apply to the data `T`
+	/// Add a `Patch` to apply to the data `T`
 	///
 	/// This does not execute the `Patch` immediately,
 	/// it will only store it for later usage.
@@ -346,7 +346,7 @@ where
 	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Add a patch.
-	/// w.add(Patch::Fn(|w, _| *w += 1));
+	/// w.add(|w, _| *w += 1);
 	///
 	/// // It hasn't been applied yet.
 	/// assert_eq!(w.staged().len(), 1);
@@ -355,13 +355,101 @@ where
 	/// w.commit();
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn add(&mut self, patch: Patch<T>) {
-		self.patches.push(patch);
+	///
+	/// # What is a `Patch`?
+	/// `Patch` is just a function that will be applied to your data `T`.
+	///
+	/// The 2 inputs you are given are:
+	/// - The [`Writer`]'s local mutable data, `T` (the thing you're modifying)
+	/// - The [`Reader`]'s latest head commit
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::sync::*;
+	/// let (_, mut w) = someday::new::<String>("".into());
+	///
+	/// // Use a pre-defined function pointer.
+	/// fn fn_ptr(w: &mut String, r: &String) {
+	///     w.push_str("hello");
+	/// }
+	/// w.add(fn_ptr);
+	///
+	/// // This non-capturing closure gets
+	/// // coerced into a `fn(&mut T, &T)`.
+	/// w.add(|w, _| {
+	///     w.push_str("hello");
+	/// });
+	///
+	/// // This capturing closure turns
+	/// // into something that looks like:
+	/// // `Box<dyn FnMut(&mut T, &T) + Send + 'static>`
+	/// let string: Arc<str> = "hello".into();
+	/// w.add(move |w, _| {
+	///     let captured = Arc::clone(&string);
+	///     w.push_str(&captured);
+	/// });
+	/// ```
+	///
+	/// # ⚠️ Non-deterministic `Patch`
+	/// The `Patch`'s you use with [`Writer::add`] **must be deterministic**.
+	///
+	/// The `Writer` may apply your `Patch` twice, so any state that gets
+	/// modified or functions used in the `Patch` must result in the
+	/// same values as the first time the `Patch` was called.
+	///
+	/// Here is a **non-deterministic** example:
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::sync::*;
+	/// static STATE: Mutex<usize> = Mutex::new(1);
+	///
+	/// let (_, mut w) = someday::new::<usize>(0);
+	///
+	/// w.add(move |w, _| {
+	///     let mut state = STATE.lock().unwrap();
+	///     *state *= 10; // 1*10 the first time, 10*10 the second time...
+	///     *w = *state;
+	/// });
+	/// w.commit();
+	/// w.push();
+	///
+	/// // ⚠️⚠️⚠️ !!!
+	/// // The `Writer` reclaimed the old `Reader` data
+	/// // and applied our `Patch` again, except, the `Patch`
+	/// // was non-deterministic, so now the `Writer`
+	/// // and `Reader` have non-matching data...
+	/// assert_eq!(*w.data(), 100);
+	/// assert_eq!(*w.reader().head(), 10);
+	/// ```
+	pub fn add<Patch>(&mut self, patch: Patch)
+	where
+		Patch: FnMut(&mut T, &T) + Send + 'static
+	{
+		// This used to be:
+		//
+		// ```rust
+		// enum Patch<T> {
+		//     Box(Box<FnMut(&mut T, &T) + Send + 'static>),
+		//     Fn(fn(&mut T, &T)),
+		// }
+		// ```
+		// so that users could specify non-allocating,
+		// non-dynamic-dispatched fn pointers.
+		//
+		// This was moved onto this function as a generic instead
+		// since the type inference and ergonomics was bad.
+		//
+		// LLVM can optimize out trivial boxes and dyn cases
+		// ...but I'm not sure it can when there's multiple
+		// mixed `fn`'s and `dyn FnMut()`'s inside a `Vec`.
+		//
+		// Guess we'll be boxing `fn()`...
+		self.patches.push(Box::new(patch));
 	}
 
 	#[inline]
 	#[allow(clippy::missing_panics_doc)]
-	/// Apply all the [`Patch`]'s that were [`add()`](Writer::add)'ed
+	/// Apply all the `Patch`'s that were [`add()`](Writer::add)'ed
 	///
 	/// The new [`Commit`] created from this will become
 	/// the `Writer`'s new [`Writer::head()`].
@@ -383,7 +471,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Add and commit a patch.
-	/// w.add(Patch::Fn(|w, _| *w += 123));
+	/// w.add(|w, _| *w += 123);
 	/// w.commit();
 	///
 	/// assert_eq!(w.timestamp(), 1);
@@ -431,7 +519,7 @@ where
 
 		// Apply the patches and add to the old vector.
 		for mut patch in self.patches.drain(..) {
-			patch.apply(
+			patch(
 				// We can't use `self.local_as_mut()` here
 				// We can't have `&mut self` and `&self`.
 				//
@@ -462,7 +550,7 @@ where
 	/// `Reader`'s will atomically be able to access the
 	/// the new `Commit` before this function is over.
 	///
-	/// The [`Patch`]'s that were not [`commit()`](Writer::commit)'ed will not be
+	/// The `Patch`'s that were not [`commit()`](Writer::commit)'ed will not be
 	/// pushed and will remain in the [`staged()`](Writer::staged) vector of patches.
 	///
 	/// The [`PushInfo`] object returned is just a container
@@ -471,7 +559,7 @@ where
 	/// ```rust
 	/// # use someday::*;
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	///
 	/// // This call does nothing since
 	/// // we haven't committed anything.
@@ -513,7 +601,7 @@ where
 	/// # use someday::*;
 	/// # use std::{sync::*,thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// # let barrier  = Arc::new(Barrier::new(2));
@@ -578,7 +666,7 @@ where
 	/// // Commit.
 	/// // Now the `Writer` is ahead by 1 commit, while
 	/// // the `Reader` is hanging onto the old one.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// // Pass in a closure, so that we can do
@@ -640,7 +728,7 @@ where
 	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// let commit = r.head();
@@ -754,7 +842,7 @@ where
 		if reclaimed {
 			// Re-apply patches to this old data.
 			for mut patch in self.patches_old.drain(..) {
-				patch.apply(&mut local.data, &self.remote.data);
+				patch(&mut local.data, &self.remote.data);
 			}
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
@@ -781,7 +869,7 @@ where
 	/// If the `Writer` and `Reader` are [`Writer::synced()`], this will return `None`.
 	///
 	/// If the `Writer` is ahead of the `Reader`, this will:
-	/// - Discard all [`Patch`]'s that have been already [`commit()`](Writer::commit)'ed
+	/// - Discard all `Patch`'s that have been already [`commit()`](Writer::commit)'ed
 	/// - Keep staged `Patch`'s that haven't been `commit()`
 	/// - Return `Some(PullInfo)`
 	///
@@ -802,7 +890,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit local changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("hello")));
+	/// w.add(|w, _| w.push_str("hello"));
 	/// w.commit();
 	/// assert_eq!(w.head(), "hello");
 	///
@@ -851,7 +939,7 @@ where
 	///
 	/// The `Writer`'s old local data is returned.
 	///
-	/// All [`Patch`]'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
+	/// All `Patch`'s that have been already [`commit()`](Writer::commit)'ed are discarded ([`Writer::committed_patches()`]).
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
 	///
@@ -864,7 +952,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("hello")));
+	/// w.add(|w, _| w.push_str("hello"));
 	/// w.commit(); // <- commit 1
 	/// w.push();
 	///
@@ -875,11 +963,11 @@ where
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
-	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.add(|w, _| *w = "hello".into());
 	/// w.commit(); // <- commit 2
-	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.add(|w, _| *w = "hello".into());
 	/// w.commit(); // <- commit 3
-	/// w.add(Patch::Fn(|w, _| *w = "hello".into()));
+	/// w.add(|w, _| *w = "hello".into());
 	/// w.commit(); // <- commit 4
 	/// assert_eq!(w.committed_patches().len(), 3);
 	///
@@ -946,7 +1034,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push a change.
-	/// w.add(Patch::Fn(|w, _| w.push_str("a")));
+	/// w.add(|w, _| w.push_str("a"));
 	/// w.commit();
 	/// w.push();
 	///
@@ -959,7 +1047,7 @@ where
 	///
 	/// // Push a whole bunch changes.
 	/// for _ in 0..100 {
-	///     w.add(Patch::Fn(|w, _| w.push_str("b")));
+	///     w.add(|w, _| w.push_str("b"));
 	///     w.commit();
 	///     w.push();
 	/// }
@@ -1017,7 +1105,7 @@ where
 	///
 	/// // Push and tag a whole bunch changes.
 	/// for i in 1..100 {
-	///     writer.add(Patch::Fn(|w, _| *w = "bbb".into()));
+	///     writer.add(|w, _| *w = "bbb".into());
 	///     writer.commit();
 	///     writer.push();
 	///     writer.tag();
@@ -1135,7 +1223,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit but don't push.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// // Writer and Reader's commit is different.
@@ -1167,7 +1255,7 @@ where
 	///
 	/// // Commit 10 times but don't push.
 	/// for i in 0..10 {
-	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.add(|w, _| w.push_str("abc"));
 	///     w.commit();
 	/// }
 	///
@@ -1196,7 +1284,7 @@ where
 	///
 	/// // Commit 10 times.
 	/// for i in 0..10 {
-	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.add(|w, _| w.push_str("abc"));
 	///     w.commit();
 	/// }
 	/// // At timestamp 10.
@@ -1258,7 +1346,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// // At timestamp 1.
@@ -1286,7 +1374,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// // Writer is at timestamp 1.
@@ -1322,13 +1410,13 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	/// w.push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.add(|w, _| w.push_str("abc"));
 	///     w.commit();
 	/// }
 	///
@@ -1358,13 +1446,13 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	/// w.push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	///     w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	///     w.add(|w, _| w.push_str("abc"));
 	///     w.commit();
 	/// }
 	///
@@ -1383,9 +1471,11 @@ where
 		self.timestamp_diff() == 0
 	}
 
+	#[inline]
+	#[allow(clippy::type_complexity)]
 	/// Restore all the staged changes.
 	///
-	/// This removes all the [`Patch`]'s that haven't yet been [`commit()`](Writer::commit)'ed.
+	/// This removes all the `Patch`'s that haven't yet been [`commit()`](Writer::commit)'ed.
 	///
 	/// Calling `Writer::staged().drain(..)` would be equivalent.
 	///
@@ -1396,19 +1486,20 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes, but don't commit.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// assert_eq!(w.staged().len(), 1);
 	///
 	/// // Restore changes.
 	/// let drain = w.restore();
 	/// assert_eq!(drain.count(), 1);
 	/// ```
-	pub fn restore(&mut self) -> std::vec::Drain<'_, Patch<T>> {
+	pub fn restore(&mut self) -> std::vec::Drain<'_, Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
 		self.patches.drain(..)
 	}
 
 	#[inline]
-	/// All the [`Patch`]'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
+	#[allow(clippy::type_complexity)]
+	/// All the `Patch`'s that **haven't** been [`commit()`](Writer::commit)'ed yet, aka, "staged" changes
 	///
 	/// You are allowed to do anything to these `Patch`'s as they haven't
 	/// been committed yet and the [`Writer`] does not necessarily need them.
@@ -1423,7 +1514,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	///
 	/// // We see and mutate the staged changes.
 	/// assert_eq!(w.staged().len(), 1);
@@ -1432,7 +1523,7 @@ where
 	/// let removed = w.staged().remove(0);
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn staged(&mut self) -> &mut Vec<Patch<T>> {
+	pub fn staged(&mut self) -> &mut Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
 		&mut self.patches
 	}
 
@@ -1457,7 +1548,8 @@ where
 	}
 
 	#[inline]
-	/// All the [`Patch`]'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
+	#[allow(clippy::type_complexity)]
+	/// All the `Patch`'s that **have** been [`commit()`](Writer::commit)'ed but not yet [`push()`](Writer::push)'ed
 	///
 	/// You are not allowed to mutate these `Patch`'s as they haven't been
 	/// [`push()`](Writer::push)'ed yet and the `Writer` may need them in the future.
@@ -1468,13 +1560,13 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("abc")));
+	/// w.add(|w, _| w.push_str("abc"));
 	/// w.commit();
 	///
 	/// // We can see but not mutate functions.
 	/// assert_eq!(w.committed_patches().len(), 1);
 	/// ```
-	pub const fn committed_patches(&self) -> &Vec<Patch<T>> {
+	pub fn committed_patches(&self) -> &Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
 		&self.patches_old
 	}
 
@@ -1563,7 +1655,7 @@ where
 		}
 	}
 
-	/// Shrinks the capacity of the [`Patch`] [`Vec`]'s as much as possible
+	/// Shrinks the capacity of the `Patch` [`Vec`]'s as much as possible
 	///
 	/// This calls [`Vec::shrink_to_fit()`] on the 2
 	/// internal `Vec`'s in [`Writer`] holding:
@@ -1581,12 +1673,12 @@ where
 	///
 	/// // Commit 32 `Patch`'s
 	/// for i in 0..32 {
-	///     w.add(Patch::Fn(|w, _| *w = "".into()));
+	///     w.add(|w, _| *w = "".into());
 	///     w.commit();
 	/// }
 	/// // Stage 16 `Patch`'s
 	/// for i in 0..16 {
-	///     w.add(Patch::Fn(|w, _| *w = "".into()));
+	///     w.add(|w, _| *w = "".into());
 	/// }
 	///
 	/// // Commit capacity is now 32.
@@ -1609,7 +1701,7 @@ where
 		self.patches_old.shrink_to_fit();
 	}
 
-	#[allow(clippy::missing_panics_doc)]
+	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]
 	/// Consume this [`Writer`] and return the inner components
 	///
 	/// In left-to-right order, this returns:
@@ -1624,11 +1716,11 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// w.add(Patch::Fn(|w, _| w.push_str("a")));
+	/// w.add(|w, _| w.push_str("a"));
 	/// w.commit();
 	///
 	/// // Add but don't commit.
-	/// w.add(Patch::Fn(|w, _| w.push_str("b")));
+	/// w.add(|w, _| w.push_str("b"));
 	///
 	/// let (
 	///     writer_data,
@@ -1642,8 +1734,12 @@ where
 	/// assert_eq!(staged_changes.len(), 1);
 	/// assert_eq!(committed_changes.len(), 1);
 	/// ```
-	#[allow(clippy::type_complexity)]
-	pub fn into_inner(self) -> (CommitOwned<T>, CommitRef<T>, Vec<Patch<T>>, Vec<Patch<T>>) {
+	pub fn into_inner(self) -> (
+		CommitOwned<T>,
+		CommitRef<T>,
+		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+	) {
 		(
 			// INVARIANT: local must be initialized after push()
 			self.local.unwrap(),

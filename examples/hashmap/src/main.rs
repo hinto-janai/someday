@@ -106,9 +106,9 @@ fn someday() -> f64 {
     // lock-free, cloning and re-acquiring data
     // if needed.
 	for i in 0..N {
-		writer.add(Patch::boxed(move |map: &mut HashMap<usize, usize>, _| {
+		writer.add(move |map: &mut HashMap<usize, usize>, _| {
             map.insert(i, i);
-        }));
+        });
 		writer.commit();
 		writer.push();
 	}
