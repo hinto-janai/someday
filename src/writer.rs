@@ -114,6 +114,15 @@ use crate::{
 /// assert_eq!(w.data(), "abcdefghi");
 /// assert_eq!(r.head(), "abcdefghi");
 /// ```
+///
+/// ## Invariants
+/// Some invariants that the `Writer` always upholds, that you can rely on:
+/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::timestamp()`]
+/// - `Reader`'s will be completely fine in the case a `Writer` panics mid-operation
+/// - [`Writer::tags()`] will always return `Commit`'s that were previously [`push()`](Writer::push)'ed
+/// - If a `Writer` that is being shared (e.g `Arc<Mutex<Writer<T>>`) panics mid-push, the other `Writer`'s
+///   will also panic on any operation that touches local data - i.e. the local data `T` will never
+///   be seen in an uninitialized state
 pub struct Writer<T>
 where
 	T: Clone,
@@ -1195,8 +1204,54 @@ where
 	/// Clear all the stored [`Writer`] tags
 	///
 	/// This calls [`BTreeMap::clear()`] on this `Writer`'s internal tags.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// // Push a change.
+	/// w.add(|w, _| w.push_str("a"));
+	/// w.commit();
+	/// w.push();
+	///
+	/// // Tag that change.
+	/// let tag = w.tag();
+	/// assert_eq!(*tag, r.head());
+	/// assert_eq!(tag.timestamp(), 1);
+	///
+	/// // Clear all tags.
+	/// w.tag_clear();
+	/// assert_eq!(w.tags().len(), 0);
+	/// ```
 	pub fn tag_clear(&mut self) {
 		self.tags.clear();
+	}
+
+	#[inline]
+	/// Run [`std::mem::take()`] on the [`Writer`]'s tags
+	///
+	/// This will return the old tags and will
+	/// replace the `Writer`'s tag with a new empty set.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// // Tag 100x times.
+	/// for i in 0..100 {
+	///     w.add(|w, _| w.push_str("a"));
+	///     w.commit();
+	///     w.push();
+	///     w.tag();
+	/// }
+	///
+	/// // Take all tags.
+	/// let tags = w.tag_take();
+	/// assert_eq!(w.tags().len(), 0);
+	/// assert_eq!(tags.len(), 100);
+	/// ```
+	pub fn tag_take(&mut self) -> BTreeMap<Timestamp, CommitRef<T>> {
+		std::mem::take(&mut self.tags)
 	}
 
 	/// Retains only the tags specified by the predicate
@@ -1818,6 +1873,7 @@ where
 	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
 	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
 	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
+	/// 5. [`Writer::tags()`]
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -1827,6 +1883,7 @@ where
 	/// // Commit some changes.
 	/// w.add(|w, _| w.push_str("a"));
 	/// w.commit();
+	/// w.tag();
 	///
 	/// // Add but don't commit.
 	/// w.add(|w, _| w.push_str("b"));
@@ -1836,25 +1893,29 @@ where
 	///     reader_data,
 	///     staged_changes,
 	///     committed_changes,
+	///     tags,
 	/// ) = w.into_inner();
 	///
 	/// assert_eq!(writer_data, "a");
 	/// assert_eq!(reader_data, ""); // We never `push()`'ed, so Readers saw nothing.
 	/// assert_eq!(staged_changes.len(), 1);
 	/// assert_eq!(committed_changes.len(), 1);
+	/// assert_eq!(tags.len(), 1);
 	/// ```
 	pub fn into_inner(self) -> (
 		CommitOwned<T>,
 		CommitRef<T>,
 		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
 		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+		BTreeMap<Timestamp, CommitRef<T>>,
 	) {
 		(
 			// INVARIANT: local must be initialized after push()
 			self.local.unwrap(),
 			CommitRef { inner: self.remote },
 			self.patches,
-			self.patches_old
+			self.patches_old,
+			self.tags,
 		)
 	}
 }
