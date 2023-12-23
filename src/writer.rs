@@ -33,6 +33,8 @@ use crate::{
 /// 2. Actually applies them to `T` by [`commit()`](Writer::commit)'ing
 /// 3. Can [`push()`](Writer::push) so that [`Reader`]'s can see the changes
 ///
+/// The `Writer` can also generate infinite `Reader`'s with [`Writer::reader()`].
+///
 /// ## Usage
 /// This example covers the typical usage of a `Writer`:
 /// - Creating some `Reader`'s
@@ -118,11 +120,11 @@ use crate::{
 /// ## Invariants
 /// Some invariants that the `Writer` always upholds, that you can rely on:
 /// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::timestamp()`]
-/// - `Reader`'s will be completely fine in the case a `Writer` panics mid-operation
 /// - [`Writer::tags()`] will always return `Commit`'s that were previously [`push()`](Writer::push)'ed
 /// - If a `Writer` that is being shared (e.g `Arc<Mutex<Writer<T>>`) panics mid-push, the other `Writer`'s
-///   will also panic on any operation that touches local data - i.e. the local data `T` will never
+///   may also panic on any operation that touches local data - i.e. the local data `T` will never
 ///   be seen in an uninitialized state
+/// - `Reader`'s will be completely fine in the case a `Writer` panics mid-push
 pub struct Writer<T>
 where
 	T: Clone,
@@ -170,177 +172,6 @@ impl<T> Writer<T>
 where
 	T: Clone,
 {
-	#[inline]
-	/// Cheaply construct a [`Reader`] connected to this [`Writer`]
-	///
-	/// This creates a new `Reader` that can read all the
-	/// data [`push()`](Writer::push)'ed from this `Writer`.
-	///
-	/// There is no limit on concurrent `Reader`'s.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<usize>(0);
-	///
-	/// // Create 100 more readers.
-	/// let readers: Vec<Reader<usize>> = vec![w.reader(); 100];
-	/// ```
-	pub fn reader(&self) -> Reader<T> {
-		Reader {
-			arc: Arc::clone(&self.arc),
-			swapping: Arc::clone(&self.swapping)
-		}
-	}
-
-	#[inline]
-	#[allow(clippy::missing_panics_doc)]
-	/// View the [`Writer`]'s _local_ data
-	///
-	/// This is the `Writer`'s local data that may or may
-	/// not have been [`push()`](Writer::push)'ed yet.
-	///
-	/// [`commit()`](Writer::commit)'ing will apply the
-	/// [`add()`](Writer::add)'ed `Patch`'s directly to this data.
-	///
-	/// If `push()` is called, this would be the
-	/// new data that `Reader`'s would see.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<usize>(0);
-	///
-	/// // No changes yet.
-	/// assert_eq!(*w.data(), 0);
-	/// assert_eq!(r.head(),  0);
-	///
-	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
-	/// w.commit();
-	///
-	/// //  Writer sees local change.
-	/// assert_eq!(*w.data(), 1);
-	/// // Reader doesn't see change.
-	/// assert_eq!(r.head(), 0);
-	/// ```
-	pub fn data(&self) -> &T {
-		self.local_as_ref()
-	}
-
-	#[inline]
-	/// View the latest copy of data [`Reader`]'s have access to
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (_, mut w) = someday::new::<usize>(0);
-	///
-	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
-	/// w.commit();
-	///
-	/// // Writer sees local change.
-	/// assert_eq!(*w.data(), 1);
-	/// // But they haven't been pushed to the remote side
-	/// // (Readers can't see them)
-	/// assert_eq!(*w.data_remote(), 0);
-	/// ```
-	pub fn data_remote(&self) -> &T {
-		&self.remote.data
-	}
-
-	#[inline]
-	#[allow(clippy::missing_panics_doc)]
-	/// View the [`Writer`]'s local "head" [`Commit`]
-	///
-	/// This is the latest, and local `Commit` from the `Writer`.
-	///
-	/// Calling [`commit()`](Writer::commit) would make that new
-	/// `Commit` be the return value for this function.
-	///
-	/// [`Reader`]'s may or may not see this `Commit` yet.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (_, mut w) = someday::new::<usize>(500);
-	///
-	/// // No changes yet.
-	/// let commit: &CommitOwned<usize> = w.head();
-	/// assert_eq!(commit.timestamp, 0);
-	/// assert_eq!(commit.data, 500);
-	///
-	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
-	/// w.commit();
-	///
-	/// // Head commit is now changed.
-	/// let commit: &CommitOwned<usize> = w.head();
-	/// assert_eq!(commit.timestamp, 1);
-	/// assert_eq!(commit.data, 501);
-	/// ```
-	pub const fn head(&self) -> &CommitOwned<T> {
-		self.local_as_ref()
-	}
-
-	#[inline]
-	/// View the [`Reader`]'s latest "head" [`Commit`]
-	///
-	/// This is the latest `Commit` the `Reader`'s can see.
-	///
-	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (_, mut w) = someday::new::<usize>(500);
-	///
-	/// // No changes yet.
-	/// let commit: &CommitOwned<usize> = w.head_remote();
-	/// assert_eq!(commit.timestamp(), 0);
-	/// assert_eq!(*commit.data(), 500);
-	///
-	/// // Writer commits & pushes some changes.
-	/// w.add(|w, _| *w += 1);
-	/// w.commit();
-	/// w.push();
-	///
-	/// // Reader's head commit is now changed.
-	/// let commit: &CommitOwned<usize> = w.head_remote();
-	/// assert_eq!(commit.timestamp(), 1);
-	/// assert_eq!(*commit.data(), 501);
-	/// ```
-	pub fn head_remote(&self) -> &CommitOwned<T> {
-		&self.remote
-	}
-
-	#[inline]
-	/// Cheaply acquire ownership of the [`Reader`]'s latest "head" [`Commit`]
-	///
-	/// This is the latest `Commit` the `Reader`'s can see.
-	///
-	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
-	///
-	/// This is an shared "owned" `Commit` (it uses [`Arc`] internally).
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<usize>(0);
-	///
-	/// // Reader gets a reference.
-	/// let reader: CommitRef<usize> = r.head();
-	/// // Writer gets a reference.
-	/// let writer: CommitRef<usize> = w.head_remote_ref();
-	///
-	/// // Reader drops their reference.
-	/// // Nothing happens, an atomic count is decremented.
-	/// drop(reader);
-	///
-	/// // Writer drops their reference.
-	/// // They were the last reference, so they are
-	/// // responsible for deallocating the backing data.
-	/// drop(writer);
-	/// ```
-	pub fn head_remote_ref(&self) -> CommitRef<T> {
-		CommitRef { inner: Arc::clone(&self.remote) }
-	}
-
 	#[inline]
 	/// Add a `Patch` to apply to the data `T`
 	///
@@ -727,7 +558,7 @@ where
 	///
 	/// This is useful if you know reclaiming old data
 	/// and re-applying your commits would take longer and/or
-	/// be more expensive just cloning the data itself.
+	/// be more expensive than cloning the data itself.
 	///
 	/// Or if you know your `Reader`'s will be holding
 	/// onto the data for a long time, and reclaiming data
@@ -978,6 +809,177 @@ where
 		});
 
 		(push_info, return_1, return_2)
+	}
+
+	#[inline]
+	/// Cheaply construct a [`Reader`] connected to this [`Writer`]
+	///
+	/// This creates a new `Reader` that can read all the
+	/// data [`push()`](Writer::push)'ed from this `Writer`.
+	///
+	/// There is no limit on concurrent `Reader`'s.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<usize>(0);
+	///
+	/// // Create 100 more readers.
+	/// let readers: Vec<Reader<usize>> = vec![w.reader(); 100];
+	/// ```
+	pub fn reader(&self) -> Reader<T> {
+		Reader {
+			arc: Arc::clone(&self.arc),
+			swapping: Arc::clone(&self.swapping)
+		}
+	}
+
+	#[inline]
+	#[allow(clippy::missing_panics_doc)]
+	/// View the [`Writer`]'s _local_ data
+	///
+	/// This is the `Writer`'s local data that may or may
+	/// not have been [`push()`](Writer::push)'ed yet.
+	///
+	/// [`commit()`](Writer::commit)'ing will apply the
+	/// [`add()`](Writer::add)'ed `Patch`'s directly to this data.
+	///
+	/// If `push()` is called, this would be the
+	/// new data that `Reader`'s would see.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<usize>(0);
+	///
+	/// // No changes yet.
+	/// assert_eq!(*w.data(), 0);
+	/// assert_eq!(r.head(),  0);
+	///
+	/// // Writer commits some changes.
+	/// w.add(|w, _| *w += 1);
+	/// w.commit();
+	///
+	/// //  Writer sees local change.
+	/// assert_eq!(*w.data(), 1);
+	/// // Reader doesn't see change.
+	/// assert_eq!(r.head(), 0);
+	/// ```
+	pub fn data(&self) -> &T {
+		self.local_as_ref()
+	}
+
+	#[inline]
+	/// View the latest copy of data [`Reader`]'s have access to
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, mut w) = someday::new::<usize>(0);
+	///
+	/// // Writer commits some changes.
+	/// w.add(|w, _| *w += 1);
+	/// w.commit();
+	///
+	/// // Writer sees local change.
+	/// assert_eq!(*w.data(), 1);
+	/// // But they haven't been pushed to the remote side
+	/// // (Readers can't see them)
+	/// assert_eq!(*w.data_remote(), 0);
+	/// ```
+	pub fn data_remote(&self) -> &T {
+		&self.remote.data
+	}
+
+	#[inline]
+	#[allow(clippy::missing_panics_doc)]
+	/// View the [`Writer`]'s local "head" [`Commit`]
+	///
+	/// This is the latest, and local `Commit` from the `Writer`.
+	///
+	/// Calling [`commit()`](Writer::commit) would make that new
+	/// `Commit` be the return value for this function.
+	///
+	/// [`Reader`]'s may or may not see this `Commit` yet.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, mut w) = someday::new::<usize>(500);
+	///
+	/// // No changes yet.
+	/// let commit: &CommitOwned<usize> = w.head();
+	/// assert_eq!(commit.timestamp, 0);
+	/// assert_eq!(commit.data, 500);
+	///
+	/// // Writer commits some changes.
+	/// w.add(|w, _| *w += 1);
+	/// w.commit();
+	///
+	/// // Head commit is now changed.
+	/// let commit: &CommitOwned<usize> = w.head();
+	/// assert_eq!(commit.timestamp, 1);
+	/// assert_eq!(commit.data, 501);
+	/// ```
+	pub const fn head(&self) -> &CommitOwned<T> {
+		self.local_as_ref()
+	}
+
+	#[inline]
+	/// View the [`Reader`]'s latest "head" [`Commit`]
+	///
+	/// This is the latest `Commit` the `Reader`'s can see.
+	///
+	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (_, mut w) = someday::new::<usize>(500);
+	///
+	/// // No changes yet.
+	/// let commit: &CommitOwned<usize> = w.head_remote();
+	/// assert_eq!(commit.timestamp(), 0);
+	/// assert_eq!(*commit.data(), 500);
+	///
+	/// // Writer commits & pushes some changes.
+	/// w.add(|w, _| *w += 1);
+	/// w.commit();
+	/// w.push();
+	///
+	/// // Reader's head commit is now changed.
+	/// let commit: &CommitOwned<usize> = w.head_remote();
+	/// assert_eq!(commit.timestamp(), 1);
+	/// assert_eq!(*commit.data(), 501);
+	/// ```
+	pub fn head_remote(&self) -> &CommitOwned<T> {
+		&self.remote
+	}
+
+	#[inline]
+	/// Cheaply acquire ownership of the [`Reader`]'s latest "head" [`Commit`]
+	///
+	/// This is the latest `Commit` the `Reader`'s can see.
+	///
+	/// Calling [`push()`](Writer::push) would update the `Reader`'s head `Commit`.
+	///
+	/// This is an shared "owned" `Commit` (it uses [`Arc`] internally).
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<usize>(0);
+	///
+	/// // Reader gets a reference.
+	/// let reader: CommitRef<usize> = r.head();
+	/// // Writer gets a reference.
+	/// let writer: CommitRef<usize> = w.head_remote_ref();
+	///
+	/// // Reader drops their reference.
+	/// // Nothing happens, an atomic count is decremented.
+	/// drop(reader);
+	///
+	/// // Writer drops their reference.
+	/// // They were the last reference, so they are
+	/// // responsible for deallocating the backing data.
+	/// drop(writer);
+	/// ```
+	pub fn head_remote_ref(&self) -> CommitRef<T> {
+		CommitRef { inner: Arc::clone(&self.remote) }
 	}
 
 	#[inline]

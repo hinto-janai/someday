@@ -144,7 +144,7 @@ pub(crate) const INIT_VEC_LEN: usize = 16;
 /// [`Vec`]'s holding onto the `Patch`'s that have and
 /// haven't been applied.
 ///
-/// Use [`with_capacity()`] to set a custom capacity.
+/// Use [`new_with_capacity()`] to set a custom capacity.
 ///
 /// ## Example
 /// ```rust
@@ -161,7 +161,7 @@ where
 #[must_use]
 /// Create a new [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
 ///
-/// This is the same as [`crate::new()`] although the
+/// This is the same as [`new()`] although the
 /// the input `capacity` determines how much capacity the
 /// `Patch` vectors will start out with.
 ///
@@ -187,7 +187,7 @@ where
 #[must_use]
 /// Create a default [`Writer`] & [`Reader`] pair
 ///
-/// This is the same as [`crate::new()`] but it does not
+/// This is the same as [`new()`] but it does not
 /// require input data, it will generate your data using
 /// [`Default::default()`].
 ///
@@ -208,7 +208,7 @@ where
 #[must_use]
 /// Create a default [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
 ///
-/// This is the same as [`crate::default`] combined with [`crate::with_capacity`].
+/// This is the same as [`default()`] combined with [`new_with_capacity()`].
 ///
 /// ## Example
 /// ```rust
