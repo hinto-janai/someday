@@ -127,7 +127,7 @@ assert_eq!(commit, "hello world!");
 assert_eq!(commit.timestamp(), 1);
 ```
 
-## Features Flags
+## Feature Flags
 These features are for (de)serialization.
 
 You can directly (de)serialize your data `T` from a:

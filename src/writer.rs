@@ -2147,7 +2147,6 @@ where
 	}
 }
 
-
 #[cfg(feature = "borsh")]
 impl<T> borsh::BorshDeserialize for Writer<T>
 where

@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 //---------------------------------------------------------------------------------------------------- Docs
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //---------------------------------------------------------------------------------------------------- Lints
 #![forbid(
@@ -204,7 +204,6 @@ where
 	new_internal::<T>(Default::default(), INIT_VEC_LEN)
 }
 
-#[inline]
 #[must_use]
 /// Create a default [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
 ///
