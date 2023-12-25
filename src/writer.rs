@@ -1380,20 +1380,43 @@ where
 	/// Compares the `Commit` that the `Reader`'s can
 	/// currently access with the `Writer`'s current local `Commit`.
 	///
-	/// This returns `true` if both:
-	/// - The data is different
-	/// - The [`Timestamp`] is different
+	/// This returns `true` if either the:
+	/// - [`Timestamp`] is different
+	/// - Data is different
+	///
+	/// ## Purpose
+	/// In correct scenarios, the `Writer`'s and `Reader`'s `Timestamp`'s
+	/// should be all that is needed to indicate if the data is different or not.
+	///
+	/// However, if your `Patch` functions are non-determistic,
+	/// the data may get out of sync.
+	///
+	/// Thus, this function is mostly meant to be used for debugging purposes.
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<String>("".into());
-	///
-	/// // Commit but don't push.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// # use std::sync::*;
+	/// // Create a non-deterministic `Writer/Reader`
+	/// // out-of-sync issue.
+	/// static STATE: Mutex<usize> = Mutex::new(1);
+	/// let (_, mut w) = someday::new::<usize>(0);
+	/// w.add(move |w, _| {
+	///     let mut state = STATE.lock().unwrap();
+	///     *state *= 10; // 1*10 the first time, 10*10 the second time...
+	///     *w = *state;
+	/// });
 	/// w.commit();
+	/// w.push();
 	///
-	/// // Writer and Reader's commit is different.
-	/// assert!(w.diff());
+	/// // Same timestamps...
+	/// assert_eq!(w.timestamp(), w.reader().head().timestamp());
+	///
+	/// // ⚠️ Out of sync data!
+	/// assert_eq!(*w.data(), 100);
+	/// assert_eq!(*w.reader().head(), 10);
+	///
+	/// // But, this function tells us the truth.
+	/// assert_eq!(w.diff(), true);
 	/// ```
 	pub fn diff(&self) -> bool
 	where T:

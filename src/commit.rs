@@ -402,9 +402,9 @@ where
 	fn into_commit_owned(self) -> CommitOwned<T>;
 
 	#[inline]
-	/// If there is a difference in `self` & `other`'s timestamps.
+	/// If there is a difference in `self` and `other`'s timestamps or data.
 	fn diff(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
-		(self.diff_timestamp(other)) && (self.diff_data(other))
+		(self.diff_timestamp(other)) || (self.diff_data(other))
 	}
 
 	#[inline]
@@ -418,7 +418,6 @@ where
 	fn diff_data(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
 		self.data() != other.data()
 	}
-
 
 	#[inline]
 	/// If `self`'s timestamp is ahead of `other`'s timestamp.
