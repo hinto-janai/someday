@@ -130,125 +130,43 @@ pub use writer::Writer;
 pub type Timestamp = usize;
 
 //---------------------------------------------------------------------------------------------------- Free functions
-/// The default `Vec` capacity for the
-/// `Patch`'s when using using `new()`.
-pub(crate) const INIT_VEC_LEN: usize = 16;
-
 #[inline]
 #[must_use]
 /// Create a new [`Writer`] & [`Reader`] pair
 ///
 /// See their documentation for writing and reading functions.
 ///
-/// This pre-allocates `16` capacity for the internal
-/// [`Vec`]'s holding onto the `Patch`'s that have and
-/// haven't been applied.
-///
-/// Use [`new_with_capacity()`] to set a custom capacity.
-///
 /// ## Example
 /// ```rust
-/// let (reader, mut writer) = someday::new::<String>("".into());
+/// let (reader, mut writer) = someday::new::<String>("hello world!".into());
+///
+/// assert_eq!(writer.data(), "hello world!");
+/// assert_eq!(writer.data_remote(), "hello world!");
 /// ```
 pub fn new<T>(data: T) -> (Reader<T>, Writer<T>)
 where
 	T: Clone,
 {
-	new_internal::<T>(data, INIT_VEC_LEN)
-}
-
-#[inline]
-#[must_use]
-/// Create a new [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
-///
-/// This is the same as [`new()`] although the
-/// the input `capacity` determines how much capacity the
-/// `Patch` vectors will start out with.
-///
-/// Use this if you are planning to [`Writer::add()`]
-/// many `Patch`'s before [`Writer::commit()`]'ing, so that
-/// the internal [`Vec`]'s don't need to reallocate so often.
-///
-/// ## Example
-/// ```rust
-/// // Can fit 128 functions without re-allocating.
-/// let (r, mut w) = someday::new_with_capacity::<String>("".into(), 128);
-/// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_patches().capacity(), 128);
-/// ```
-pub fn new_with_capacity<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
-where
-	T: Clone,
-{
-	new_internal::<T>(data, capacity)
-}
-
-#[inline]
-#[must_use]
-/// Create a default [`Writer`] & [`Reader`] pair
-///
-/// This is the same as [`new()`] but it does not
-/// require input data, it will generate your data using
-/// [`Default::default()`].
-///
-/// ## Example
-/// ```rust
-/// let (r, mut w) = someday::default::<String>();
-/// assert_eq!(*w.data(), "");
-/// assert_eq!(r.head(), "");
-/// ```
-pub fn default<T>() -> (Reader<T>, Writer<T>)
-where
-	T: Default + Clone,
-{
-	new_internal::<T>(Default::default(), INIT_VEC_LEN)
-}
-
-#[must_use]
-/// Create a default [`Writer`] & [`Reader`] pair with a specified `Patch` capacity
-///
-/// This is the same as [`default()`] combined with [`new_with_capacity()`].
-///
-/// ## Example
-/// ```rust
-/// // Can fit 128 functions without re-allocating.
-/// let (r, mut w) = someday::default_with_capacity::<String>(128);
-/// assert_eq!(w.staged().capacity(), 128);
-/// assert_eq!(w.committed_patches().capacity(), 128);
-/// ```
-pub fn default_with_capacity<T>(capacity: usize) -> (Reader<T>, Writer<T>)
-where
-	T: Default + Clone,
-{
-	new_internal::<T>(Default::default(), capacity)
-}
-
-/// Internal generic functions used by all `new()` functions above.
-fn new_internal<T>(data: T, capacity: usize) -> (Reader<T>, Writer<T>)
-where
-	T: Clone,
-{
 	use std::sync::{Arc,atomic::AtomicBool};
+
+	/// The default `Vec` capacity for the
+	/// `Patch`'s when using using `new()`.
+	const INIT_VEC_LEN: usize = 16;
 
 	let local  = CommitOwned { timestamp: 0, data };
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(arc_swap::ArcSwapAny::new(Arc::clone(&remote)));
 	let swapping = Arc::new(AtomicBool::new(false));
 
-	let reader = Reader {
-		arc: Arc::clone(&arc),
-		swapping: Arc::clone(&swapping),
-	};
-
 	let writer = Writer {
 		local: Some(local),
 		remote,
 		arc,
-		patches: Vec::with_capacity(capacity),
-		patches_old: Vec::with_capacity(capacity),
+		patches: Vec::with_capacity(INIT_VEC_LEN),
+		patches_old: Vec::with_capacity(INIT_VEC_LEN),
 		tags: std::collections::BTreeMap::new(),
 		swapping,
 	};
 
-	(reader, writer)
+	(writer.reader(), writer)
 }
