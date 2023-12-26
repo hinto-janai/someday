@@ -704,6 +704,74 @@ where
 
 	#[inline]
 	#[allow(clippy::missing_panics_doc)]
+	/// [`add()`](Writer::add) and [`commit()`](Writer::commit)
+	///
+	/// This function combines `add()` and `commit()` together.
+	/// Since these actions are done together, a return value is allowed to be specified.
+	///
+	/// For example, if you'd like to receive a large chunk of data
+	/// from your `T` instead of throwing it away:
+	/// ```rust
+	/// # use someday::*;
+	/// // Very expensive data.
+	/// let vec = (0..100_000).map(|i| format!("{i}")).collect();
+	///
+	/// let (_, mut w) = someday::new::<Vec<String>>(vec);
+	/// assert_eq!(w.timestamp(), 0);
+	/// assert_eq!(w.timestamp_remote(), 0);
+	///
+	/// let r = w.add_commit(|w, _| {
+	///     // Swap our value, and get back the strings.
+	///     // This implicitly becomes our <Return> (Vec<String>).
+	///     std::mem::take(w)
+	/// });
+	///
+	/// // We got our 100,000 `String`'s back
+	/// // instead of dropping them!
+	/// let r: Vec<String> = r;
+	///
+	/// // We got back our original strings.
+	/// for (i, string) in r.into_iter().enumerate() {
+	///     assert_eq!(format!("{i}"), string);
+	/// }
+	///
+	/// // And the `Patch` got applied to the `Writer`'s data,
+	/// // but hasn't been `push()`'ed yet.
+	/// assert!(w.data().is_empty());
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(w.timestamp_remote(), 0);
+	/// ```
+	///
+	/// # Generics
+	/// The generic inputs are:
+	/// - `Patch`
+	/// - `Return`
+	///
+	/// `Patch` is the same as [`Writer::add()`] however, it has a
+	/// `-> Return` value associated with it, this is defined by
+	/// you, using the `Return` generic.
+	///
+	/// # Timestamp
+	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
+	pub fn add_commit<Patch, Return>(&mut self, mut patch: Patch) -> Return
+	where
+		Patch: FnMut(&mut T, &T) -> Return + Send + 'static
+	{
+		// Commit `Patch` to our local data.
+		self.local_as_mut().timestamp += 1;
+		let r = patch(
+			&mut self.local.as_mut().unwrap().data,
+			&self.remote.data,
+		);
+
+		// Convert `Patch` to immediately drop return value.
+		self.patches_old.push(Box::new(move |w, r| drop(patch(w, r))));
+
+		r
+	}
+
+	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// [`add()`](Writer::add), [`commit()`](Writer::commit), and [`push()`](Writer::push)
 	///
 	/// This function combines `add()`, `commit()`, `push()` together.
