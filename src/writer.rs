@@ -14,7 +14,6 @@ use std::{
 };
 
 use crate::{
-	INIT_VEC_LEN,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
@@ -1922,7 +1921,7 @@ where
 	/// ```rust
 	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
-	/// let (_, mut w) = someday::new_with_capacity::<String>("".into(), 16);
+	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // Capacity is 16.
 	/// assert_eq!(w.committed_patches().capacity(), 16);
@@ -1956,6 +1955,35 @@ where
 	pub fn shrink_to_fit(&mut self) {
 		self.patches.shrink_to_fit();
 		self.patches_old.shrink_to_fit();
+	}
+
+	/// Reserve capacity in the `Patch` [`Vec`]'s
+	///
+	/// This calls [`Vec::reserve_exact()`] on the 2
+	/// internal `Vec`'s in [`Writer`] holding:
+	/// 1. The currently staged `Patch`'s
+	/// 2. The already committed `Patch`'s
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::{thread::*,time::*};
+	/// let (_, mut w) = someday::new::<String>("".into());
+	///
+	/// // Capacity is 16.
+	/// assert_eq!(w.committed_patches().capacity(), 16);
+	/// assert_eq!(w.staged().capacity(),            16);
+	///
+	/// // Reserve space for 48 more patches.
+	/// w.reserve_exact(48);
+	/// assert!(w.committed_patches().capacity() >= 48);
+	/// assert!(w.staged().capacity()            >= 48);
+	/// ```
+	///
+	/// # Panics
+	/// Panics if the new capacity exceeds [`isize::MAX`] bytes.
+	pub fn reserve_exact(&mut self, additional: usize) {
+		self.patches.reserve_exact(additional);
+		self.patches_old.reserve_exact(additional);
 	}
 
 	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]
@@ -2082,14 +2110,14 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
-	/// let (_, w1) = someday::default::<usize>();
+	/// let (_, w1) = someday::new::<usize>(Default::default());
 	/// let w2      = Writer::<usize>::default();
 	///
 	/// assert_eq!(*w1.data(), 0);
 	/// assert_eq!(*w2.data(), 0);
 	/// ```
 	fn default() -> Self {
-		crate::default().1
+		crate::new(Default::default()).1
 	}
 }
 
