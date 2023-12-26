@@ -1,6 +1,6 @@
 [package]
 name = "someday"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["hinto.janai <hinto.janai@protonmail.com>"]
 description = "Eventually consistent, multi version concurrency"
