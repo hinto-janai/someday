@@ -1251,7 +1251,7 @@ where
 	///
 	/// // SAFETY: now we know that we're the
 	/// // only ones holding onto this commit.
-	/// let inner_data: String = tag.try_unwrap().unwrap().data;
+	/// let inner_data: String = std::sync::Arc::try_unwrap(tag.0).unwrap().data;
 	///
 	/// // Now, let's use that old tag to overwrite our current data.
 	/// //
