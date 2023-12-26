@@ -56,7 +56,7 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
 	/// if you are the only one holding onto it.
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
-		Arc::try_unwrap(commit.inner).map_err(|inner| CommitRef { inner })
+		Arc::try_unwrap(commit.0).map_err(|arc| CommitRef(arc))
 	}
 }
 
@@ -194,93 +194,60 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 /// let string = commit.to_string();
 /// assert_eq!(string, "hello");
 /// ```
-pub struct CommitRef<T>
-where
-	T: Clone
-{
-	/// Shared pointer to a `CommitOwned<T>.
-	pub(super) inner: Arc<CommitOwned<T>>,
-}
-
-impl<T> CommitRef<T>
-where
-	T: Clone
-{
-	#[inline]
-	#[must_use]
-	/// How many other shared instances of this [`CommitRef`] exist?
-	///
-	/// This is akin to [`Arc::strong_count`].
-	pub fn count(&self) -> usize {
-		Arc::strong_count(&self.inner)
-	}
-
-	#[inline]
-	/// Cheaply convert to an [`CommitOwned`] if possible
-	///
-	/// This is akin to [`Arc::try_unwrap`].
-	///
-	/// # Errors
-	/// This attempts to take ownership of the backing data
-	/// inside this [`CommitRef`]. If there are other references
-	/// ([`CommitRef::count()`]) then this function will fail
-	/// and return the `self` input back.
-	///
-	/// If there are no other references, this will cheaply
-	/// acquire ownership of the `T` data.
-	pub fn try_unwrap(self) -> Result<CommitOwned<T>, Self> {
-		Arc::try_unwrap(self.inner).map_err(|inner| Self { inner })
-	}
-}
+pub struct CommitRef<T: Clone>
+(
+	/// Shared pointer to a `CommitOwned<T>`.
+	pub Arc<CommitOwned<T>>,
+);
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> std::ops::Deref for CommitRef<T> {
 	type Target = T;
 	#[inline]
 	fn deref(&self) -> &Self::Target {
-		&self.inner.data
+		&self.0.data
 	}
 }
 
 impl<T: Clone> AsRef<T> for CommitRef<T> {
 	#[inline]
 	fn as_ref(&self) -> &T {
-		&self.inner.data
+		&self.0.data
 	}
 }
 
 impl<T: Clone> std::borrow::Borrow<T> for CommitRef<T> {
 	#[inline]
 	fn borrow(&self) -> &T {
-		&self.inner.data
+		&self.0.data
 	}
 }
 
 impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitRef<T> {
 	#[inline]
 	fn eq(&self, other: &T) -> bool {
-		self.inner.data == *other
+		self.0.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitRef<T> {
 	#[inline]
 	fn eq(&self, other: &str) -> bool {
-		self.inner.data == *other
+		self.0.data == *other
 	}
 }
 
 impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
 	#[inline]
 	fn eq(&self, other: &[u8]) -> bool {
-		self.inner.data == *other
+		self.0.data == *other
 	}
 }
 
 impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
 	#[inline]
 	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		self.inner.data.partial_cmp(other)
+		self.0.data.partial_cmp(other)
 	}
 }
 
@@ -291,14 +258,14 @@ macro_rules! impl_traits {
 			impl PartialEq<&$target> for CommitRef<$from> {
 				#[inline]
 				fn eq(&self, other: &&$target) -> bool {
-					let s: &$target = &self.inner.data;
+					let s: &$target = &self.0.data;
 					s == *other
 				}
 			}
 			impl PartialOrd<&$target> for CommitRef<$from> {
 				#[inline]
 				fn partial_cmp(&self, other: &&$target) -> Option<std::cmp::Ordering> {
-					let s: &$target = &self.inner.data;
+					let s: &$target = &self.0.data;
 					s.partial_cmp(*other)
 				}
 			}
@@ -306,19 +273,20 @@ macro_rules! impl_traits {
 			impl AsRef<$target> for CommitRef<$from> {
 				#[inline]
 				fn as_ref(&self) -> &$target {
-					self.inner.data.as_ref()
+					self.0.data.as_ref()
 				}
 			}
 
 			impl std::borrow::Borrow<$target> for CommitRef<$from> {
 				#[inline]
 				fn borrow(&self) -> &$target {
-					self.inner.data.as_ref()
+					self.0.data.as_ref()
 				}
 			}
 		)*
 	};
 }
+
 impl_traits! { str =>
 	String,
 	Box<str>,
@@ -326,6 +294,7 @@ impl_traits! { str =>
 	std::rc::Rc<str>,
 }
 impl_traits! { [u8] =>
+	Vec<u8>,
 	Box<[u8]>,
 	Arc<[u8]>,
 	std::rc::Rc<[u8]>,
@@ -333,7 +302,7 @@ impl_traits! { [u8] =>
 
 impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitRef<T> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		std::fmt::Display::fmt(&self.inner.data, f)
+		std::fmt::Display::fmt(&self.0.data, f)
 	}
 }
 
@@ -435,21 +404,21 @@ where
 impl<T: Clone + PartialEq> PartialEq<CommitRef<T>> for &CommitOwned<T> {
 	#[inline]
 	fn eq(&self, other: &CommitRef<T>) -> bool {
-		**self == **other.inner
+		**self == **other.0
 	}
 }
 
 impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for &CommitOwned<T> {
 	#[inline]
 	fn eq(&self, other: &&CommitRef<T>) -> bool {
-		**self == **other.inner
+		**self == **other.0
 	}
 }
 
 impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for CommitOwned<T> {
 	#[inline]
 	fn eq(&self, other: &&CommitRef<T>) -> bool {
-		**self == **other.inner
+		**self == **other.0
 	}
 }
 
@@ -467,21 +436,21 @@ where
 {
 	#[inline]
 	fn timestamp(&self) -> Timestamp {
-		self.inner.timestamp
+		self.0.timestamp
 	}
 	#[inline]
 	fn data(&self) -> &T {
-		&self.inner.data
+		&self.0.data
 	}
 
 	#[inline]
 	fn to_data(&self) -> T {
-		self.inner.data.clone()
+		self.0.data.clone()
 	}
 
 	#[inline]
 	fn into_data(self) -> T {
-		match Arc::try_unwrap(self.inner) {
+		match Arc::try_unwrap(self.0) {
 			Ok(s) => s.data,
 			Err(s) => s.data.clone(),
 		}
@@ -490,14 +459,14 @@ where
 	#[inline]
 	fn to_commit_owned(&self) -> CommitOwned<T> {
 		CommitOwned {
-			timestamp: self.inner.timestamp,
-			data: self.inner.data.clone(),
+			timestamp: self.0.timestamp,
+			data: self.0.data.clone(),
 		}
 	}
 
 	#[inline]
 	fn into_commit_owned(self) -> CommitOwned<T> where T: Clone {
-		match Arc::try_unwrap(self.inner) {
+		match Arc::try_unwrap(self.0) {
 			Ok(s) => s,
 			Err(s) => CommitOwned {
 				timestamp: s.timestamp,
