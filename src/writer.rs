@@ -708,7 +708,11 @@ where
 	/// This function combines `add()` and `commit()` together.
 	/// Since these actions are done together, a return value is allowed to be specified.
 	///
-	/// For example, if you'd like to receive a large chunk of data
+	/// This function will apply your current [`Writer::patches()`] first,
+	/// then your input `patch`, then `commit()` them.
+	///
+	/// # Example
+	/// If you'd like to receive a large chunk of data
 	/// from your `T` instead of throwing it away:
 	/// ```rust
 	/// # use someday::*;
@@ -719,15 +723,24 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	/// assert_eq!(w.timestamp_remote(), 0);
 	///
-	/// let r = w.add_commit(|w, _| {
+	/// // Add some patches normally.
+	/// // These will be applied in `add_commit()` below.
+	/// for i in 100_000..200_000 {
+	///     w.add(move |w, _| w.push(format!("{i}")));
+	/// }
+	///
+	/// let (commit_info, r) = w.add_commit(|w, _| {
 	///     // Swap our value, and get back the strings.
 	///     // This implicitly becomes our <Return> (Vec<String>).
 	///     std::mem::take(w)
 	/// });
 	///
-	/// // We got our 100,000 `String`'s back
+	/// // We got our 200,000 `String`'s back
 	/// // instead of dropping them!
 	/// let r: Vec<String> = r;
+	/// assert_eq!(r.len(), 200_000);
+	/// assert_eq!(commit_info.patches, 100_001); // 100_000 normal patches + 1 `add_commit()`
+	/// assert_eq!(commit_info.timestamp_diff, 1);
 	///
 	/// // We got back our original strings.
 	/// for (i, string) in r.into_iter().enumerate() {
@@ -752,21 +765,33 @@ where
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit<Patch, Return>(&mut self, mut patch: Patch) -> Return
+	pub fn add_commit<Patch, Return>(&mut self, mut patch: Patch) -> (CommitInfo, Return)
 	where
 		Patch: FnMut(&mut T, &T) -> Return + Send + 'static
 	{
-		// Commit `Patch` to our local data.
-		self.local_as_mut().timestamp += 1;
+		// Commit the current patches.
+		let mut commit_info = self.commit();
+
+		// `commit()` won't update the timestamp
+		// if there we no previous patches,
+		// so make sure we do that.
+		if commit_info.patches == 0 {
+			self.local_as_mut().timestamp += 1;
+			commit_info.timestamp_diff += 1;
+		}
+		// We're adding 1 more patch regardless.
+		commit_info.patches += 1;
+
+		// Commit the _input_ patch to our local data.
 		let r = patch(
 			&mut self.local.as_mut().unwrap().data,
 			&self.remote.data,
 		);
 
-		// Convert `Patch` to immediately drop return value.
+		// Convert patch to immediately drop return value.
 		self.patches_old.push(Box::new(move |w, r| drop(patch(w, r))));
 
-		r
+		(commit_info, r)
 	}
 
 	#[inline]
