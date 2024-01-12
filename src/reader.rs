@@ -430,7 +430,7 @@ where
 	#[inline]
 	/// This will call `head()`, then serialize your `T`.
 	///
-	/// `T::serialize(self.head().as_ref(), serializer)`.
+	/// `T::serialize(self.head().data(), serializer)`.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -444,7 +444,7 @@ where
     where
         S: serde::Serializer,
     {
-        T::serialize(self.head().as_ref(), serializer)
+        T::serialize(self.head().data(), serializer)
     }
 }
 
@@ -456,7 +456,7 @@ where
 	#[inline]
 	/// This will call `head()`, then serialize your `T`.
 	///
-	/// `T::encode(self.head().as_ref(), encoder)`
+	/// `T::encode(self.head().data(), encoder)`
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -468,7 +468,7 @@ where
 	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
 	/// ```
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-		T::encode(self.head().as_ref(), encoder)
+		T::encode(self.head().data(), encoder)
 	}
 }
 
@@ -478,7 +478,7 @@ where
 	T: Clone + borsh::BorshSerialize
 {
 	#[inline]
-	/// This will call `head()`, then serialize your `T`.
+	/// This will call `self.head().data()`, then serialize your `T`.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -489,6 +489,6 @@ where
 	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
 	/// ```
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-		T::serialize(self.head().as_ref(), writer)
+		T::serialize(self.head().data(), writer)
 	}
 }
