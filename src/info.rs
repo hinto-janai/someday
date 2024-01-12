@@ -8,6 +8,7 @@ use crate::{
 	Timestamp,
 	commit::CommitOwned,
 };
+use std::num::NonZeroUsize;
 #[allow(unused_imports)] // docs
 use crate::{Commit,Writer,Reader};
 
@@ -107,9 +108,9 @@ where
 	/// [`Writer::head_remote`]
 	pub head_remote: &'a CommitOwned<T>,
 	/// [`Writer::head_readers`]
-	pub head_readers: usize,
+	pub head_readers: NonZeroUsize,
 	/// [`Writer::reader_count`]
-	pub reader_count: usize,
+	pub reader_count: NonZeroUsize,
 	/// [`Writer::timestamp`]
 	pub timestamp: Timestamp,
 	/// [`Writer::timestamp_remote`]

@@ -11,6 +11,7 @@ use std::{
 	time::Duration,
 	borrow::Borrow,
 	collections::BTreeMap,
+	num::NonZeroUsize,
 };
 
 use crate::{
@@ -1885,8 +1886,14 @@ where
 	/// // we just leaked them)
 	/// assert_eq!(w.head_readers(), 10);
 	/// ```
-	pub fn head_readers(&self) -> usize {
-		Arc::strong_count(&self.remote)
+	pub fn head_readers(&self) -> NonZeroUsize {
+		let count = Arc::strong_count(&self.remote);
+		debug_assert!(count != 0, "head_readers() returned 0");
+
+		// SAFETY:
+		// The fact that we have are passing an Arc
+		// means this will always at-least output 1.
+		unsafe { NonZeroUsize::new_unchecked(count) }
 	}
 
 	#[inline]
@@ -1912,8 +1919,14 @@ where
 	/// // Now there are 10.
 	/// assert_eq!(w.reader_count(), 10);
 	/// ```
-	pub fn reader_count(&self) -> usize {
-		Arc::strong_count(&self.arc)
+	pub fn reader_count(&self) -> NonZeroUsize {
+		let count = Arc::strong_count(&self.remote);
+		debug_assert!(count != 0, "reader_count() returned 0");
+
+		// SAFETY:
+		// The fact that we have are passing an Arc
+		// means this will always at-least output 1.
+		unsafe { NonZeroUsize::new_unchecked(count) }
 	}
 
 	/// Get the current status on the [`Writer`] and [`Reader`]

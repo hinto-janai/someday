@@ -1,13 +1,17 @@
 //! Reader<T>
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{sync::{
-	Arc,
-	atomic::{
-		AtomicBool,
-		Ordering,
+use std::{
+	sync::{
+		Arc,
+		atomic::{
+			AtomicBool,
+			Ordering,
+		},
 	},
-}, time::Duration};
+	time::Duration,
+	num::NonZeroUsize,
+};
 use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
@@ -382,11 +386,18 @@ where
 
 	#[inline]
 	#[must_use]
+	#[allow(clippy::missing_panics_doc)]
 	/// How many [`Reader`]'s are there?
 	///
 	/// This is the same as [`Writer::reader_count()`].
-	pub fn reader_count(&self) -> usize {
-		Arc::strong_count(&self.arc)
+	pub fn reader_count(&self) -> NonZeroUsize {
+		let count = Arc::strong_count(&self.arc);
+		debug_assert!(count != 0, "reader_count() returned 0");
+
+		// SAFETY:
+		// The fact that we have are passing an Arc
+		// means this will always at-least output 1.
+		unsafe { NonZeroUsize::new_unchecked(count) }
 	}
 
 	#[inline]
