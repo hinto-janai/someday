@@ -69,6 +69,7 @@
 	clippy::exhaustive_structs,
 	clippy::exhaustive_enums,
 	clippy::panic,
+	clippy::impl_trait_in_params,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
