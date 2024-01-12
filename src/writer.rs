@@ -66,7 +66,7 @@ use crate::{
 /// assert_eq!(w.timestamp(), 0);
 /// assert_eq!(r.timestamp(), 0);
 /// assert_eq!(w.data(), "");
-/// assert_eq!(r.head(), "");
+/// assert_eq!(r.head().data(), "");
 ///
 /// // The Writer can add many `Patch`'s
 /// w.add(|w, _| w.push_str("abc"));
@@ -80,7 +80,7 @@ use crate::{
 /// assert_eq!(w.timestamp(), 0);
 /// assert_eq!(r.timestamp(), 0);
 /// assert_eq!(w.data(), "");
-/// assert_eq!(r.head(), "");
+/// assert_eq!(r.head().data(), "");
 ///
 /// // We can see our "staged" patches here.
 /// let staged = w.staged();
@@ -101,7 +101,7 @@ use crate::{
 /// assert_eq!(w.timestamp(), 1);
 /// assert_eq!(r.timestamp(), 0);
 /// assert_eq!(w.data(), "abcdefghi");
-/// assert_eq!(r.head(), "");
+/// assert_eq!(r.head().data(), "");
 ///
 /// // Now we push.
 /// let push_info: PushInfo = w.push();
@@ -114,7 +114,7 @@ use crate::{
 /// assert_eq!(w.timestamp(), 1);
 /// assert_eq!(r.timestamp(), 1);
 /// assert_eq!(w.data(), "abcdefghi");
-/// assert_eq!(r.head(), "abcdefghi");
+/// assert_eq!(r.head().data(), "abcdefghi");
 /// ```
 ///
 /// ## Invariants
@@ -259,7 +259,7 @@ where
 	/// // was non-deterministic, so now the `Writer`
 	/// // and `Reader` have non-matching data...
 	/// assert_eq!(*w.data(), 100);
-	/// assert_eq!(*w.reader().head(), 10);
+	/// assert_eq!(*w.reader().head().data(), 10);
 	/// ```
 	pub fn add<Patch>(&mut self, patch: Patch)
 	where
@@ -315,7 +315,7 @@ where
 	/// w.commit();
 	///
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(*w.head(), 123);
+	/// assert_eq!(*w.head().data(), 123);
 	/// ```
 	///
 	/// # Timestamp
@@ -339,7 +339,7 @@ where
 	/// // There was nothing to commit,
 	/// // so our timestamp did not change.
 	/// assert_eq!(w.timestamp(), 0);
-	/// assert_eq!(*w.head(), 0);
+	/// assert_eq!(*w.head().data(), 0);
 	/// ```
 	pub fn commit(&mut self) -> CommitInfo {
 		let patch_len = self.patches.len();
@@ -945,7 +945,7 @@ where
 	///
 	/// // No changes yet.
 	/// assert_eq!(*w.data(), 0);
-	/// assert_eq!(r.head(),  0);
+	/// assert_eq!(*r.head().data(),  0);
 	///
 	/// // Writer commits some changes.
 	/// w.add(|w, _| *w += 1);
@@ -954,7 +954,7 @@ where
 	/// //  Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
 	/// // Reader doesn't see change.
-	/// assert_eq!(r.head(), 0);
+	/// assert_eq!(*r.head().data(), 0);
 	/// ```
 	pub const fn data(&self) -> &T {
 		&self.local_as_ref().data
@@ -1105,17 +1105,17 @@ where
 	/// // Commit local changes.
 	/// w.add(|w, _| w.push_str("hello"));
 	/// w.commit();
-	/// assert_eq!(w.head(), "hello");
+	/// assert_eq!(w.head().data(), "hello");
 	///
 	/// // Reader's sees nothing
-	/// assert_eq!(r.head(), "");
+	/// assert_eq!(r.head().data(), "");
 	///
 	/// // Pull from the Reader.
 	/// let pull_status: PullInfo<String> = w.pull().unwrap();
-	/// assert_eq!(pull_status.old_writer_data, "hello");
+	/// assert_eq!(pull_status.old_writer_commit.data(), "hello");
 	///
 	/// // We're back to square 1.
-	/// assert_eq!(w.head(), "");
+	/// assert_eq!(w.head().data(), "");
 	///
 	/// // If we try to pull again, nothing will happen
 	/// // since we are already synced with `Reader`s.
@@ -1132,7 +1132,7 @@ where
 		let commits_reverted = std::num::NonZeroUsize::new(self.timestamp_diff()).unwrap();
 
 		// INVARIANT: `local` must be initialized after push()
-		let old_writer_data = self.local.take().unwrap();
+		let old_writer_commit = self.local.take().unwrap();
 		self.local = Some((*self.remote).clone());
 
 		// Delete old functions, we won't need
@@ -1142,7 +1142,7 @@ where
 
 		Some(PullInfo {
 			commits_reverted,
-			old_writer_data,
+			old_writer_commit,
 		})
 	}
 
@@ -1172,7 +1172,7 @@ where
 	/// assert_eq!(w.timestamp(), 1);
 	///
 	/// // Reader's sees them.
-	/// assert_eq!(r.head(), "hello");
+	/// assert_eq!(r.head().data(), "hello");
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
@@ -1186,7 +1186,7 @@ where
 	///
 	/// // Overwrite the Writer with arbitrary data.
 	/// let old_data = w.overwrite(String::from("world")); // <- commit 5
-	/// assert_eq!(old_data, "hello");
+	/// assert_eq!(old_data.data(), "hello");
 	/// // Committed functions were deleted.
 	/// assert_eq!(w.committed_patches().len(), 0);
 	///
@@ -1194,7 +1194,7 @@ where
 	/// w.push();
 	///
 	/// // Readers see change.
-	/// assert_eq!(r.head(), "world");
+	/// assert_eq!(r.head().data(), "world");
 	///
 	/// // 5 commits total.
 	/// assert_eq!(w.timestamp(), 5);
@@ -1276,7 +1276,7 @@ where
 	///
 	/// // SAFETY: now we know that we're the
 	/// // only ones holding onto this commit.
-	/// let inner_data: String = std::sync::Arc::try_unwrap(tag.0).unwrap().data;
+	/// let inner_data: String = std::sync::Arc::try_unwrap(tag).unwrap().data;
 	///
 	/// // Now, let's use that old tag to overwrite our current data.
 	/// //
@@ -1506,7 +1506,7 @@ where
 	///
 	/// // ⚠️ Out of sync data!
 	/// assert_eq!(*w.data(), 100);
-	/// assert_eq!(*w.reader().head(), 10);
+	/// assert_eq!(*w.reader().head().data(), 10);
 	///
 	/// // But, this function tells us the truth.
 	/// assert_eq!(w.diff(), true);
@@ -2048,15 +2048,15 @@ where
 	/// w.add(|w, _| w.push_str("b"));
 	///
 	/// let (
-	///     writer_data,
-	///     reader_data,
+	///     writer_commit,
+	///     reader_commit,
 	///     staged_changes,
 	///     committed_changes,
 	///     tags,
 	/// ) = w.into_inner();
 	///
-	/// assert_eq!(writer_data, "a");
-	/// assert_eq!(reader_data, ""); // We never `push()`'ed, so Readers saw nothing.
+	/// assert_eq!(writer_commit.data(), "a");
+	/// assert_eq!(reader_commit.data(), ""); // We never `push()`'ed, so Readers saw nothing.
 	/// assert_eq!(staged_changes.len(), 1);
 	/// assert_eq!(committed_changes.len(), 1);
 	/// assert_eq!(tags.len(), 1);

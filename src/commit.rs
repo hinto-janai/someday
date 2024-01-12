@@ -77,11 +77,12 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 /// This is a [`Commit`] of data received from operations
 /// like [`Writer::head()`] and [`Reader::head()`].
 ///
-/// It is shared data, and cheaply [`Clone`]-able - this is just an
-/// alias for [`Arc`] of a [`CommitOwned<T>`] that implements [`Clone`].
+/// It is shared data, and cheaply [`Clone`]-able.
+///
+/// This is just an alias for [`Arc<CommitOwned<T>>`].
 ///
 /// [`Commit`] is implemented on this (`Arc<CommitOwned<T>>`).
-pub type CommitRef<T: Clone> = Arc<CommitOwned<T>>;
+pub type CommitRef<T> = Arc<CommitOwned<T>>;
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {

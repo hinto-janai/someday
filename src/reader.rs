@@ -67,7 +67,7 @@ use crate::{
 ///     // Pretty cheap operation.
 ///     let another_reader = reader.clone();
 ///     // We can send Reader's to other threads.
-///     std::thread::spawn(move || assert_eq!(another_reader.head(), ""));
+///     std::thread::spawn(move || assert_eq!(another_reader.head().data(), ""));
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
@@ -77,7 +77,7 @@ use crate::{
 /// assert_eq!(writer.timestamp(), 0);
 /// assert_eq!(reader.timestamp(), 0);
 /// assert_eq!(*writer.data(), "");
-/// assert_eq!(reader.head(), "");
+/// assert_eq!(reader.head().data(), "");
 ///
 /// // Move the Writer into another thread
 /// // and make it do some work in the background.
@@ -175,7 +175,7 @@ where
 	/// assert_eq!(w.timestamp(), 0);
 	/// assert_eq!(r.timestamp(), 0);
 	/// assert_eq!(w.data(), "");
-	/// assert_eq!(r.head(), "");
+	/// assert_eq!(r.head().data(), "");
 	///
 	/// // Writer commits some changes locally.
 	/// w.add(|w, _| *w = "hello".into());

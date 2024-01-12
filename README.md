@@ -87,7 +87,7 @@ let (r, mut w) = someday::new("hello".to_string());
 
 // The readers see the data.
 let commit: CommitRef<String> = r.head();
-assert_eq!(commit, "hello");
+assert_eq!(commit.data(), "hello");
 assert_eq!(commit.timestamp(), 0);
 
 // Writer writes some data, but does not commit.
@@ -99,12 +99,12 @@ assert_eq!(*data, "hello");
 assert_eq!(w.staged().len(), 1);
 
 // Readers still see old data.
-assert_eq!(r.head(), "hello");
+assert_eq!(r.head().data(), "hello");
 
 // Writer writes some more data.
 w.add(|w, _| w.push_str("!"));
 // Readers still see old data.
-assert_eq!(r.head(), "hello");
+assert_eq!(r.head().data(), "hello");
 
 // Writer commits their patches.
 let commit_info: CommitInfo = w.commit();
@@ -113,7 +113,7 @@ let commit_info: CommitInfo = w.commit();
 assert_eq!(commit_info.patches, 2);
 
 // Readers still see old data.
-assert_eq!(r.head(), "hello");
+assert_eq!(r.head().data(), "hello");
 
 // Writer finally reveals those
 // changes by calling `push()`.
@@ -122,7 +122,7 @@ assert_eq!(push_info.commits, 1);
 
 // Now readers see updates.
 let commit: CommitRef<String> = r.head();
-assert_eq!(commit, "hello world!");
+assert_eq!(commit.data(), "hello world!");
 // Each call to `.commit()` added 1 to the timestamp.
 assert_eq!(commit.timestamp(), 1);
 ```

@@ -80,9 +80,9 @@ where
 	/// and they [`Writer::pull()`]'ed when the [`Reader`]'s
 	/// [`Timestamp`] was `3`, this field would hold `2`.
 	pub commits_reverted: std::num::NonZeroUsize,
-	/// The fully owned local data the [`Writer`] had before
+	/// The owned [`Commit`] the [`Writer`] had before
 	/// replacing it with the [`Reader`]'s data.
-	pub old_writer_data: CommitOwned<T>,
+	pub old_writer_commit: CommitOwned<T>,
 }
 
 #[allow(clippy::module_name_repetitions, clippy::type_complexity)]
