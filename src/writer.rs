@@ -1862,7 +1862,7 @@ where
 	/// let (_, mut w) = someday::new::<String>("".into());
 	///
 	/// // The Writer, `w` holds 2 strong counts.
-	/// assert_eq!(w.head_readers(), 2);
+	/// assert_eq!(w.head_count().get(), 2);
 	///
 	/// // Create and leak 8 Reader's.
 	/// // Note however, the above Reader's
@@ -1873,7 +1873,7 @@ where
 	///     std::mem::forget(reader);
 	/// }
 	/// let r = w.reader();
-	/// assert_eq!(w.head_readers(), 2);
+	/// assert_eq!(w.head_count().get(), 2);
 	///
 	/// // Leak the actual data 8 times.
 	/// for i in 0..8 {
@@ -1884,11 +1884,11 @@ where
 	/// // Now there are 10 strong references.
 	/// // (which will never be reclaimed since
 	/// // we just leaked them)
-	/// assert_eq!(w.head_readers(), 10);
+	/// assert_eq!(w.head_count().get(), 10);
 	/// ```
-	pub fn head_readers(&self) -> NonZeroUsize {
+	pub fn head_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.remote);
-		debug_assert!(count != 0, "head_readers() returned 0");
+		debug_assert!(count != 0, "head_count() returned 0");
 
 		// SAFETY:
 		// The fact that we have are passing an Arc
@@ -1899,7 +1899,7 @@ where
 	#[inline]
 	/// How many [`Reader`]'s are there?
 	///
-	/// Unlike [`Writer::head_readers()`], this doesn't count references
+	/// Unlike [`Writer::head_count()`], this doesn't count references
 	/// to the current data, it counts how many `Reader` objects are in existence.
 	///
 	/// ```rust
@@ -1908,7 +1908,7 @@ where
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // 2 Reader's (the Writer counts as a Reader).
-	/// assert_eq!(w.reader_count(), 2);
+	/// assert_eq!(w.reader_count().get(), 2);
 	///
 	/// // Create and leak 8 Reader's.
 	/// for i in 0..8 {
@@ -1917,10 +1917,10 @@ where
 	/// }
 	///
 	/// // Now there are 10.
-	/// assert_eq!(w.reader_count(), 10);
+	/// assert_eq!(w.reader_count().get(), 10);
 	/// ```
 	pub fn reader_count(&self) -> NonZeroUsize {
-		let count = Arc::strong_count(&self.remote);
+		let count = Arc::strong_count(&self.arc);
 		debug_assert!(count != 0, "reader_count() returned 0");
 
 		// SAFETY:
@@ -1942,7 +1942,7 @@ where
 			committed_patches: self.committed_patches(),
 			head: self.head(),
 			head_remote: self.head_remote(),
-			head_readers: self.head_readers(),
+			head_count: self.head_count(),
 			reader_count: self.reader_count(),
 			timestamp: self.timestamp(),
 			timestamp_remote: self.timestamp_remote(),
