@@ -33,6 +33,9 @@ jobs:
         path: target
         key: ${{ matrix.os }}
 
+    - name: Doc
+      run: cargo doc --release --all-features
+
     - name: Clippy
       run: cargo clippy --release --all-features
 
