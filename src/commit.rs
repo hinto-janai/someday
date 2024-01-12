@@ -56,106 +56,8 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
 	/// if you are the only one holding onto it.
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
-		Arc::try_unwrap(commit.0).map_err(|arc| CommitRef(arc))
+		Arc::try_unwrap(commit)
 	}
-}
-
-impl<T: Clone> std::ops::Deref for CommitOwned<T> {
-	type Target = T;
-	#[inline]
-	fn deref(&self) -> &Self::Target {
-		&self.data
-	}
-}
-
-impl<T: Clone> AsRef<T> for CommitOwned<T> {
-	#[inline]
-	fn as_ref(&self) -> &T {
-		&self.data
-	}
-}
-
-impl<T: Clone> std::borrow::Borrow<T> for CommitOwned<T> {
-	#[inline]
-	fn borrow(&self) -> &T {
-		&self.data
-	}
-}
-
-impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &T) -> bool {
-		self.data == *other
-	}
-}
-
-impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &str) -> bool {
-		self.data == *other
-	}
-}
-
-impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &[u8]) -> bool {
-		self.data == *other
-	}
-}
-
-impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitOwned<T> {
-	#[inline]
-	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		self.data.partial_cmp(other)
-	}
-}
-
-/// Implement traits on `CommitOwned`
-macro_rules! impl_traits {
-	($target:ty => $($from:ty),* $(,)?) => {
-		$(
-			impl PartialEq<&$target> for CommitOwned<$from> {
-				#[inline]
-				fn eq(&self, other: &&$target) -> bool {
-					let s: &$target = &self.data;
-					s == *other
-				}
-			}
-
-			impl PartialOrd<&$target> for CommitOwned<$from> {
-				#[inline]
-				fn partial_cmp(&self, other: &&$target) -> Option<std::cmp::Ordering> {
-					let s: &$target = &self.data;
-					s.partial_cmp(*other)
-				}
-			}
-
-			impl AsRef<$target> for CommitOwned<$from> {
-				#[inline]
-				fn as_ref(&self) -> &$target {
-					self.data.as_ref()
-				}
-			}
-
-			impl std::borrow::Borrow<$target> for CommitOwned<$from> {
-				#[inline]
-				fn borrow(&self) -> &$target {
-					self.data.as_ref()
-				}
-			}
-		)*
-	};
-}
-impl_traits! { str =>
-	String,
-	Box<str>,
-	Arc<str>,
-	std::rc::Rc<str>,
-}
-impl_traits! { [u8] =>
-	Box<[u8]>,
-	Arc<[u8]>,
-	std::rc::Rc<[u8]>,
 }
 
 impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
@@ -166,146 +68,22 @@ impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
 
 //---------------------------------------------------------------------------------------------------- CommitRef
 #[allow(clippy::module_name_repetitions)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[derive(Clone,Debug,Hash,PartialEq,PartialOrd,Eq,Ord)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+// #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+// #[derive(Clone,Debug,Hash,PartialEq,PartialOrd,Eq,Ord)]
 /// Cheaply cloneable snapshot of some data `T` and its [`Timestamp`]
 ///
 /// This is a [`Commit`] of data received from operations
 /// like [`Writer::head()`] and [`Reader::head()`].
 ///
-/// It is shared data, and cheaply [`Clone`]-able (it is an [`Arc`] internally).
+/// It is shared data, and cheaply [`Clone`]-able - this is just an
+/// alias for [`Arc`] of a [`CommitOwned<T>`] that implements [`Clone`].
 ///
-/// To get the inner data, use [`CommitRef::data()`].
-///
-/// [`CommitRef`] also implements convenience traits like [`PartialEq`] for your `T`:
-/// ```rust
-/// # use someday::*;
-/// let (reader, _) = someday::new::<String>("hello".into());
-///
-/// let commit: CommitRef<String> = reader.head();
-///
-/// // `PartialEq` the CommitRef directly with a string
-/// assert_eq!(commit, "hello");
-///
-/// // String implements `Display`, so CommitRef also
-/// // implements `Display` and can call `.to_string()`.
-/// let string = commit.to_string();
-/// assert_eq!(string, "hello");
-/// ```
-pub struct CommitRef<T: Clone>
-(
-	/// Shared pointer to a `CommitOwned<T>`.
-	pub Arc<CommitOwned<T>>,
-);
+/// [`Commit`] is implemented on this (`Arc<CommitOwned<T>>`).
+pub type CommitRef<T: Clone> = Arc<CommitOwned<T>>;
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
-impl<T: Clone> std::ops::Deref for CommitRef<T> {
-	type Target = T;
-	#[inline]
-	fn deref(&self) -> &Self::Target {
-		&self.0.data
-	}
-}
-
-impl<T: Clone> AsRef<T> for CommitRef<T> {
-	#[inline]
-	fn as_ref(&self) -> &T {
-		&self.0.data
-	}
-}
-
-impl<T: Clone> std::borrow::Borrow<T> for CommitRef<T> {
-	#[inline]
-	fn borrow(&self) -> &T {
-		&self.0.data
-	}
-}
-
-impl<T: Clone + PartialEq<T>> PartialEq<T> for CommitRef<T> {
-	#[inline]
-	fn eq(&self, other: &T) -> bool {
-		self.0.data == *other
-	}
-}
-
-impl<T: Clone + PartialEq<str>> PartialEq<str> for CommitRef<T> {
-	#[inline]
-	fn eq(&self, other: &str) -> bool {
-		self.0.data == *other
-	}
-}
-
-impl<T: Clone + PartialEq<[u8]>> PartialEq<[u8]> for CommitRef<T> {
-	#[inline]
-	fn eq(&self, other: &[u8]) -> bool {
-		self.0.data == *other
-	}
-}
-
-impl<T: Clone + PartialOrd<T>> PartialOrd<T> for CommitRef<T> {
-	#[inline]
-	fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
-		self.0.data.partial_cmp(other)
-	}
-}
-
-/// Implement traits on `CommitRef`.
-macro_rules! impl_traits {
-	($target:ty => $($from:ty),* $(,)?) => {
-		$(
-			impl PartialEq<&$target> for CommitRef<$from> {
-				#[inline]
-				fn eq(&self, other: &&$target) -> bool {
-					let s: &$target = &self.0.data;
-					s == *other
-				}
-			}
-			impl PartialOrd<&$target> for CommitRef<$from> {
-				#[inline]
-				fn partial_cmp(&self, other: &&$target) -> Option<std::cmp::Ordering> {
-					let s: &$target = &self.0.data;
-					s.partial_cmp(*other)
-				}
-			}
-
-			impl AsRef<$target> for CommitRef<$from> {
-				#[inline]
-				fn as_ref(&self) -> &$target {
-					self.0.data.as_ref()
-				}
-			}
-
-			impl std::borrow::Borrow<$target> for CommitRef<$from> {
-				#[inline]
-				fn borrow(&self) -> &$target {
-					self.0.data.as_ref()
-				}
-			}
-		)*
-	};
-}
-
-impl_traits! { str =>
-	String,
-	Box<str>,
-	Arc<str>,
-	std::rc::Rc<str>,
-}
-impl_traits! { [u8] =>
-	Vec<u8>,
-	Box<[u8]>,
-	Arc<[u8]>,
-	std::rc::Rc<[u8]>,
-}
-
-impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitRef<T> {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		std::fmt::Display::fmt(&self.0.data, f)
-	}
-}
-
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 	#[inline]
 	fn from(reader: &Reader<T>) -> Self {
@@ -401,27 +179,6 @@ where
 	}
 }
 
-impl<T: Clone + PartialEq> PartialEq<CommitRef<T>> for &CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &CommitRef<T>) -> bool {
-		**self == **other.0
-	}
-}
-
-impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for &CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &&CommitRef<T>) -> bool {
-		**self == **other.0
-	}
-}
-
-impl<T: Clone + PartialEq> PartialEq<&CommitRef<T>> for CommitOwned<T> {
-	#[inline]
-	fn eq(&self, other: &&CommitRef<T>) -> bool {
-		**self == **other.0
-	}
-}
-
 /// Sealed trait module
 mod private {
 	/// Sealed trait, prevents non-pub(crate) impls
@@ -436,21 +193,21 @@ where
 {
 	#[inline]
 	fn timestamp(&self) -> Timestamp {
-		self.0.timestamp
+		self.timestamp
 	}
 	#[inline]
 	fn data(&self) -> &T {
-		&self.0.data
+		&self.data
 	}
 
 	#[inline]
 	fn to_data(&self) -> T {
-		self.0.data.clone()
+		self.data.clone()
 	}
 
 	#[inline]
 	fn into_data(self) -> T {
-		match Arc::try_unwrap(self.0) {
+		match Self::try_unwrap(self) {
 			Ok(s) => s.data,
 			Err(s) => s.data.clone(),
 		}
@@ -459,14 +216,14 @@ where
 	#[inline]
 	fn to_commit_owned(&self) -> CommitOwned<T> {
 		CommitOwned {
-			timestamp: self.0.timestamp,
-			data: self.0.data.clone(),
+			timestamp: self.timestamp,
+			data: self.data.clone(),
 		}
 	}
 
 	#[inline]
 	fn into_commit_owned(self) -> CommitOwned<T> where T: Clone {
-		match Arc::try_unwrap(self.0) {
+		match Self::try_unwrap(self) {
 			Ok(s) => s,
 			Err(s) => CommitOwned {
 				timestamp: s.timestamp,

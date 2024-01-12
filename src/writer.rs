@@ -956,8 +956,8 @@ where
 	/// // Reader doesn't see change.
 	/// assert_eq!(r.head(), 0);
 	/// ```
-	pub fn data(&self) -> &T {
-		self.local_as_ref()
+	pub const fn data(&self) -> &T {
+		&self.local_as_ref().data
 	}
 
 	#[inline]
@@ -1072,7 +1072,7 @@ where
 	/// drop(writer);
 	/// ```
 	pub fn head_remote_ref(&self) -> CommitRef<T> {
-		CommitRef(Arc::clone(&self.remote))
+		Arc::clone(&self.remote)
 	}
 
 	#[inline]
@@ -1292,7 +1292,7 @@ where
 	/// ```
 	pub fn tag(&mut self) -> &CommitRef<T> {
 		self.tags.entry(self.remote.timestamp)
-			.or_insert_with(|| CommitRef(Arc::clone(&self.remote)))
+			.or_insert_with(|| Arc::clone(&self.remote))
 	}
 
 	#[inline]
@@ -2071,7 +2071,7 @@ where
 		(
 			// INVARIANT: local must be initialized after push()
 			self.local.unwrap(),
-			CommitRef(self.remote),
+			self.remote,
 			self.patches,
 			self.patches_old,
 			self.tags,

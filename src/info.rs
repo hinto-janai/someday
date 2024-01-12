@@ -107,8 +107,8 @@ where
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]
 	pub head_remote: &'a CommitOwned<T>,
-	/// [`Writer::head_readers`]
-	pub head_readers: NonZeroUsize,
+	/// [`Writer::head_count`]
+	pub head_count: NonZeroUsize,
 	/// [`Writer::reader_count`]
 	pub reader_count: NonZeroUsize,
 	/// [`Writer::timestamp`]

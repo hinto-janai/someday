@@ -209,7 +209,7 @@ where
 		// (writer will clone all the
 		// time because there are always
 		// strong arc references).
-		CommitRef(arc_swap::Guard::into_inner(self.arc.load()))
+		arc_swap::Guard::into_inner(self.arc.load())
 	}
 
 	#[inline]
