@@ -579,9 +579,10 @@ where
 	/// });
 	///
 	/// // Always clone data, don't wait.
-	/// let push_status = w.push_clone();
+	/// let push_info = w.push_clone();
 	/// // We pushed 1 commit.
-	/// assert_eq!(push_status.commits, 1);
+	/// assert_eq!(push_info.commits, 1);
+	/// assert_eq!(push_info.reclaimed, false);
 	/// ```
 	pub fn push_clone(&mut self) -> PushInfo {
 		// If we're always cloning, there's no
@@ -875,7 +876,176 @@ where
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit_push<Patch, Return>(&mut self, mut patch: Patch) -> (PushInfo, Return, Option<Return>)
+	pub fn add_commit_push<Patch, Return>(&mut self, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	where
+		Patch: FnMut(&mut T, &T) -> Return
+	{
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
+			patch,
+			None,
+			None::<fn()>
+		);
+		(push_info, return_1, return_2)
+	}
+
+	#[inline]
+	/// This is the same as [`Self::add_commit_push()`] with [`Self::push_wait()`] semantics.
+	///
+	/// See `push_wait()`'s documentation for more info.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::{sync::*,thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// # let barrier  = Arc::new(Barrier::new(2));
+	/// # let other_b = barrier.clone();
+	/// let commit = r.head();
+	/// spawn(move || {
+	///     # other_b.wait();
+	///     // This `Reader` is holding onto the old data.
+	///     let moved = commit;
+	///     // But will let go after 1 millisecond.
+	///     sleep(Duration::from_millis(1));
+	/// });
+	///
+	/// # barrier.wait();
+	/// // Wait 250 milliseconds before resorting to cloning data.
+	/// let (push_info, _, _) = w.add_commit_push_wait(
+	///     Duration::from_millis(250),
+	///     |w, _| w.push_str("abc"),
+	/// );
+	/// // We pushed 1 commit.
+	/// assert_eq!(push_info.commits, 1);
+	/// // And we successfully reclaimed the old data cheaply.
+	/// assert_eq!(push_info.reclaimed, true);
+	/// ```
+	pub fn add_commit_push_wait<Patch, Return>(&mut self, duration: Duration, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	where
+		Patch: FnMut(&mut T, &T) -> Return
+	{
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
+			patch,
+			Some(duration),
+			None::<fn()>
+		);
+		(push_info, return_1, return_2)
+	}
+
+	#[inline]
+	#[allow(clippy::missing_panics_doc)]
+	/// This is the same as [`Self::add_commit_push()`] with [`Self::push_do()`] semantics.
+	///
+	/// See `push_do()`'s documentation for more info.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::{sync::*,thread::*,time::*,collections::*};
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// # let barrier  = Arc::new(Barrier::new(2));
+	/// # let other_b = barrier.clone();
+	/// let head = r.head();
+	/// spawn(move || {
+	///     # other_b.wait();
+	///     // This `Reader` is holding onto the old data.
+	///     let moved = head;
+	///     // But will let go after 100 milliseconds.
+	///     sleep(Duration::from_millis(100));
+	/// });
+	///
+	/// # barrier.wait();
+	/// // Some work to be done.
+	/// let mut hashmap = HashMap::<usize, String>::new();
+	/// let mut vec     = vec![];
+	///
+	/// // The actual `Patch` on our data.
+	/// let patch = |w: &mut String, _: &_| w.push_str("abc");
+	///
+	/// // The closure to do arbitrary things while pushing.
+	/// let closure = || {
+	///     // While we're waiting, let's get some work done.
+	///     // Add a bunch of data to this HashMap.
+	///     (0..1_000).for_each(|i| {
+	///         hashmap.insert(i, format!("{i}"));
+	///     });
+	///     // Add some data to the vector.
+	///     (0..1_000).for_each(|_| {
+	///         vec.push(format!("aaaaaaaaaaaaaaaa"));
+	///     }); // <- `add_commit_push_do()` returns `()`
+	///     # sleep(Duration::from_secs(1));
+	/// };      // although we could return anything
+	///         // and it would be binded to `return_value`
+	///
+	/// // Pass in a closure, so that we can do
+	/// // arbitrary things in the meanwhile...!
+	/// let (push_info, _, _, return_value) = w.add_commit_push_do(closure, patch);
+	///
+	/// // At this point, the old `Reader`'s have
+	/// // probably all dropped their old references
+	/// // and we can probably cheaply reclaim our
+	/// // old data back.
+	///
+	/// // And yes, looks like we got it back cheaply:
+	/// assert_eq!(push_info.reclaimed, true);
+	///
+	/// // And we did some work
+	/// // while waiting to get it:
+	/// assert_eq!(hashmap.len(), 1_000);
+	/// assert_eq!(vec.len(), 1_000);
+	/// assert_eq!(return_value, ());
+	/// ```
+	pub fn add_commit_push_do<Patch, Return, F, R>(&mut self, f: F, patch: Patch) -> (PushInfo, Return, Option<Return>, R)
+	where
+		Patch: FnMut(&mut T, &T) -> Return,
+		F: FnOnce() -> R,
+	{
+		let (push_info, return_1, return_2, r) = self.add_commit_push_inner::<false, Patch, Return, R>(
+			patch,
+			None,
+			Some(f),
+		);
+		// INVARIANT: we _know_ `R` will be a `Some`
+		// because we provided a `Some`. `add_commit_push_inner()`
+		// will always return a Some(value).
+		(push_info, return_1, return_2, r.unwrap())
+	}
+
+	#[inline]
+	/// This is the same as [`Self::add_commit_push()`] with [`Self::push_clone()`] semantics.
+	///
+	/// See `push_clone()`'s documentation for more info.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::{thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String>("".into());
+	/// let (push_info, _, _) = w.add_commit_push_clone(|w, _| {
+	///     w.push_str("abc");
+	/// });
+	///
+	/// assert_eq!(push_info.commits, 1);
+	/// assert_eq!(push_info.reclaimed, false);
+	/// ```
+	pub fn add_commit_push_clone<Patch, Return>(&mut self, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	where
+		Patch: FnMut(&mut T, &T) -> Return
+	{
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<true, Patch, Return, ()>(
+			patch,
+			None,
+			None::<fn()>
+		);
+		(push_info, return_1, return_2)
+	}
+
+	/// Generic function to handle all the different types of `add_commit_push`'s.
+	fn add_commit_push_inner<const CLONE: bool, Patch, Return, R>(
+		&mut self,
+		mut patch: Patch,
+		duration: Option<Duration>,
+		function: Option<impl FnOnce() -> R>,
+	) -> (PushInfo, Return, Option<Return>, Option<R>)
 	where
 		// We're never storing this `Patch` so it
 		// doesn't have to be `Send + 'static`.
@@ -889,19 +1059,28 @@ where
 		);
 
 		// Push all commits so far.
-		let push_info = self.push();
+		let (push_info, r) = if CLONE {
+			(self.push_clone(), None)
+		} else if let Some(duration) = duration {
+			(self.push_wait(duration), None)
+		} else if let Some(function) = function {
+			let (push_info, r) = self.push_do(function);
+			(push_info, Some(r))
+		} else {
+			(self.push(), None)
+		};
 
 		// If the `Writer` reclaimed data, we must re-apply
 		// since we did not push the Patch onto the `patches_old` Vec
 		// (since we want the return value).
-		let return_2 = push_info.reclaimed.then(|| {
+		let return_2 = (!CLONE && push_info.reclaimed).then(|| {
 			patch(
 				&mut self.local.as_mut().unwrap().data,
 				&self.remote.data,
 			)
 		});
 
-		(push_info, return_1, return_2)
+		(push_info, return_1, return_2, r)
 	}
 
 	#[inline]
