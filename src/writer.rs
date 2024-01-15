@@ -150,11 +150,11 @@ where
 	pub(super) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
 
 	/// Patches that have not yet been applied.
-	pub(super) patches: Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+	pub(super) patches: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 
 	/// Patches that were already applied,
 	/// that must be re-applied to the old `T`.
-	pub(super) patches_old: Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+	pub(super) patches_old: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 
 	/// This signifies to the `Reader`'s that the
 	/// `Writer` is currently attempting to swap data.
@@ -263,7 +263,7 @@ where
 	/// ```
 	pub fn add<Patch>(&mut self, patch: Patch)
 	where
-		Patch: FnMut(&mut T, &T) + Send + 'static
+		Patch: Fn(&mut T, &T) + Send + 'static
 	{
 		// This used to be:
 		//
@@ -358,7 +358,7 @@ where
 		self.patches_old.reserve_exact(patch_len);
 
 		// Apply the patches and add to the old vector.
-		for mut patch in self.patches.drain(..) {
+		for patch in self.patches.drain(..) {
 			patch(
 				// We can't use `self.local_as_mut()` here
 				// We can't have `&mut self` and `&self`.
@@ -682,7 +682,7 @@ where
 
 		if reclaimed {
 			// Re-apply patches to this old data.
-			for mut patch in self.patches_old.drain(..) {
+			for patch in self.patches_old.drain(..) {
 				patch(&mut local.data, &self.remote.data);
 			}
 			// Set proper timestamp if we're reusing old data.
@@ -767,9 +767,9 @@ where
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit<Patch, Return>(&mut self, mut patch: Patch) -> (CommitInfo, Return)
+	pub fn add_commit<Patch, Return>(&mut self, patch: Patch) -> (CommitInfo, Return)
 	where
-		Patch: FnMut(&mut T, &T) -> Return + Send + 'static
+		Patch: Fn(&mut T, &T) -> Return + Send + 'static
 	{
 		// Commit the current patches.
 		let mut commit_info = self.commit();
@@ -1388,7 +1388,10 @@ where
 	///
 	/// ## Timestamp
 	/// This increments the `Writer`'s local `Timestamp` by `1`.
-	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
+	pub fn overwrite(&mut self, data: T) -> CommitOwned<T>
+	where
+		T: Clone + Send + 'static,
+	{
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
@@ -1400,18 +1403,18 @@ where
 
 		self.local = Some(CommitOwned {
 			timestamp,
-			data,
+			data: data.clone(),
 		});
 
 		// Add a `Patch` that clones the new data
 		// to the _old_ patches, meaning they are
 		// being applied to reclaimed `Reader` data.
-		self.patches_old.push(Box::new(|w, r| {
+		self.patches_old.push(Box::new(move |w, r| {
 		//   old_reader_data
 		//   |
 		//   |   current_reader_head
 		//   v   v
-			*w = r.clone();
+			*w = data.clone();
 		}));
 
 		old_data
@@ -1971,7 +1974,7 @@ where
 	/// let drain = w.restore();
 	/// assert_eq!(drain.count(), 1);
 	/// ```
-	pub fn restore(&mut self) -> std::vec::Drain<'_, Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
+	pub fn restore(&mut self) -> std::vec::Drain<'_, Box<dyn Fn(&mut T, &T) + Send + 'static>> {
 		self.patches.drain(..)
 	}
 
@@ -2001,7 +2004,7 @@ where
 	/// let removed = w.staged().remove(0);
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn staged(&mut self) -> &mut Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
+	pub fn staged(&mut self) -> &mut Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>> {
 		&mut self.patches
 	}
 
@@ -2044,7 +2047,7 @@ where
 	/// // We can see but not mutate functions.
 	/// assert_eq!(w.committed_patches().len(), 1);
 	/// ```
-	pub fn committed_patches(&self) -> &Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>> {
+	pub fn committed_patches(&self) -> &Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>> {
 		&self.patches_old
 	}
 
@@ -2260,8 +2263,8 @@ where
 	pub fn into_inner(self) -> (
 		CommitOwned<T>,
 		CommitRef<T>,
-		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
-		Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+		Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+		Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 		BTreeMap<Timestamp, CommitRef<T>>,
 	) {
 		(

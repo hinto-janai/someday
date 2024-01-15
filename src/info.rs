@@ -100,9 +100,9 @@ where
 	T: Clone
 {
 	/// [`Writer::staged`]
-	pub staged_patches: &'a Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+	pub staged_patches: &'a Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 	/// [`Writer::committed_patches`]
-	pub committed_patches: &'a Vec<Box<dyn FnMut(&mut T, &T) + Send + 'static>>,
+	pub committed_patches: &'a Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 	/// [`Writer::head`]
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]
