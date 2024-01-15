@@ -1366,13 +1366,19 @@ where
 	/// // Overwrite the Writer with arbitrary data.
 	/// let old_data = w.overwrite(String::from("world")); // <- commit 5
 	/// assert_eq!(old_data.data(), "hello");
-	/// // Committed functions were deleted.
-	/// assert_eq!(w.committed_patches().len(), 0);
+	/// assert_eq!(w.data(), "world");
+	/// // Committed functions were deleted, but 1 patch is leftover.
+	/// // This is an automatically inserted patch that makes the
+	/// // reclaimed `Reader`'s `.clone()` the new data.
+	/// assert_eq!(w.committed_patches().len(), 1);
+	///
+	/// // `Reader`'s still don't see changes.
+	/// assert_eq!(r.head().data(), "hello");
 	///
 	/// // Push that change.
 	/// w.push();
 	///
-	/// // Readers see change.
+	/// // Now `Reader`s see change.
 	/// assert_eq!(r.head().data(), "world");
 	///
 	/// // 5 commits total.
@@ -1394,8 +1400,19 @@ where
 
 		self.local = Some(CommitOwned {
 			timestamp,
-			data
+			data,
 		});
+
+		// Add a `Patch` that clones the new data
+		// to the _old_ patches, meaning they are
+		// being applied to reclaimed `Reader` data.
+		self.patches_old.push(Box::new(|w, r| {
+		//   old_reader_data
+		//   |
+		//   |   current_reader_head
+		//   v   v
+			*w = r.clone();
+		}));
 
 		old_data
 	}
