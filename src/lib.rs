@@ -32,7 +32,7 @@
 	single_use_lifetimes,
 	variant_size_differences,
 	unused_mut,
-	// unsafe_code,
+	unsafe_code,
 )]
 #![deny(
 	clippy::all,
@@ -70,6 +70,7 @@
 	clippy::exhaustive_enums,
 	clippy::panic,
 	clippy::impl_trait_in_params,
+	clippy::expect_used,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod

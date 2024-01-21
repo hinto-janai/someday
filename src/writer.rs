@@ -2052,6 +2052,7 @@ where
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// How many [`Reader`]'s are _currently_ accessing
 	/// the current `Reader` head [`Commit`]?
 	///
@@ -2087,15 +2088,15 @@ where
 	/// ```
 	pub fn head_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.remote);
-		debug_assert!(count != 0, "head_count() returned 0");
 
-		// SAFETY:
+		// INVARIANT:
 		// The fact that we have are passing an Arc
 		// means this will always at-least output 1.
-		unsafe { NonZeroUsize::new_unchecked(count) }
+		NonZeroUsize::new(count).expect("head_count() returned 0")
 	}
 
 	#[inline]
+	#[allow(clippy::missing_panics_doc)]
 	/// How many [`Reader`]'s are there?
 	///
 	/// Unlike [`Writer::head_count()`], this doesn't count references
@@ -2120,12 +2121,11 @@ where
 	/// ```
 	pub fn reader_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.arc);
-		debug_assert!(count != 0, "reader_count() returned 0");
 
-		// SAFETY:
+		// INVARIANT:
 		// The fact that we have are passing an Arc
 		// means this will always at-least output 1.
-		unsafe { NonZeroUsize::new_unchecked(count) }
+		NonZeroUsize::new(count).expect("head_count() returned 0")
 	}
 
 	/// Get the current status on the [`Writer`] and [`Reader`]

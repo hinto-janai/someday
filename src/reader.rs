@@ -392,12 +392,11 @@ where
 	/// This is the same as [`Writer::reader_count()`].
 	pub fn reader_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.arc);
-		debug_assert!(count != 0, "reader_count() returned 0");
 
-		// SAFETY:
+		// INVARIANT:
 		// The fact that we have are passing an Arc
 		// means this will always at-least output 1.
-		unsafe { NonZeroUsize::new_unchecked(count) }
+		NonZeroUsize::new(count).expect("reader_count() returned 0")
 	}
 
 	#[inline]
