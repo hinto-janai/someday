@@ -2292,7 +2292,7 @@ impl<T: Clone> Writer<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_ref() {
 			Some(local) => local,
-			_ => panic!("writer.local was not initialized after push()"),
+			None => panic!("the `Writer`'s local data <T> was not initialized"),
 		}
 	}
 
@@ -2303,7 +2303,7 @@ impl<T: Clone> Writer<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_mut() {
 			Some(local) => local,
-			_ => panic!("writer.local was not initialized after push()"),
+			None => panic!("the `Writer`'s local data <T> was not initialized"),
 		}
 	}
 }
