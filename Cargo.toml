@@ -23,7 +23,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = []
 
 [dependencies]
-arc-swap = { version = "1.6", default-features = false }
+arc-swap = { version = "1", default-features = false }
 
 # Optional.
 serde   = { version = "1", optional = true, features = ["derive", "rc"] }
