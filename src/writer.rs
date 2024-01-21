@@ -137,6 +137,17 @@ pub struct Writer<T: Clone> {
 	/// It will be `None` in-between those moments and
 	/// the invariant is that is MUST be `Some` before
 	/// `push()` is over.
+	///
+	/// This _could_ be a `MaybeUninit` instead, although:
+	/// 1. Requires `unsafe`
+	/// 2. Is actually unsafe if we panic mid-`push()`
+	///
+	/// In the case code panics _right_ after we set this
+	/// to `None` and before we set it back to `Some`, it
+	/// will be in an uninitialized state.
+	///
+	/// Thankfully it's an `Option`, and we `.unwrap()` on
+	/// each access, if it were a `MaybeUninit`, UB.
 	pub(super) local: Option<CommitOwned<T>>,
 
 	/// The current data the remote `Reader`'s can see.
@@ -1403,7 +1414,7 @@ impl<T: Clone> Writer<T> {
 		// Add a `Patch` that clones the new data
 		// to the _old_ patches, meaning they are
 		// being applied to reclaimed `Reader` data.
-		self.patches_old.push(Box::new(move |w, r| {
+		self.patches_old.push(Box::new(move |w, _| {
 		//   old_reader_data
 		//   |
 		//   |   current_reader_head
@@ -2291,21 +2302,6 @@ impl<T: Clone> Writer<T> {
 	fn local_as_mut(&mut self) -> &mut CommitOwned<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_mut() {
-			Some(local) => local,
-			_ => panic!("writer.local was not initialized after push()"),
-		}
-	}
-
-	#[allow(clippy::option_if_let_else,clippy::inline_always)]
-	#[inline(always)]
-	/// Same as `local_as_mut()`, but field specific so we
-	/// can around taking `&mut self` when we need
-	/// `&` to `self` as well.
-	///
-	/// INVARIANT: This function is ONLY for this `self.local` purpose.
-	fn local_field(local: &mut Option<CommitOwned<T>>) -> &mut CommitOwned<T> {
-		// INVARIANT: `local` must be initialized after push()
-		match local {
 			Some(local) => local,
 			_ => panic!("writer.local was not initialized after push()"),
 		}
