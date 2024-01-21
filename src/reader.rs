@@ -311,7 +311,7 @@ impl<T: Clone> Reader<T> {
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`] ASAP, but while cooperating
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// pushing new data, this function will spin ([`std::hint::spin_loop()`])
+	/// pushing new data, this function will spin ([`std::hint::spin_loop`])
 	/// until it is not.
 	///
 	/// Realistically, this function will only spin for a brief moment
@@ -329,6 +329,19 @@ impl<T: Clone> Reader<T> {
 
 	#[inline]
 	#[must_use]
+	/// Same as [`Self::head_spin`] except use [`std::thread::yield_now`] instead.
+	pub fn head_yield(&self) -> CommitRef<T> {
+		loop {
+			if !self.swapping() {
+				return self.head();
+			}
+
+			std::thread::yield_now();
+		}
+	}
+
+	#[inline]
+	#[must_use]
 	/// Attempt to acquire the latest [`CommitRef`] pushed by the [`Writer`]
 	///
 	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
@@ -339,6 +352,15 @@ impl<T: Clone> Reader<T> {
 		} else {
 			Some(self.head())
 		}
+	}
+
+	#[inline]
+	#[must_use]
+	/// Acquire a [`CommitOwned`] that owns the underlying data
+	///
+	/// This will expensively clone the underlying data `T`.
+	pub fn head_owned(&self) -> CommitOwned<T> {
+		self.head().into_commit_owned()
 	}
 
 	#[inline]
@@ -367,15 +389,6 @@ impl<T: Clone> Reader<T> {
 	/// -like operation is called, and it will never be greater than the [`Writer`]'s [`Timestamp`].
 	pub fn timestamp(&self) -> Timestamp {
 		self.head().timestamp()
-	}
-
-	#[inline]
-	#[must_use]
-	/// Acquire a [`CommitOwned`] that owns the underlying data
-	///
-	/// This will expensively clone the underlying data `T`.
-	pub fn head_owned(&self) -> CommitOwned<T> {
-		self.head().into_commit_owned()
 	}
 
 	#[inline]
