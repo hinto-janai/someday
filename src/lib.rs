@@ -145,10 +145,7 @@ pub type Timestamp = usize;
 /// assert_eq!(writer.data(), "hello world!");
 /// assert_eq!(writer.data_remote(), "hello world!");
 /// ```
-pub fn new<T>(data: T) -> (Reader<T>, Writer<T>)
-where
-	T: Clone,
-{
+pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 	use std::sync::{Arc,atomic::AtomicBool};
 
 	/// The default `Vec` capacity for the

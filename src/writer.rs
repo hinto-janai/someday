@@ -125,10 +125,7 @@ use crate::{
 ///   may also panic on any operation that touches local data - i.e. the local data `T` will never
 ///   be seen in an uninitialized state
 /// - `Reader`'s will be completely fine in the case a `Writer` panics mid-push
-pub struct Writer<T>
-where
-	T: Clone,
-{
+pub struct Writer<T: Clone> {
 	/// The writer's local mutually
 	/// exclusive copy of the data.
 	///
@@ -168,10 +165,7 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- Writer
-impl<T> Writer<T>
-where
-	T: Clone,
-{
+impl<T: Clone> Writer<T> {
 	#[inline]
 	/// Add a `Patch` to apply to the data `T`
 	///
@@ -2279,10 +2273,7 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- Private writer functions
-impl<T> Writer<T>
-where
-	T: Clone
-{
+impl<T: Clone> Writer<T> {
 	#[allow(clippy::option_if_let_else,clippy::inline_always)]
 	#[inline(always)]
 	/// Borrow `self.local`.

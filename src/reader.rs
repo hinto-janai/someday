@@ -137,10 +137,7 @@ use crate::{
 /// drop(head_commit);
 /// ```
 #[derive(Clone,Debug)]
-pub struct Reader<T>
-where
-	T: Clone,
-{
+pub struct Reader<T: Clone> {
 	/// The atomic pointer to the `Arc` that all readers enter through.
 	///
 	/// This is `swap()` updated by the `Writer`.
@@ -149,10 +146,7 @@ where
 	pub(super) swapping: Arc<AtomicBool>,
 }
 
-impl<T> Reader<T>
-where
-	T: Clone,
-{
+impl<T: Clone> Reader<T> {
 	#[inline]
 	#[must_use]
 	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`].

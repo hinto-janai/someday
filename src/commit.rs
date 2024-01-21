@@ -34,10 +34,7 @@ use crate::Writer;
 /// // The String's destructor will run here.
 /// drop(owned);
 /// ```
-pub struct CommitOwned<T>
-where
-	T: Clone
-{
+pub struct CommitOwned<T: Clone> {
 	/// Timestamp of this [`Commit`].
 	///
 	/// Starts at 0, and increments by 1 every time a `commit`-like
@@ -60,7 +57,10 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	}
 }
 
-impl<T: Clone + std::fmt::Display> std::fmt::Display for CommitOwned<T> {
+impl<T> std::fmt::Display for CommitOwned<T>
+where
+	T: Clone + std::fmt::Display
+{
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Display::fmt(&self.data, f)
 	}
@@ -188,10 +188,7 @@ mod private {
 	impl<T: Clone> Sealed for crate::CommitRef<T> {}
 }
 
-impl<T> Commit<T> for CommitRef<T>
-where
-	T: Clone,
-{
+impl<T: Clone> Commit<T> for CommitRef<T> {
 	#[inline]
 	fn timestamp(&self) -> Timestamp {
 		self.timestamp
@@ -234,10 +231,7 @@ where
 	}
 }
 
-impl<T> Commit<T> for CommitOwned<T>
-where
-	T: Clone,
-{
+impl<T: Clone> Commit<T> for CommitOwned<T> {
 	#[inline]
 	fn timestamp(&self) -> Timestamp {
 		self.timestamp

@@ -70,10 +70,7 @@ pub struct PushInfo {
 /// [`Writer`] pull operations produce.
 ///
 /// It is returned from pull-like functions.
-pub struct PullInfo<T>
-where
-	T: Clone
-{
+pub struct PullInfo<T: Clone> {
 	/// How many [`Commit`]'s did the [`Writer`] go backwards?
 	///
 	/// For example, if the [`Writer`]'s [`Timestamp`] is `5`
@@ -95,10 +92,7 @@ where
 ///
 /// If you only need 1 or a few of these fields, consider
 /// using their individual methods instead.
-pub struct StatusInfo<'a, T>
-where
-	T: Clone
-{
+pub struct StatusInfo<'a, T: Clone> {
 	/// [`Writer::staged`]
 	pub staged_patches: &'a Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 	/// [`Writer::committed_patches`]
