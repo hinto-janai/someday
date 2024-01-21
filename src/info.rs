@@ -1,4 +1,4 @@
-//! Metadata resulting from common [`Writer`] operations
+//! Metadata resulting from common [`Writer`] operations.
 //!
 //! These are simple container structs that hold
 //! information about [`Writer`] operations.

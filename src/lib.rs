@@ -87,7 +87,7 @@ mod writer;
 pub use writer::Writer;
 
 //---------------------------------------------------------------------------------------------------- Type alias.
-/// An incrementing [`usize`] representing a new versions of data
+/// An incrementing [`usize`] representing a new versions of data.
 ///
 /// In [`Commit`] objects, there is a [`Timestamp`] that represents that data's "version".
 ///
@@ -134,7 +134,7 @@ pub type Timestamp = usize;
 //---------------------------------------------------------------------------------------------------- Free functions
 #[inline]
 #[must_use]
-/// Create a new [`Writer`] & [`Reader`] pair
+/// Create a new [`Reader`] & [`Writer`] pair.
 ///
 /// See their documentation for writing and reading functions.
 ///

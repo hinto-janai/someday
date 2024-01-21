@@ -1,4 +1,4 @@
-//! Writer<T>
+//! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
@@ -26,7 +26,7 @@ use crate::{
 
 //---------------------------------------------------------------------------------------------------- Writer
 #[allow(clippy::type_complexity)]
-/// The single [`Writer`] of some data `T`
+/// The single [`Writer`] of some data `T`.
 ///
 /// The [`Writer`]:
 /// 1. Stores your `Patch`'s (functions) with [`add()`](Writer::add)
@@ -710,8 +710,8 @@ where
 	/// This function combines `add()` and `commit()` together.
 	/// Since these actions are done together, a return value is allowed to be specified.
 	///
-	/// This function will apply your current [`Writer::patches()`] first,
-	/// then your input `patch`, then `commit()` them.
+	/// This function will apply your [`Writer::staged()`] patches
+	/// first, then your input `patch`, then `commit()` them.
 	///
 	/// # Example
 	/// If you'd like to receive a large chunk of data

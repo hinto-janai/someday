@@ -1,4 +1,4 @@
-//! Snapshots of data with timestamps
+//! Snapshots of data with timestamps.
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::sync::Arc;
@@ -126,8 +126,8 @@ where
 
 	/// Cheaply convert `Self` to the owned data `T` if possible
 	///
-	/// If this is a [`CommitRef`] and it is the only [`CommitRef::count`]
-	/// reference, this call will acquire ownership for free.
+	/// If this is a [`CommitRef`] and it is the only reference,
+	/// this call will acquire ownership for free.
 	///
 	/// If there are other instances of this [`CommitRef`], the
 	/// internal data will be cloned directly.
@@ -140,8 +140,8 @@ where
 
 	/// Cheaply convert `Self` to owned if possible
 	///
-	/// If this is a [`CommitRef`] and it is the only [`CommitRef::count`]
-	/// reference, this call will acquire ownership for free.
+	/// If this is a [`CommitRef`] and it is the only reference,
+	/// this call will acquire ownership for free.
 	///
 	/// If there are other instances of this [`CommitRef`], the
 	/// internal data will be cloned directly.

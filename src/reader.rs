@@ -1,4 +1,4 @@
-//! Reader<T>
+//! `Reader<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 //---------------------------------------------------------------------------------------------------- Reader
-/// Reader(s) who can atomically read some data `T`
+/// Reader(s) who can atomically read some data `T`.
 ///
 /// [`Reader`]'s can cheaply [`Clone`] themselves and there
 /// is no limit to how many there can be.
