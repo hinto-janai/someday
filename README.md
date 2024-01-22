@@ -3,6 +3,10 @@
 
 `someday` is a [multi-version concurrency control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) primitive.
 
+A lock-free, but more memory hungry alternative to `Mutex<T>` or `RwLock<T>`.
+
+---
+
 All [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s receive [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s of data along with a timestamp.
 
 The single [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) can write [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) and chooses when to [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) their changes to the readers.
@@ -15,13 +19,15 @@ Readers who are holding onto old copies of data will be able to continue to do s
 ## Lock-free
 Readers are [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) and most of the time [wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom).
 
-The writer is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom), but may block for a bit in worst case scenarios.
+The writer is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom), but may clone data.
 
 When the writer wants to [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) updates to readers, it must:
 1. Atomically update a pointer, at which point all _future_ readers will see the new data
-2. Re-apply the patches to the old reclaimed data
+2. Re-apply the patches to the old reclaimed data OR clone the data if it cannot be reclaimed
 
-The old data _can_ be cheaply reclaimed and re-used by the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) if there are no [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s hanging onto old [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s
+The old data _can_ be cheaply reclaimed and re-used by the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) if there are no [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s hanging onto old [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s.
+
+If there are still `Reader`'s hanging onto old data, the `Writer` will clone the data such that it can continue.
 
 ## Use-case
 `someday` is best in situations where:
@@ -40,6 +46,8 @@ and a writer that:
 - Is normally in contention with readers using normal locks (`Mutex`, `RwLock`)
 
 ## Tradeoffs
+`someday` has all the regular tradeoffs that MVCC has.
+
 - **Increased memory use:** The [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) keeps at least two copies of the backing data structure, and [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s can keep an infinite amount (as long as they continue to hold onto references)
 
 - **Deterministic patches:** The patches/functions applied to your data must be deterministic, since the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) may apply them twice
