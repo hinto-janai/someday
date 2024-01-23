@@ -34,7 +34,6 @@ pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 	let local  = CommitOwned { timestamp: 0, data };
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
-	let swapping = Arc::new(AtomicBool::new(false));
 
 	let writer = Writer {
 		local: Some(local),
@@ -43,7 +42,6 @@ pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 		patches: Vec::with_capacity(INIT_VEC_CAP),
 		patches_old: Vec::with_capacity(INIT_VEC_CAP),
 		tags: BTreeMap::new(),
-		swapping,
 	};
 
 	(writer.reader(), writer)

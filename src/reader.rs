@@ -142,8 +142,6 @@ pub struct Reader<T: Clone> {
 	///
 	/// This is `swap()` updated by the `Writer`.
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
-	/// Is the `Writer` currently in the process of swapping the above pointer?
-	pub(super) swapping: Arc<AtomicBool>,
 }
 
 impl<T: Clone> Reader<T> {
@@ -198,154 +196,6 @@ impl<T: Clone> Reader<T> {
 
 	#[inline]
 	#[must_use]
-	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but wait a little to cooperate.
-	///
-	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// trying to push new data, this function will wait for `duration` amount
-	/// of time before forcefully acquiring the latest [`CommitRef`] anyway.
-	///
-	/// Realistically, `duration` can be a small number as
-	/// the time it takes [`Writer`] to "push" new data is very small.
-	/// (1 new `Arc` and an atomic pointer swap).
-	///
-	/// `std::time::Duration::from_millis(1)` will most likely be more
-	/// than enough time for the [`Writer`] to finish (depending on how
-	/// long it takes [`Writer`] to re-apply all your `Patch`'s).
-	///
-	/// This will forcefully call [`head()`](Reader::head) after
-	/// sleeping regardless if the [`Writer`] is pushing.
-	///
-	/// Consider using [`Reader::head_do()`] or [`Reader::head_spin()`]
-	/// instead of paying the price of sleeping a thread for a tiny duration.
-	pub fn head_wait(&self, duration: Duration) -> CommitRef<T> {
-		// Writer is not swapping, acquire head commit.
-		if !self.swapping() {
-			return self.head();
-		}
-
-		// Else sleep and acquire.
-		std::thread::sleep(duration);
-		self.head()
-	}
-
-	#[inline]
-	#[must_use]
-	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`], but do something in the meanwhile if we can't.
-	///
-	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// pushing new data, this function will execute the function `F` in the
-	/// meanwhile before forcefully acquiring the latest [`CommitRef`] anyway.
-	///
-	/// This can be any arbitrary code, although the function
-	/// is provided with the same [`Reader`], `&self`.
-	///
-	/// If the [`CommitRef`] could be acquired immediately, then
-	/// the function `F` will execute and return.
-	///
-	/// The parameter `R` is the return value of the function, although
-	/// leaving it blank and having a non-returning function will
-	/// be enough inference that the return value is `()`.
-	///
-	/// Basically: "run the function `F` while we're waiting"
-	///
-	/// ## Example
-	/// ```rust
-	/// # use someday::*;
-	/// let (r, mut w) = someday::new::<String>("".into());
-	///
-	/// /* Let's just pretend the Writer
-	///   is off doing some other things */
-	///       std::mem::forget(w);
-	///
-	/// // Some work to be done.
-	/// let mut hello_world   = String::from("hello");
-	/// let mut one_two_three = vec![0, 0, 0];
-	///
-	/// // Pass in a closure, so that we can do
-	/// // arbitrary things in the meanwhile...!
-	/// let (commit, return_value) = r.head_do(|reader| {
-	///     // While we're waiting, let's get some work done.
-	///     // Mutate this string.
-	///     hello_world.push_str(" world");
-	///     // Mutate this vector.
-	///     one_two_three[0] = 1;
-	///     one_two_three[1] = 2;
-	///     one_two_three[2] = 3; // <- `head_do()` returns `()`
-	/// });                       // although we could return anything
-	///                           // and it would be binded to `return_value`
-	///
-	/// // We have our commit:
-	/// assert_eq!(commit.timestamp(), 0);
-	/// // And we did some work
-	/// // while waiting to get it:
-	/// assert_eq!(hello_world,   "hello world");
-	/// assert_eq!(one_two_three, vec![1, 2, 3]);
-	/// assert_eq!(return_value,  ());
-	/// ```
-	pub fn head_do<F, R>(&self, f: F) -> (CommitRef<T>, R)
-	where
-		F: FnOnce(&Self) -> R
-	{
-		// Writer is not swapping, acquire head commit.
-		if !self.swapping() {
-			let head = self.head();
-			return (head, f(self));
-		}
-
-		// Else execute function and acquire.
-		(self.head(), f(self))
-	}
-
-	#[inline]
-	#[must_use]
-	/// Acquire the latest [`CommitRef`] pushed by the [`Writer`] ASAP, but while cooperating
-	///
-	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// pushing new data, this function will spin ([`std::hint::spin_loop`])
-	/// until it is not.
-	///
-	/// Realistically, this function will only spin for a brief moment
-	/// as the time it takes [`Writer`] to "push" new data is very small
-	/// (1 new `Arc` and an atomic pointer swap).
-	pub fn head_spin(&self) -> CommitRef<T> {
-		loop {
-			if !self.swapping() {
-				return self.head();
-			}
-
-			std::hint::spin_loop();
-		}
-	}
-
-	#[inline]
-	#[must_use]
-	/// Same as [`Self::head_spin`] except use [`std::thread::yield_now`] instead.
-	pub fn head_yield(&self) -> CommitRef<T> {
-		loop {
-			if !self.swapping() {
-				return self.head();
-			}
-
-			std::thread::yield_now();
-		}
-	}
-
-	#[inline]
-	#[must_use]
-	/// Attempt to acquire the latest [`CommitRef`] pushed by the [`Writer`]
-	///
-	/// This is the same as [`Reader::head()`] but if the [`Writer`] is currently
-	/// trying to reclaim old data, this function will return `None`.
-	pub fn head_try(&self) -> Option<CommitRef<T>> {
-		if self.swapping() {
-			None
-		} else {
-			Some(self.head())
-		}
-	}
-
-	#[inline]
-	#[must_use]
 	/// Acquire a [`CommitOwned`] that owns the underlying data
 	///
 	/// This will expensively clone the underlying data `T`.
@@ -394,19 +244,6 @@ impl<T: Clone> Reader<T> {
 		// The fact that we have are passing an Arc
 		// means this will always at-least output 1.
 		NonZeroUsize::new(count).expect("reader_count() returned 0")
-	}
-
-	#[inline]
-	#[must_use]
-	/// Is the [`Writer`] currently swapping data?
-	///
-	/// This indicates if the [`Writer`] very recently [`Writer::push()`]'ed
-	/// new data and is about to reclaim old [`Reader`] data.
-	///
-	/// If this returns `false`, that means subsequently calling [`Reader::head()`]
-	/// will return the latest data and not impact the [`Writer`].
-	pub fn swapping(&self) -> bool {
-		self.swapping.load(Ordering::Acquire)
 	}
 }
 

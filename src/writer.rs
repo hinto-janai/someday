@@ -164,13 +164,6 @@ pub struct Writer<T: Clone> {
 	/// that must be re-applied to the old `T`.
 	pub(super) patches_old: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
 
-	/// This signifies to the `Reader`'s that the
-	/// `Writer` is currently attempting to swap data.
-	///
-	/// `Reader`'s can cooperate by sleeping
-	/// for a bit when they see this as `true`
-	pub(super) swapping: Arc<AtomicBool>,
-
 	/// Tags.
 	pub(super) tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
@@ -590,9 +583,6 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(push_info.reclaimed, false);
 	/// ```
 	pub fn push_clone(&mut self) -> PushInfo {
-		// If we're always cloning, there's no
-		// need to block Reader's for reclamation
-		// so don't set `swapping`.
 		self.push_inner::<true, ()>(None, None::<fn()>).0
 	}
 
@@ -613,25 +603,17 @@ impl<T: Clone> Writer<T> {
 			}, return_value);
 		}
 
-		// Set atomic bool to indicate to `Reader`'s
-		// that we're about to start reclaiming.
-		if !CLONE { self.swapping.store(true, Ordering::Release); }
-
 		// INVARIANT: we're temporarily "taking" our `self.local`.
 		// It will be uninitialized for the time being.
 		// We need to initialize it before returning.
 		let local = self.local.take().unwrap();
-		// Swap the reader's `arc_swap` with our new local.
-		let old = self.arc.swap(Arc::new(local));
+		// Create the new `Reader` T.
+		let new = Arc::new(local);
 
-		if !CLONE { self.swapping.store(false, Ordering::Release); }
+		// Update the `Reader` side with our new data.
+		self.remote = Arc::clone(&new);
+		let old = self.arc.swap(new);
 
-		// To keep the "swapping" phase as small
-		// as possible to not block `Reader`'s, these
-		// operations are done here.
-		//
-		// `self.arc` now returns the new data.
-		self.remote = self.arc.load_full();
 		let timestamp_diff = self.remote.timestamp - old.timestamp;
 
 		// Return early if the user wants to deep-clone no matter what.
@@ -676,14 +658,6 @@ impl<T: Clone> Writer<T> {
 				}
 			},
 		};
-
-		// INVARIANT:
-		// `self.swapping` must be `false` before we
-		// return or else we will lock `Reader`'s
-		debug_assert!(
-			!self.swapping.load(Ordering::SeqCst),
-			"Writer's `swapping` is still true even after swap"
-		);
 
 		if reclaimed {
 			// Re-apply patches to this old data.
@@ -1106,7 +1080,6 @@ impl<T: Clone> Writer<T> {
 	pub fn reader(&self) -> Reader<T> {
 		Reader {
 			arc: Arc::clone(&self.arc),
-			swapping: Arc::clone(&self.swapping)
 		}
 	}
 
@@ -2318,7 +2291,6 @@ where
 			.field("local", &self.local)
 			.field("remote", &self.remote)
 			.field("arc", &self.arc)
-			.field("swapping", &self.swapping)
 			.field("tags", &self.tags)
 			.finish_non_exhaustive()
 	}
