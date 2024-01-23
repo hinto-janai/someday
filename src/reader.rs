@@ -193,17 +193,7 @@ impl<T: Clone> Reader<T> {
 	/// assert_eq!(head.data(), "hello");
 	/// ```
 	pub fn head(&self) -> CommitRef<T> {
-		// May be slower for readers,
-		// although, more maybe better
-		// to prevent writer starvation.
-		// let arc = self.arc.load_full();
-
-		// Faster for readers.
-		// May cause writer starvation
-		// (writer will clone all the
-		// time because there are always
-		// strong arc references).
-		arc_swap::Guard::into_inner(self.arc.load())
+		self.arc.load_full()
 	}
 
 	#[inline]
