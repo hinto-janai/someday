@@ -4,7 +4,7 @@
 use crate::{
 	reader::Reader,
 	writer::Writer,
-	commit::{Commit,CommitOwned},
+	commit::{Commit,CommitOwned,CommitRef},
 	timestamp::Timestamp,
 };
 use arc_swap::ArcSwapAny;
@@ -42,7 +42,7 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 
 #[inline]
 #[must_use]
-/// Create a new [`Reader`] & [`Writer`] pair a [`Commit`].
+/// Create a new [`Reader`] & [`Writer`] pair from a [`Commit`].
 ///
 /// This allows you to modify the starting [`Timestamp`],
 /// as you can set your `Commit`'s timestamp to any value.

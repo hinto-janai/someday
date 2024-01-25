@@ -1,6 +1,11 @@
 //! `Reader<T>` & `Writer<T>` commit timestamps.
 
 //---------------------------------------------------------------------------------------------------- Use
+use crate::{
+	Writer,
+	Reader,
+	commit::{Commit,CommitOwned,CommitRef},
+};
 
 //---------------------------------------------------------------------------------------------------- Timestamp
 /// An incrementing [`usize`] representing a new versions of data.

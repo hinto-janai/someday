@@ -194,72 +194,6 @@ impl<T: Clone> Writer<T> {
 	/// w.commit();
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	///
-	/// # What is a `Patch`?
-	/// `Patch` is just a function that will be applied to your data `T`.
-	///
-	/// The 2 inputs you are given are:
-	/// - The [`Writer`]'s local mutable data, `T` (the thing you're modifying)
-	/// - The [`Reader`]'s latest head commit
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::sync::*;
-	/// let (_, mut w) = someday::new::<String>("".into());
-	///
-	/// // Use a pre-defined function pointer.
-	/// fn fn_ptr(w: &mut String, r: &String) {
-	///     w.push_str("hello");
-	/// }
-	/// w.add(Patch::Ptr(fn_ptr));
-	///
-	/// // This non-capturing closure gets
-	/// // coerced into a `fn(&mut T, &T)`.
-	/// w.add(Patch::Ptr(|w, _| {
-	///     w.push_str("hello");
-	/// }));
-	///
-	/// // This capturing closure turns
-	/// // into something that looks like:
-	/// // `Box<dyn FnMut(&mut T, &T) + Send + 'static>`
-	/// let string: Arc<str> = "hello".into();
-	/// w.add(Patch::boxed(move |w: &mut String ,_| {
-	///     let captured = Arc::clone(&string);
-	///     w.push_str(&captured);
-	/// }));
-	/// ```
-	///
-	/// # ⚠️ Non-deterministic `Patch`
-	/// The `Patch`'s you use with [`Writer::add`] **must be deterministic**.
-	///
-	/// The `Writer` may apply your `Patch` twice, so any state that gets
-	/// modified or functions used in the `Patch` must result in the
-	/// same values as the first time the `Patch` was called.
-	///
-	/// Here is a **non-deterministic** example:
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::sync::*;
-	/// static STATE: Mutex<usize> = Mutex::new(1);
-	///
-	/// let (_, mut w) = someday::new::<usize>(0);
-	///
-	/// w.add(Patch::boxed(move |w, _| {
-	///     let mut state = STATE.lock().unwrap();
-	///     *state *= 10; // 1*10 the first time, 10*10 the second time...
-	///     *w = *state;
-	/// }));
-	/// w.commit();
-	/// w.push();
-	///
-	/// // ⚠️⚠️⚠️ !!!
-	/// // The `Writer` reclaimed the old `Reader` data
-	/// // and applied our `Patch` again, except, the `Patch`
-	/// // was non-deterministic, so now the `Writer`
-	/// // and `Reader` have non-matching data...
-	/// assert_eq!(*w.data(), 100);
-	/// assert_eq!(*w.reader().head().data(), 10);
-	/// ```
 	pub fn add(&mut self, patch: Patch<T>) {
 		self.patches.push(patch);
 	}
@@ -645,13 +579,13 @@ impl<T: Clone> Writer<T> {
 			}
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
+		} else {
+			// Clear old patches.
+			self.patches_old.clear();
 		}
 
 		// Re-initialize `self.local`.
 		self.local = Some(local);
-
-		// Clear functions.
-		self.patches_old.clear();
 
 		// Output how many commits we pushed.
 		(PushInfo {
