@@ -35,6 +35,14 @@ pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 #[inline]
 #[must_use]
 /// Create a new [`Reader`] & [`Writer`] pair from `T::default()`.
+///
+/// ## Example
+/// ```rust
+/// let (reader, mut writer) = someday::default::<usize>();
+///
+/// assert_eq!(*writer.data(), 0);
+/// assert_eq!(*writer.data_remote(), 0);
+/// ```
 pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 	let writer = new_inner(CommitOwned { data: T::default(), timestamp: 0 });
 	(writer.reader(), writer)
@@ -54,6 +62,43 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 /// - [`CommitOwned<T>`] where this function will take the data as it, or
 /// - [`CommitRef<T>`] where this function will _attempt_ to acquire the data
 /// if there are no other strong references to it. It will [`Clone`] otherwise.
+///
+/// ## Example
+/// ```rust
+/// # use someday::*;
+/// let commit = CommitOwned {
+///     data: String::from("hello world!"),
+///     timestamp: 123,
+/// };
+/// let (reader, mut writer) = someday::from_commit(commit);
+///
+/// assert_eq!(writer.data(), "hello world!");
+/// assert_eq!(writer.data_remote(), "hello world!");
+/// assert_eq!(writer.timestamp(), 123);
+/// assert_eq!(writer.timestamp_remote(), 123);
+/// ```
+///
+/// # Timestamp > [`usize::MAX`]
+/// Note that [`Writer`] will start panicking
+/// if the `Timestamp` surpasses [`usize::MAX`].
+///
+/// It should not be set to an extremely high value.
+///
+/// ```rust,should_panic
+/// # use someday::*;
+/// let commit = CommitOwned {
+///     data: String::from("hello world!"),
+///     timestamp: usize::MAX,
+/// };
+/// let (reader, mut writer) = someday::from_commit(commit);
+///
+/// assert_eq!(writer.data(), "hello world!");
+/// assert_eq!(writer.timestamp(), usize::MAX);
+///
+/// // This panics on overflow, since this
+/// // causes the timestamp to be += 1.
+/// writer.add_commit(|_, _| {});
+/// ```
 pub fn from_commit<T: Clone, C: Commit<T>>(commit: C) -> (Reader<T>, Writer<T>) {
 	let writer = new_inner(commit.into_commit_owned());
 	(writer.reader(), writer)
