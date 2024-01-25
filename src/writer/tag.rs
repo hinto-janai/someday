@@ -207,25 +207,11 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(writer.tags().len(), 1);
 	/// assert_eq!(*writer.tags().get(&0).unwrap().data(), "aaa");
 	/// ```
-	pub fn tag_retain<F>(&mut self, f: F)
+	pub fn tag_retain<F>(&mut self, mut f: F)
 	where
-		F: Fn(&CommitRef<T>) -> bool,
+		F: FnMut(&CommitRef<T>) -> bool,
 	{
-		// The normal `retain()` gives `&mut` access to the
-		// 2nd argument, but we need to uphold the invariant
-		// that timestamps + commits are always valid, and
-		// never randomly mutated by the user.
-		//
-		// So, we will iterate over our btree, marking
-		// which timestamps we need to remove, then sweep
-		// them all after.
-		self.tags
-			.iter_mut()                  // for each key, value
-			.filter(|(_, v)| !f(v))      // yield if F returns false
-			.map(|(k, _)| *k)            // yield the timestamp
-			.collect::<Vec<Timestamp>>() // collect them
-			.into_iter()                 // for each timestamp
-			.for_each(|timestamp| { self.tags.remove(&timestamp); }); // remove it
+		self.tags.retain(|_, commit| f(commit));
 	}
 
 	#[inline]
