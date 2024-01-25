@@ -315,7 +315,7 @@ impl<T: Clone> Writer<T> {
 
 		if reclaimed {
 			// Re-apply patches to this old data.
-			for patch in self.patches_old.drain(..) {
+			for mut patch in self.patches_old.drain(..) {
 				patch.apply(&mut local.data, &self.remote.data);
 			}
 			// Set proper timestamp if we're reusing old data.

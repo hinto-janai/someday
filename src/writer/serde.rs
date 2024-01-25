@@ -15,6 +15,7 @@ use std::{
 };
 
 use crate::{
+	writer::Writer,
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},

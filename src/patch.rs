@@ -101,7 +101,7 @@ pub enum Patch<T> {
 	/// ```rust
 	/// let string = String::new();
 	///
-	/// let boxed: Box<dyn Fn()> = Box::new(move || {
+	/// let mut boxed: Box<dyn FnMut()> = Box::new(move || {
 	///     // The outside string was captured.
 	///     println!("{string}");
 	/// });
@@ -109,7 +109,7 @@ pub enum Patch<T> {
 	/// // This cannot be cloned.
 	/// boxed();
 	/// ```
-	Box(Box<dyn Fn(&mut T, &T) + Send + 'static>),
+	Box(Box<dyn FnMut(&mut T, &T) + Send + 'static>),
 
 	/// Dynamically dispatched, potentially capturing, cheaply [`Clone`]-able function.
 	///
@@ -158,7 +158,7 @@ impl<T> Patch<T> {
 	/// Short-hand for `Self::Box(Box::new(patch))`.
 	pub fn boxed<P>(patch: P) -> Self
 	where
-		P: Fn(&mut T, &T) + Send + 'static,
+		P: FnMut(&mut T, &T) + Send + 'static,
 	{
 		Self::Box(Box::new(patch))
 	}
@@ -174,7 +174,7 @@ impl<T> Patch<T> {
 
 	#[inline]
 	/// Apply the [`Patch`] onto the [`Writer`] data.
-	pub(crate) fn apply(&self, writer: &mut T, reader: &T) {
+	pub(crate) fn apply(&mut self, writer: &mut T, reader: &T) {
 		match self {
 			Self::Box(f) => f(writer, reader),
 			Self::Arc(f) => f(writer, reader),
@@ -201,8 +201,8 @@ impl<T> Patch<T> {
 	}
 }
 
-impl<T> From<Box<dyn Fn(&mut T, &T) + Send + 'static>> for Patch<T> {
-	fn from(patch: Box<dyn Fn(&mut T, &T) + Send + 'static>) -> Self {
+impl<T> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
+	fn from(patch: Box<dyn FnMut(&mut T, &T) + Send + 'static>) -> Self {
 		Self::Box(patch)
 	}
 }

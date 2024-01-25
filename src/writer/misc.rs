@@ -53,6 +53,7 @@ impl<T: Clone> Writer<T> {
 	pub fn restore(&mut self) -> std::vec::Drain<'_, Patch<T>> {
 		self.patches.drain(..)
 	}
+
 	/// Shrinks the capacity of the `Patch` [`Vec`]'s as much as possible
 	///
 	/// This calls [`Vec::shrink_to_fit()`] on the 2
