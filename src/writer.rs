@@ -2201,6 +2201,11 @@ impl<T: Clone> Writer<T> {
 		self.patches_old.reserve_exact(additional);
 	}
 
+	/// Same as [`crate::free::new`] but without creating a [`Reader`].
+	pub fn new(data: T) -> Self {
+		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+	}
+
 	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]
 	/// Consume this [`Writer`] and return the inner components
 	///
@@ -2296,6 +2301,27 @@ where
 	}
 }
 
+impl<T: Clone> From<T> for Writer<T> {
+	/// Same as [`crate::free::new`] but without creating a [`Reader`].
+	fn from(data: T) -> Self {
+		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+	}
+}
+
+impl<T: Clone> From<CommitOwned<T>> for Writer<T> {
+	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
+	fn from(commit: CommitOwned<T>) -> Self {
+		crate::free::new_inner(commit)
+	}
+}
+
+impl<T: Clone> From<CommitRef<T>> for Writer<T> {
+	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
+	fn from(commit: CommitRef<T>) -> Self {
+		crate::free::new_inner(commit.into_commit_owned())
+	}
+}
+
 impl<T> Default for Writer<T>
 where
 	T: Clone + Default,
@@ -2313,7 +2339,7 @@ where
 	/// assert_eq!(*w2.data(), 0);
 	/// ```
 	fn default() -> Self {
-		crate::new(Default::default()).1
+		crate::free::new_inner(CommitOwned { data: T::default(), timestamp: 0 })
 	}
 }
 

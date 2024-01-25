@@ -71,6 +71,7 @@
 	clippy::panic,
 	clippy::impl_trait_in_params,
 	clippy::expect_used,
+	clippy::redundant_pub_crate,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
@@ -90,4 +91,9 @@ mod timestamp;
 pub use timestamp::Timestamp;
 
 mod free;
-pub use free::new;
+pub use free::{
+	new,
+	default,
+	from_commit,
+};
+pub(crate) use free::new_inner;
