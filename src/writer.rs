@@ -2222,18 +2222,18 @@ impl<T: Clone> Writer<T> {
 	/// // Add but don't commit.
 	/// w.add(|w, _| w.push_str("b"));
 	///
-	/// let (
-	///     writer_commit,
-	///     reader_commit,
-	///     staged_changes,
-	///     committed_changes,
+	/// let WriterInfo {
+	///     writer,
+	///     reader,
+	///     staged,
+	///     committed_patches,
 	///     tags,
-	/// ) = w.into_inner();
+	/// } = w.into_inner();
 	///
-	/// assert_eq!(writer_commit.data(), "a");
-	/// assert_eq!(reader_commit.data(), ""); // We never `push()`'ed, so Readers saw nothing.
-	/// assert_eq!(staged_changes.len(), 1);
-	/// assert_eq!(committed_changes.len(), 1);
+	/// assert_eq!(writer.data(), "a");
+	/// assert_eq!(reader.data(), ""); // We never `push()`'ed, so Readers saw nothing.
+	/// assert_eq!(staged.len(), 1);
+	/// assert_eq!(committed_patches.len(), 1);
 	/// assert_eq!(tags.len(), 1);
 	/// ```
 	pub fn into_inner(self) -> WriterInfo<T> {
