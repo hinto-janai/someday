@@ -3,8 +3,6 @@
 //! These are simple container structs that hold
 //! information about [`Writer`] operations.
 
-#![allow(clippy::module_name_repetitions,clippy::type_complexity)]
-
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,

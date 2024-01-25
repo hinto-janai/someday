@@ -72,6 +72,8 @@
 	clippy::impl_trait_in_params,
 	clippy::expect_used,
 	clippy::redundant_pub_crate,
+	clippy::type_complexity,
+	clippy::module_name_repetitions,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
@@ -86,6 +88,9 @@ pub use reader::Reader;
 
 mod writer;
 pub use writer::Writer;
+
+mod patch;
+pub use patch::Patch;
 
 mod timestamp;
 pub use timestamp::Timestamp;
