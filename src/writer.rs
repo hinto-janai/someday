@@ -2304,7 +2304,7 @@ where
 impl<T: Clone> From<T> for Writer<T> {
 	/// Same as [`crate::free::new`] but without creating a [`Reader`].
 	fn from(data: T) -> Self {
-		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+		Self::new(data)
 	}
 }
 
@@ -2417,7 +2417,7 @@ where
 	where
 		D: serde::Deserializer<'de>
 	{
-		T::deserialize(deserializer).map(|t| crate::new(t).1)
+		T::deserialize(deserializer).map(Self::from)
 	}
 }
 
@@ -2464,7 +2464,7 @@ where
 	/// assert_eq!(writer.data(), "hello");
 	/// ```
 	fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
-		T::decode(decoder).map(|t| crate::new(t).1)
+		T::decode(decoder).map(Self::from)
 	}
 }
 
@@ -2507,6 +2507,6 @@ where
 	/// assert_eq!(writer.data(), "hello");
 	/// ```
 	fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
-		T::deserialize_reader(reader).map(|t| crate::new(t).1)
+		T::deserialize_reader(reader).map(Self::from)
 	}
 }
