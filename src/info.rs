@@ -3,20 +3,25 @@
 //! These are simple container structs that hold
 //! information about [`Writer`] operations.
 
+#![allow(clippy::module_name_repetitions,clippy::type_complexity)]
+
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
-	commit::CommitOwned,
+	commit::{CommitOwned,CommitRef},
 };
-use std::num::NonZeroUsize;
+use std::{
+	num::NonZeroUsize,
+	collections::BTreeMap,
+};
 #[allow(unused_imports)] // docs
 use crate::{Commit,Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Info
-#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+#[derive(Copy,Clone,Debug,Default,PartialEq,Eq,PartialOrd,Ord,Hash)]
 /// Metadata about a [`Writer::commit()`]
 ///
 /// This is a container for holding the metadata
@@ -31,10 +36,10 @@ pub struct CommitInfo {
 	pub timestamp_diff: usize,
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+#[derive(Copy,Clone,Debug,Default,PartialEq,Eq,PartialOrd,Ord,Hash)]
 /// Metadata about a [`Writer::push()`]
 ///
 /// This is a container for holding the metadata
@@ -60,10 +65,10 @@ pub struct PushInfo {
 	pub reclaimed: bool,
 }
 
-#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord,Hash)]
 /// Metadata about a [`Writer::pull()`]
 ///
 /// This is a container for holding the metadata
@@ -82,7 +87,7 @@ pub struct PullInfo<T: Clone> {
 	pub old_writer_commit: CommitOwned<T>,
 }
 
-#[allow(clippy::module_name_repetitions, clippy::type_complexity)]
+#[derive(Copy,Clone)]
 /// A variety of status info about the [`Writer`] and [`Reader`]
 ///
 /// This is a bag of various metadata about the current
@@ -109,4 +114,26 @@ pub struct StatusInfo<'a, T: Clone> {
 	pub timestamp: Timestamp,
 	/// [`Writer::timestamp_remote`]
 	pub timestamp_remote: Timestamp,
+}
+
+/// The inner structures of a `Writer`, returned by [`Writer::into_inner`].
+pub struct WriterInfo<T: Clone> {
+	/// The `Writer`'s local data.
+	///
+	/// [`Writer::head`].
+	pub writer: CommitOwned<T>,
+	/// The latest [`Reader`]'s [`Commit`].
+	///
+	/// [`Writer::head_remote`].
+	pub reader: CommitRef<T>,
+	/// The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed.
+	///
+	/// [`Writer::staged`].
+	pub staged: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	/// The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed.
+	///
+	/// [`Writer::committed_patches`].
+	pub committed_patches: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	/// [`Writer::tags`].
+	pub tags: BTreeMap<Timestamp, CommitRef<T>>,
 }

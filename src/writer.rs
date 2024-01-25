@@ -20,7 +20,7 @@ use crate::{
 	Timestamp,
 	info::{
 		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,
+		PullInfo,PushInfo,WriterInfo,
 	},
 };
 
@@ -2207,14 +2207,7 @@ impl<T: Clone> Writer<T> {
 	}
 
 	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]
-	/// Consume this [`Writer`] and return the inner components
-	///
-	/// In left-to-right order, this returns:
-	/// 1. The `Writer`'s local data
-	/// 2. The latest [`Reader`]'s [`Commit`] (aka, from [`Reader::head()`])
-	/// 3. The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed (aka, from [`Writer::staged()`])
-	/// 4. The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed (aka, from [`Writer::committed_patches()`])
-	/// 5. [`Writer::tags()`]
+	/// Consume this [`Writer`] and return the inner components.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -2243,21 +2236,15 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(committed_changes.len(), 1);
 	/// assert_eq!(tags.len(), 1);
 	/// ```
-	pub fn into_inner(self) -> (
-		CommitOwned<T>,
-		CommitRef<T>,
-		Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
-		Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
-		BTreeMap<Timestamp, CommitRef<T>>,
-	) {
-		(
+	pub fn into_inner(self) -> WriterInfo<T> {
+		WriterInfo {
 			// INVARIANT: local must be initialized after push()
-			self.local.unwrap(),
-			self.remote,
-			self.patches,
-			self.patches_old,
-			self.tags,
-		)
+			writer:	self.local.unwrap(),
+			reader:	self.remote,
+			staged:	self.patches,
+			committed_patches: self.patches_old,
+			tags: self.tags,
+		}
 	}
 }
 
