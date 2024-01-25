@@ -126,7 +126,7 @@ impl<T: Clone> Writer<T> {
 		self.patches_old.reserve_exact(patch_len);
 
 		// Apply the patches and add to the old vector.
-		for patch in self.patches.drain(..) {
+		for mut patch in self.patches.drain(..) {
 			patch.apply(
 				// We can't use `self.local_as_mut()` here
 				// We can't have `&mut self` and `&self`.
@@ -176,7 +176,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// let (commit_info, r) = w.add_commit(|w, _| {
 	///     // Swap our value, and get back the strings.
-	///     // This implicitly becomes our <Return> (Vec<String>).
+	///     // This implicitly becomes our <Output> (Vec<String>).
 	///     std::mem::take(w)
 	/// });
 	///
@@ -202,17 +202,17 @@ impl<T: Clone> Writer<T> {
 	/// # Generics
 	/// The generic inputs are:
 	/// - `Patch`
-	/// - `Return`
+	/// - `Output`
 	///
 	/// `Patch` is the same as [`Writer::add()`] however, it has a
-	/// `-> Return` value associated with it, this is defined by
-	/// you, using the `Return` generic.
+	/// `-> Output` value associated with it, this is defined by
+	/// you, using the `Output` generic.
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit<P, Return>(&mut self, patch: P) -> (CommitInfo, Return)
+	pub fn add_commit<P, Output>(&mut self, mut patch: P) -> (CommitInfo, Output)
 	where
-		P: Fn(&mut T, &T) -> Return + Send + 'static
+		P: FnMut(&mut T, &T) -> Output + Send + 'static
 	{
 		// Commit the current patches.
 		let mut commit_info = self.commit();
@@ -265,7 +265,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// let (info, r1, r2) = w.add_commit_push(|w, _| {
 	///     // Swap our value, and get back the strings.
-	///     // This implicitly becomes our <Return> (Vec<String>).
+	///     // This implicitly becomes our <Output> (Vec<String>).
 	///     std::mem::take(w)
 	/// });
 	///
@@ -299,31 +299,31 @@ impl<T: Clone> Writer<T> {
 	/// # Generics
 	/// The generic inputs are:
 	/// - `Patch`
-	/// - `Return`
+	/// - `Output`
 	///
 	/// `Patch` is the same as [`Writer::add()`] however, it has a
-	/// `-> Return` value associated with it, this is defined by
-	/// you, using the `Return` generic.
+	/// `-> Output` value associated with it, this is defined by
+	/// you, using the `Output` generic.
 	///
 	/// # Returned Tuple
 	/// The returned tuple is contains the regular [`PushInfo`]
-	/// along with a `Return` and `Option<Return>`.
+	/// along with a `Output` and `Option<Output>`.
 	///
-	/// The `Return` is the data returned by operating on the `Writer`'s side
+	/// The `Output` is the data returned by operating on the `Writer`'s side
 	/// of the data.
 	///
-	/// The `Option<Return>` is `Some` if the `Writer` reclaimed the `Reader`'s
+	/// The `Option<Output>` is `Some` if the `Writer` reclaimed the `Reader`'s
 	/// side of the data, and re-applied your `Patch` - it returns it instead
 	/// of dropping it. This means that if `PushInfo`'s `reclaimed` is
-	/// `true`, this `Option<Return>` will _always_ be `Some`.
+	/// `true`, this `Option<Output>` will _always_ be `Some`.
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit_push<Patch, Return>(&mut self, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	pub fn add_commit_push<Patch, Output>(&mut self, patch: Patch) -> (PushInfo, Output, Option<Output>)
 	where
-		Patch: Fn(&mut T, &T) -> Return
+		Patch: FnMut(&mut T, &T) -> Output
 	{
-		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Output, ()>(
 			patch,
 			None,
 			None::<fn()>
@@ -363,11 +363,11 @@ impl<T: Clone> Writer<T> {
 	/// // And we successfully reclaimed the old data cheaply.
 	/// assert_eq!(push_info.reclaimed, true);
 	/// ```
-	pub fn add_commit_push_wait<Patch, Return>(&mut self, duration: Duration, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	pub fn add_commit_push_wait<Patch, Output>(&mut self, duration: Duration, patch: Patch) -> (PushInfo, Output, Option<Output>)
 	where
-		Patch: Fn(&mut T, &T) -> Return
+		Patch: FnMut(&mut T, &T) -> Output
 	{
-		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Output, ()>(
 			patch,
 			Some(duration),
 			None::<fn()>
@@ -438,12 +438,12 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(vec.len(), 1_000);
 	/// assert_eq!(return_value, ());
 	/// ```
-	pub fn add_commit_push_do<Patch, Return, F, R>(&mut self, f: F, patch: Patch) -> (PushInfo, Return, Option<Return>, R)
+	pub fn add_commit_push_do<Patch, Output, F, R>(&mut self, f: F, patch: Patch) -> (PushInfo, Output, Option<Output>, R)
 	where
-		Patch: FnMut(&mut T, &T) -> Return,
+		Patch: FnMut(&mut T, &T) -> Output,
 		F: FnOnce() -> R,
 	{
-		let (push_info, return_1, return_2, r) = self.add_commit_push_inner::<false, Patch, Return, R>(
+		let (push_info, return_1, return_2, r) = self.add_commit_push_inner::<false, Patch, Output, R>(
 			patch,
 			None,
 			Some(f),
@@ -470,11 +470,11 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(push_info.commits, 1);
 	/// assert_eq!(push_info.reclaimed, false);
 	/// ```
-	pub fn add_commit_push_clone<Patch, Return>(&mut self, patch: Patch) -> (PushInfo, Return, Option<Return>)
+	pub fn add_commit_push_clone<Patch, Output>(&mut self, patch: Patch) -> (PushInfo, Output, Option<Output>)
 	where
-		Patch: FnMut(&mut T, &T) -> Return
+		Patch: FnMut(&mut T, &T) -> Output
 	{
-		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<true, Patch, Return, ()>(
+		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<true, Patch, Output, ()>(
 			patch,
 			None,
 			None::<fn()>
@@ -483,16 +483,16 @@ impl<T: Clone> Writer<T> {
 	}
 
 	/// Generic function to handle all the different types of `add_commit_push`'s.
-	fn add_commit_push_inner<const CLONE: bool, Patch, Return, R>(
+	fn add_commit_push_inner<const CLONE: bool, Patch, Output, R>(
 		&mut self,
 		mut patch: Patch,
 		duration: Option<Duration>,
 		function: Option<impl FnOnce() -> R>,
-	) -> (PushInfo, Return, Option<Return>, Option<R>)
+	) -> (PushInfo, Output, Option<Output>, Option<R>)
 	where
 		// We're never storing this `Patch` so it
 		// doesn't have to be `Send + 'static`.
-		Patch: FnMut(&mut T, &T) -> Return
+		Patch: FnMut(&mut T, &T) -> Output
 	{
 		// Commit `Patch` to our local data.
 		self.local_as_mut().timestamp += 1;
