@@ -74,6 +74,8 @@
 	clippy::redundant_pub_crate,
 	clippy::type_complexity,
 	clippy::module_name_repetitions,
+	clippy::mod_module_files,
+	clippy::module_inception,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
