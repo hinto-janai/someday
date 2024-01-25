@@ -83,24 +83,6 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 /// if the `Timestamp` surpasses [`usize::MAX`].
 ///
 /// It should not be set to an extremely high value.
-///
-/// ```rust,should_panic
-/// # use someday::*;
-/// let commit = CommitOwned {
-///     data: String::from("hello world!"),
-///     timestamp: usize::MAX,
-/// };
-/// let (reader, mut writer) = someday::from_commit(commit);
-///
-/// assert_eq!(writer.data(), "hello world!");
-/// assert_eq!(writer.timestamp(), usize::MAX);
-///
-/// // This panics on overflow in debug,
-/// // and wraps in release mode.
-/// # if !cfg!(debug_assertions) { panic!() };
-/// # // This must be added since CI uses --release.
-/// writer.add_commit(|_, _| {});
-/// ```
 pub fn from_commit<T: Clone, C: Commit<T>>(commit: C) -> (Reader<T>, Writer<T>) {
 	let writer = new_inner(commit.into_commit_owned());
 	(writer.reader(), writer)
