@@ -60,7 +60,7 @@ pub enum Patch<T> {
 	/// arc2();
 	/// arc3();
 	/// ```
-	Arc(Arc<dyn Fn(&mut T, &T) + Send + 'static>),
+	Arc(Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>),
 
 	/// Non-capturing, static function pointer.
 	///
@@ -98,7 +98,7 @@ impl<T> Patch<T> {
 	/// TODO
 	pub fn arc<P>(patch: Arc<P>) -> Self
 	where
-		P: Fn(&mut T, &T) + Send + 'static,
+		P: Fn(&mut T, &T) + Send + Sync + 'static,
 	{
 		Self::Arc(patch)
 	}
@@ -111,7 +111,7 @@ impl<T> Patch<T> {
 
 	#[inline]
 	/// TODO
-	pub fn call(&self, writer: &mut T, reader: &T) {
+	pub fn apply(&self, writer: &mut T, reader: &T) {
 		match self {
 			Self::Box(f) => f(writer, reader),
 			Self::Arc(f) => f(writer, reader),
@@ -144,14 +144,14 @@ impl<T> From<Box<dyn Fn(&mut T, &T) + Send + 'static>> for Patch<T> {
 	}
 }
 
-impl<T> From<Arc<dyn Fn(&mut T, &T) + Send + 'static>> for Patch<T> {
-	fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + 'static>) -> Self {
+impl<T> From<Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+	fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(patch)
 	}
 }
 
-impl<T> From<&Arc<dyn Fn(&mut T, &T) + Send + 'static>> for Patch<T> {
-	fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + 'static>) -> Self {
+impl<T> From<&Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+	fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(Arc::clone(patch))
 	}
 }

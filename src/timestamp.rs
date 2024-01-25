@@ -22,19 +22,19 @@
 ///
 /// ## Example
 /// ```rust
-///
+/// # use someday::*;
 /// let v = vec![];
 /// let (r, mut w) = someday::new::<Vec<&str>>(v);
 ///
 /// // Writer writes some data, but does not commit.
-/// w.add(|w, _| w.push("a"));
+/// w.add(Patch::Ptr(|w, _| w.push("a")));
 /// // Timestamp is still 0.
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(|w, _| w.push("b"));
+/// w.add(Patch::Ptr(|w, _| w.push("b")));
 /// assert_eq!(w.timestamp(), 0);
 ///
-/// w.add(|w, _| w.push("b"));
+/// w.add(Patch::Ptr(|w, _| w.push("b")));
 /// assert_eq!(w.timestamp(), 0);
 ///
 /// // Now we commit.

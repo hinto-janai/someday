@@ -15,6 +15,7 @@ use std::{
 };
 
 use crate::{
+	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
@@ -69,10 +70,10 @@ use crate::{
 /// assert_eq!(r.head().data(), "");
 ///
 /// // The Writer can add many `Patch`'s
-/// w.add(|w, _| w.push_str("abc"));
-/// w.add(|w, _| w.push_str("def"));
-/// w.add(|w, _| w.push_str("ghi"));
-/// w.add(|w, _| w.push_str("jkl"));
+/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
+/// w.add(Patch::Ptr(|w, _| w.push_str("def")));
+/// w.add(Patch::Ptr(|w, _| w.push_str("ghi")));
+/// w.add(Patch::Ptr(|w, _| w.push_str("jkl")));
 ///
 /// // But `add()`'ing does not actually modify the
 /// // local (Writer) or remote (Readers) data, it
@@ -158,11 +159,11 @@ pub struct Writer<T: Clone> {
 	pub(super) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
 
 	/// Patches that have not yet been applied.
-	pub(super) patches: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub(super) patches: Vec<Patch<T>>,
 
 	/// Patches that were already applied,
 	/// that must be re-applied to the old `T`.
-	pub(super) patches_old: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub(super) patches_old: Vec<Patch<T>>,
 
 	/// Tags.
 	pub(super) tags: BTreeMap<Timestamp, CommitRef<T>>,
@@ -171,7 +172,7 @@ pub struct Writer<T: Clone> {
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
 	#[inline]
-	/// Add a `Patch` to apply to the data `T`
+	/// Add a [`Patch`] to apply to the data `T`
 	///
 	/// This does not execute the `Patch` immediately,
 	/// it will only store it for later usage.
@@ -184,7 +185,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<usize>(0);
 	///
 	/// // Add a patch.
-	/// w.add(|w, _| *w += 1);
+	/// w.add(Patch::Ptr(|w, _| *w += 1));
 	///
 	/// // It hasn't been applied yet.
 	/// assert_eq!(w.staged().len(), 1);
@@ -210,22 +211,22 @@ impl<T: Clone> Writer<T> {
 	/// fn fn_ptr(w: &mut String, r: &String) {
 	///     w.push_str("hello");
 	/// }
-	/// w.add(fn_ptr);
+	/// w.add(Patch::Ptr(fn_ptr));
 	///
 	/// // This non-capturing closure gets
 	/// // coerced into a `fn(&mut T, &T)`.
-	/// w.add(|w, _| {
+	/// w.add(Patch::Ptr(|w, _| {
 	///     w.push_str("hello");
-	/// });
+	/// }));
 	///
 	/// // This capturing closure turns
 	/// // into something that looks like:
 	/// // `Box<dyn FnMut(&mut T, &T) + Send + 'static>`
 	/// let string: Arc<str> = "hello".into();
-	/// w.add(move |w, _| {
+	/// w.add(Patch::boxed(move |w: &mut String ,_| {
 	///     let captured = Arc::clone(&string);
 	///     w.push_str(&captured);
-	/// });
+	/// }));
 	/// ```
 	///
 	/// # ⚠️ Non-deterministic `Patch`
@@ -243,11 +244,11 @@ impl<T: Clone> Writer<T> {
 	///
 	/// let (_, mut w) = someday::new::<usize>(0);
 	///
-	/// w.add(move |w, _| {
+	/// w.add(Patch::boxed(move |w, _| {
 	///     let mut state = STATE.lock().unwrap();
 	///     *state *= 10; // 1*10 the first time, 10*10 the second time...
 	///     *w = *state;
-	/// });
+	/// }));
 	/// w.commit();
 	/// w.push();
 	///
@@ -259,30 +260,8 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(*w.data(), 100);
 	/// assert_eq!(*w.reader().head().data(), 10);
 	/// ```
-	pub fn add<Patch>(&mut self, patch: Patch)
-	where
-		Patch: Fn(&mut T, &T) + Send + 'static
-	{
-		// This used to be:
-		//
-		// ```rust
-		// enum Patch<T> {
-		//     Box(Box<FnMut(&mut T, &T) + Send + 'static>),
-		//     Fn(fn(&mut T, &T)),
-		// }
-		// ```
-		// so that users could specify non-allocating,
-		// non-dynamic-dispatched fn pointers.
-		//
-		// This was moved onto this function as a generic instead
-		// since the type inference and ergonomics was bad.
-		//
-		// LLVM can optimize out trivial boxes and dyn cases
-		// ...but I'm not sure it can when there's multiple
-		// mixed `fn`'s and `dyn FnMut()`'s inside a `Vec`.
-		//
-		// Guess we'll be boxing `fn()`...
-		self.patches.push(Box::new(patch));
+	pub fn add(&mut self, patch: Patch<T>) {
+		self.patches.push(patch);
 	}
 
 	#[inline]
@@ -309,7 +288,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Add and commit a patch.
-	/// w.add(|w, _| *w += 123);
+	/// w.add(Patch::Ptr(|w, _| *w += 123));
 	/// w.commit();
 	///
 	/// assert_eq!(w.timestamp(), 1);
@@ -357,7 +336,7 @@ impl<T: Clone> Writer<T> {
 
 		// Apply the patches and add to the old vector.
 		for patch in self.patches.drain(..) {
-			patch(
+			patch.apply(
 				// We can't use `self.local_as_mut()` here
 				// We can't have `&mut self` and `&self`.
 				//
@@ -397,7 +376,7 @@ impl<T: Clone> Writer<T> {
 	/// ```rust
 	/// # use someday::*;
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///
 	/// // This call does nothing since
 	/// // we haven't committed anything.
@@ -439,7 +418,7 @@ impl<T: Clone> Writer<T> {
 	/// # use someday::*;
 	/// # use std::{sync::*,thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// # let barrier  = Arc::new(Barrier::new(2));
@@ -504,7 +483,7 @@ impl<T: Clone> Writer<T> {
 	/// // Commit.
 	/// // Now the `Writer` is ahead by 1 commit, while
 	/// // the `Reader` is hanging onto the old one.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// // Pass in a closure, so that we can do
@@ -566,7 +545,7 @@ impl<T: Clone> Writer<T> {
 	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
 	/// let (r, mut w) = someday::new::<String>("".into());
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// let commit = r.head();
@@ -662,7 +641,7 @@ impl<T: Clone> Writer<T> {
 		if reclaimed {
 			// Re-apply patches to this old data.
 			for patch in self.patches_old.drain(..) {
-				patch(&mut local.data, &self.remote.data);
+				patch.apply(&mut local.data, &self.remote.data);
 			}
 			// Set proper timestamp if we're reusing old data.
 			local.timestamp = self.remote.timestamp;
@@ -707,7 +686,9 @@ impl<T: Clone> Writer<T> {
 	/// // Add some patches normally.
 	/// // These will be applied in `add_commit()` below.
 	/// for i in 100_000..200_000 {
-	///     w.add(move |w, _| w.push(format!("{i}")));
+	///     w.add(Patch::boxed(move |w: &mut Vec<String>, _| {
+	///         w.push(format!("{i}"));
+	///     }));
 	/// }
 	///
 	/// let (commit_info, r) = w.add_commit(|w, _| {
@@ -746,9 +727,9 @@ impl<T: Clone> Writer<T> {
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit<Patch, Return>(&mut self, patch: Patch) -> (CommitInfo, Return)
+	pub fn add_commit<P, Return>(&mut self, patch: P) -> (CommitInfo, Return)
 	where
-		Patch: Fn(&mut T, &T) -> Return + Send + 'static
+		P: Fn(&mut T, &T) -> Return + Send + 'static
 	{
 		// Commit the current patches.
 		let mut commit_info = self.commit();
@@ -770,7 +751,7 @@ impl<T: Clone> Writer<T> {
 		);
 
 		// Convert patch to immediately drop return value.
-		self.patches_old.push(Box::new(move |w, r| drop(patch(w, r))));
+		self.patches_old.push(Patch::boxed(move |w, r| drop(patch(w, r))));
 
 		(commit_info, r)
 	}
@@ -857,7 +838,7 @@ impl<T: Clone> Writer<T> {
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
 	pub fn add_commit_push<Patch, Return>(&mut self, patch: Patch) -> (PushInfo, Return, Option<Return>)
 	where
-		Patch: FnMut(&mut T, &T) -> Return
+		Patch: Fn(&mut T, &T) -> Return
 	{
 		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
 			patch,
@@ -901,7 +882,7 @@ impl<T: Clone> Writer<T> {
 	/// ```
 	pub fn add_commit_push_wait<Patch, Return>(&mut self, duration: Duration, patch: Patch) -> (PushInfo, Return, Option<Return>)
 	where
-		Patch: FnMut(&mut T, &T) -> Return
+		Patch: Fn(&mut T, &T) -> Return
 	{
 		let (push_info, return_1, return_2, _) = self.add_commit_push_inner::<false, Patch, Return, ()>(
 			patch,
@@ -1105,7 +1086,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(*r.head().data(),  0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
+	/// w.add(Patch::Ptr(|w, _| *w += 1));
 	/// w.commit();
 	///
 	/// //  Writer sees local change.
@@ -1125,7 +1106,7 @@ impl<T: Clone> Writer<T> {
 	/// let (_, mut w) = someday::new::<usize>(0);
 	///
 	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
+	/// w.add(Patch::Ptr(|w, _| *w += 1));
 	/// w.commit();
 	///
 	/// // Writer sees local change.
@@ -1159,7 +1140,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(commit.data, 500);
 	///
 	/// // Writer commits some changes.
-	/// w.add(|w, _| *w += 1);
+	/// w.add(Patch::Ptr(|w, _| *w += 1));
 	/// w.commit();
 	///
 	/// // Head commit is now changed.
@@ -1188,7 +1169,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(*commit.data(), 500);
 	///
 	/// // Writer commits & pushes some changes.
-	/// w.add(|w, _| *w += 1);
+	/// w.add(Patch::Ptr(|w, _| *w += 1));
 	/// w.commit();
 	/// w.push();
 	///
@@ -1260,7 +1241,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit local changes.
-	/// w.add(|w, _| w.push_str("hello"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("hello")));
 	/// w.commit();
 	/// assert_eq!(w.head().data(), "hello");
 	///
@@ -1322,7 +1303,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push changes.
-	/// w.add(|w, _| w.push_str("hello"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("hello")));
 	/// w.commit(); // <- commit 1
 	/// w.push();
 	///
@@ -1333,11 +1314,11 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(r.timestamp(), 1);
 	///
 	/// // Commit some changes.
-	/// w.add(|w, _| *w = "hello".into());
+	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
 	/// w.commit(); // <- commit 2
-	/// w.add(|w, _| *w = "hello".into());
+	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
 	/// w.commit(); // <- commit 3
-	/// w.add(|w, _| *w = "hello".into());
+	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
 	/// w.commit(); // <- commit 4
 	/// assert_eq!(w.committed_patches().len(), 3);
 	///
@@ -1387,7 +1368,7 @@ impl<T: Clone> Writer<T> {
 		// Add a `Patch` that clones the new data
 		// to the _old_ patches, meaning they are
 		// being applied to reclaimed `Reader` data.
-		self.patches_old.push(Box::new(move |w, _| {
+		self.patches_old.push(Patch::boxed(move |w, _| {
 		//   old_reader_data
 		//   |
 		//   |   current_reader_head
@@ -1424,7 +1405,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push a change.
-	/// w.add(|w, _| w.push_str("a"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("a")));
 	/// w.commit();
 	/// w.push();
 	///
@@ -1437,7 +1418,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Push a whole bunch changes.
 	/// for _ in 0..100 {
-	///     w.add(|w, _| w.push_str("b"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("b")));
 	///     w.commit();
 	///     w.push();
 	/// }
@@ -1482,7 +1463,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Push a change.
-	/// w.add(|w, _| w.push_str("a"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("a")));
 	/// w.commit();
 	/// w.push();
 	///
@@ -1511,7 +1492,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Tag 100x times.
 	/// for i in 0..100 {
-	///     w.add(|w, _| w.push_str("a"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("a")));
 	///     w.commit();
 	///     w.push();
 	///     w.tag();
@@ -1541,7 +1522,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Push and tag a whole bunch changes.
 	/// for i in 1..100 {
-	///     writer.add(|w, _| *w = "bbb".into());
+	///     writer.add(Patch::Ptr(|w, _| *w = "bbb".into()));
 	///     writer.commit();
 	///     writer.push();
 	///     writer.tag();
@@ -1670,11 +1651,11 @@ impl<T: Clone> Writer<T> {
 	/// // out-of-sync issue.
 	/// static STATE: Mutex<usize> = Mutex::new(1);
 	/// let (_, mut w) = someday::new::<usize>(0);
-	/// w.add(move |w, _| {
+	/// w.add(Patch::boxed(move |w, _| {
 	///     let mut state = STATE.lock().unwrap();
 	///     *state *= 10; // 1*10 the first time, 10*10 the second time...
 	///     *w = *state;
-	/// });
+	/// }));
 	/// w.commit();
 	/// w.push();
 	///
@@ -1714,7 +1695,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Commit 10 times but don't push.
 	/// for i in 0..10 {
-	///     w.add(|w, _| w.push_str("abc"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///     w.commit();
 	/// }
 	///
@@ -1743,7 +1724,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Commit 10 times.
 	/// for i in 0..10 {
-	///     w.add(|w, _| w.push_str("abc"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///     w.commit();
 	/// }
 	/// // At timestamp 10.
@@ -1805,7 +1786,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// // At timestamp 1.
@@ -1833,7 +1814,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Commit some changes.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// // Writer is at timestamp 1.
@@ -1869,13 +1850,13 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	/// w.push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	///     w.add(|w, _| w.push_str("abc"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///     w.commit();
 	/// }
 	///
@@ -1905,13 +1886,13 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 0);
 	///
 	/// // Push 1 change.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	/// w.push();
 	///
 	/// // Commit 5 changes locally.
 	/// for i in 0..5 {
-	///     w.add(|w, _| w.push_str("abc"));
+	///     w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///     w.commit();
 	/// }
 	///
@@ -1945,14 +1926,14 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes, but don't commit.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// assert_eq!(w.staged().len(), 1);
 	///
 	/// // Restore changes.
 	/// let drain = w.restore();
 	/// assert_eq!(drain.count(), 1);
 	/// ```
-	pub fn restore(&mut self) -> std::vec::Drain<'_, Box<dyn Fn(&mut T, &T) + Send + 'static>> {
+	pub fn restore(&mut self) -> std::vec::Drain<'_, Patch<T>> {
 		self.patches.drain(..)
 	}
 
@@ -1973,7 +1954,7 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Add some changes.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	///
 	/// // We see and mutate the staged changes.
 	/// assert_eq!(w.staged().len(), 1);
@@ -1982,7 +1963,7 @@ impl<T: Clone> Writer<T> {
 	/// let removed = w.staged().remove(0);
 	/// assert_eq!(w.staged().len(), 0);
 	/// ```
-	pub fn staged(&mut self) -> &mut Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>> {
+	pub fn staged(&mut self) -> &mut Vec<Patch<T>> {
 		&mut self.patches
 	}
 
@@ -2019,13 +2000,13 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// w.add(|w, _| w.push_str("abc"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
 	/// w.commit();
 	///
 	/// // We can see but not mutate functions.
 	/// assert_eq!(w.committed_patches().len(), 1);
 	/// ```
-	pub fn committed_patches(&self) -> &Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>> {
+	pub const fn committed_patches(&self) -> &Vec<Patch<T>> {
 		&self.patches_old
 	}
 
@@ -2144,12 +2125,12 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Commit 32 `Patch`'s
 	/// for i in 0..32 {
-	///     w.add(|w, _| *w = "".into());
+	///     w.add(Patch::Ptr(|w, _| *w = "".into()));
 	///     w.commit();
 	/// }
 	/// // Stage 16 `Patch`'s
 	/// for i in 0..16 {
-	///     w.add(|w, _| *w = "".into());
+	///     w.add(Patch::Ptr(|w, _| *w = "".into()));
 	/// }
 	///
 	/// // Commit capacity is now 32.
@@ -2215,12 +2196,12 @@ impl<T: Clone> Writer<T> {
 	/// let (r, mut w) = someday::new::<String>("".into());
 	///
 	/// // Commit some changes.
-	/// w.add(|w, _| w.push_str("a"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("a")));
 	/// w.commit();
 	/// w.tag();
 	///
 	/// // Add but don't commit.
-	/// w.add(|w, _| w.push_str("b"));
+	/// w.add(Patch::Ptr(|w, _| w.push_str("b")));
 	///
 	/// let WriterInfo {
 	///     writer,

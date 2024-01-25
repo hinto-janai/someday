@@ -53,8 +53,7 @@ use crate::{
 /// - Repeat
 ///
 /// ```rust
-/// use someday::{Writer,Reader,Commit,CommitOwned,CommitRef};
-///
+/// # use someday::*;
 /// // Create a Reader/Writer pair of a `String`.
 /// let (reader, writer) = someday::new("".into());
 ///
@@ -91,7 +90,7 @@ use crate::{
 ///     // and real code probably wouldn't do this, although
 ///     // just for the example...
 ///     loop {
-///         writer.add(|w, _| w.push_str("abc"));
+///         writer.add(Patch::Ptr(|w, _| w.push_str("abc")));
 ///         writer.commit();
 ///         writer.push();
 ///     }
@@ -170,7 +169,7 @@ impl<T: Clone> Reader<T> {
 	/// assert_eq!(r.head().data(), "");
 	///
 	/// // Writer commits some changes locally.
-	/// w.add(|w, _| *w = "hello".into());
+	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
 	/// w.commit();
 	///
 	/// // Writer sees local changes.

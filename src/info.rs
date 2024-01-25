@@ -6,6 +6,7 @@
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
+	patch::Patch,
 	commit::{CommitOwned,CommitRef},
 };
 use std::{
@@ -97,9 +98,9 @@ pub struct PullInfo<T: Clone> {
 /// using their individual methods instead.
 pub struct StatusInfo<'a, T: Clone> {
 	/// [`Writer::staged`]
-	pub staged_patches: &'a Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub staged_patches: &'a Vec<Patch<T>>,
 	/// [`Writer::committed_patches`]
-	pub committed_patches: &'a Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub committed_patches: &'a Vec<Patch<T>>,
 	/// [`Writer::head`]
 	pub head: &'a CommitOwned<T>,
 	/// [`Writer::head_remote`]
@@ -127,11 +128,11 @@ pub struct WriterInfo<T: Clone> {
 	/// The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed.
 	///
 	/// [`Writer::staged`].
-	pub staged: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub staged: Vec<Patch<T>>,
 	/// The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed.
 	///
 	/// [`Writer::committed_patches`].
-	pub committed_patches: Vec<Box<dyn Fn(&mut T, &T) + Send + 'static>>,
+	pub committed_patches: Vec<Patch<T>>,
 	/// [`Writer::tags`].
 	pub tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
