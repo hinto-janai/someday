@@ -95,8 +95,10 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 /// assert_eq!(writer.data(), "hello world!");
 /// assert_eq!(writer.timestamp(), usize::MAX);
 ///
-/// // This panics on overflow, since this
-/// // causes the timestamp to be += 1.
+/// // This panics on overflow in debug,
+/// // and wraps in release mode.
+/// # if !cfg!(debug_assertions) { panic!() };
+/// # // This must be added since CI uses --release.
 /// writer.add_commit(|_, _| {});
 /// ```
 pub fn from_commit<T: Clone, C: Commit<T>>(commit: C) -> (Reader<T>, Writer<T>) {
