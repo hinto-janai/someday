@@ -109,9 +109,9 @@ impl<T: Clone> Writer<T> {
 	///
 	/// Staged `Patch`'s that haven't been [`commit()`](Writer::commit) still kept around ([`Writer::staged()`]).
 	///
-	/// A `Patch` that overwrites the data
-	/// applied with `commit()` would be
-	/// equivalent to this convenience function.
+	/// A `Patch` that overwrites the data applied with `commit()` would be
+	/// equivalent to this convenience function, although, this function will
+	/// be slightly cheaper as it avoids cloning an extra time.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -162,10 +162,20 @@ impl<T: Clone> Writer<T> {
 	///
 	/// ## Timestamp
 	/// This increments the `Writer`'s local `Timestamp` by `1`.
-	pub fn overwrite(&mut self, data: T) -> CommitOwned<T>
-	where
-		T: Clone + Send + 'static,
-	{
+	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
+		self.overwrite_inner(data)
+	}
+
+	/// TODO
+	fn overwrite_from_tag(&mut self, tag_timestamp: Timestamp) -> Option<CommitOwned<T>> {
+		let Some(commit_ref) = self.tags().get(&tag_timestamp) else {
+			return None;
+		};
+		Some(self.overwrite_inner(commit_ref.to_data()))
+	}
+
+	/// TODO
+	fn overwrite_inner(&mut self, data: T) -> CommitOwned<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
@@ -177,18 +187,26 @@ impl<T: Clone> Writer<T> {
 
 		self.local = Some(CommitOwned {
 			timestamp,
-			data: data.clone(),
+			data,
 		});
 
 		// Add a `Patch` that clones the new data
 		// to the _old_ patches, meaning they are
 		// being applied to reclaimed `Reader` data.
-		self.patches_old.push(Patch::boxed(move |w, _| {
-		//   old_reader_data
-		//   |
-		//   |   current_reader_head
-		//   v   v
-			*w = data.clone();
+		self.patches_old.push(Patch::Ptr(|w, r| {
+			// INVARIANT/cool_trick:
+			// This is _not_ a `FnOnce()`, so we cannot take `data` by value and do `*w = data;`.
+			// But, we are aware that this is `patches_old`, and by the time `push()` gets called,
+			// the `r` in this scope will actually be `data`.
+			//
+			// This means we can just mimic an overwrite by calling `clone()`.
+			// This also means we don't have to move `data` within here and do Box stuff.
+			//
+			//  old_reader_data
+			//  |
+			//  |   current_reader_head (which will be the passed T on `push()`)
+			//  v   v
+			   *w = r.clone();
 		}));
 
 		old_data
