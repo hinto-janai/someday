@@ -244,6 +244,20 @@ impl<T: Clone> Reader<T> {
 		// means this will always at-least output 1.
 		NonZeroUsize::new(count).expect("reader_count() returned 0")
 	}
+
+	#[must_use]
+	/// This returns whether this is the last [`Reader`] standing,
+	/// AND that the associated [`Writer`] has been dropped.
+	///
+	/// If this returns `true`, it means:
+	/// 1. This is the only `Reader` in existance
+	/// 2. The associated `Writer` has been dropped
+	///
+	/// If this returns `false`, it means:
+	/// - Other `Reader`'s exist (maybe including the `Writer`)
+	pub fn alone(&self) -> bool {
+		Arc::strong_count(&self.arc) == 1
+	}
 }
 
 //---------------------------------------------------------------------------------------------------- Trait Impl

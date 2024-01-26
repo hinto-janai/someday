@@ -26,7 +26,6 @@ use crate::{
 };
 
 //---------------------------------------------------------------------------------------------------- Writer
-#[allow(clippy::type_complexity)]
 /// The single [`Writer`] of some data `T`.
 ///
 /// The [`Writer`]:
@@ -152,7 +151,7 @@ pub struct Writer<T: Clone> {
 	pub(crate) local: Option<CommitOwned<T>>,
 
 	/// The current data the remote `Reader`'s can see.
-	pub(crate) remote: Arc<CommitOwned<T>>,
+	pub(crate) remote: CommitRef<T>,
 
 	/// The AtomicPtr that `Reader`'s enter through.
 	/// Calling `.load()` would load the `remote` above.
