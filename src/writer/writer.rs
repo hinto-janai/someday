@@ -15,6 +15,7 @@ use std::{
 };
 
 use crate::{
+	writer::WriterToken,
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
@@ -126,6 +127,9 @@ use crate::{
 ///   be seen in an uninitialized state
 /// - `Reader`'s will be completely fine in the case a `Writer` panics mid-push
 pub struct Writer<T: Clone> {
+	/// Only set to `false` when we are `drop()`'ed.
+	pub(crate) token: WriterToken,
+
 	/// The writer's local mutually
 	/// exclusive copy of the data.
 	///

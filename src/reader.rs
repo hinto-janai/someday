@@ -13,6 +13,7 @@ use std::{
 	num::NonZeroUsize, collections::BTreeMap,
 };
 use crate::{
+	writer::{WriterToken,WriterReviveToken},
 	free::INIT_VEC_CAP,
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
@@ -142,6 +143,8 @@ pub struct Reader<T: Clone> {
 	///
 	/// This is `swap()` updated by the `Writer`.
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
+	/// Has the associated `Writer` to this `Reader` been dropped?
+	pub(super) writer_token: WriterToken,
 }
 
 impl<T: Clone> Reader<T> {
@@ -247,17 +250,49 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[must_use]
-	/// This returns whether this is the last [`Reader`] standing,
-	/// AND that the associated [`Writer`] has been dropped.
+	/// This returns whether the associated [`Writer`]
+	/// to this [`Reader`] has been dropped.
 	///
-	/// If this returns `true`, it means:
-	/// 1. This is the only `Reader` in existence
-	/// 2. The associated `Writer` has been dropped
+	/// Note that even if this returns `true`, [`Reader::try_into_writer`]
+	/// is not guaranteed to succeed as other `Reader`'s could race towards
+	/// becoming the new `Writer`.
 	///
-	/// If this returns `false`, it means:
-	/// - Other `Reader`'s exist (maybe including the `Writer`)
-	pub fn alone(&self) -> bool {
-		Arc::strong_count(&self.arc) == 1
+	/// It is guaranteed _one_ of them will succeed, but not necessarily _this_ `Reader`.
+	pub fn writer_dead(&self) -> bool {
+		self.writer_token.is_dead()
+	}
+
+	/// TODO
+	/// # Errors
+	/// TODO
+	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
+		let writer_revive_token = match self.writer_token.try_revive() {
+			Some(wrt) => wrt,
+			None => return Err(self),
+		};
+
+		//------------------------------------------------------------
+		// Past this point, we:
+		// 1. Are the only `Reader` here
+		// 2. Can safely turn into a `Writer` since it was dropped
+		//------------------------------------------------------------
+
+		let remote = self.head();
+
+		let writer = Writer {
+			token: self.writer_token,
+			local: Some(remote.to_commit_owned()),
+			remote,
+			arc: self.arc,
+			patches: Vec::with_capacity(INIT_VEC_CAP),
+			patches_old: Vec::with_capacity(INIT_VEC_CAP),
+			tags: BTreeMap::new(),
+		};
+
+		// INVARIANT: We must tell the token that we have successfully revived the `Writer`.
+		WriterReviveToken::revived(writer_revive_token);
+
+		Ok(writer)
 	}
 
 	#[must_use]
@@ -268,6 +303,7 @@ impl<T: Clone> Reader<T> {
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 
 		Writer {
+			token: Arc::new(AtomicBool::new(false)).into(),
 			local: Some(local),
 			remote,
 			arc,

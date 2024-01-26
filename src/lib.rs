@@ -76,6 +76,11 @@
 	clippy::module_name_repetitions,
 	clippy::mod_module_files,
 	clippy::module_inception,
+	clippy::let_underscore_must_use,
+	clippy::let_underscore_untyped,
+	clippy::items_after_statements,
+	clippy::single_call_fn,
+	clippy::if_then_some_else_none,
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod

@@ -99,6 +99,7 @@ pub(crate) fn new_inner<T: Clone>(local: CommitOwned<T>) -> Writer<T> {
 	let arc    = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
 
 	Writer {
+		token: Arc::new(AtomicBool::new(false)).into(),
 		local: Some(local),
 		remote,
 		arc,

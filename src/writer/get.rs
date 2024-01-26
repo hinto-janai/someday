@@ -15,7 +15,7 @@ use std::{
 };
 
 use crate::{
-	writer::Writer,
+	writer::{Writer,WriterToken},
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
@@ -46,6 +46,7 @@ impl<T: Clone> Writer<T> {
 	pub fn reader(&self) -> Reader<T> {
 		Reader {
 			arc: Arc::clone(&self.arc),
+			writer_token: self.token.clone(),
 		}
 	}
 

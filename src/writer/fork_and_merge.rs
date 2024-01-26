@@ -37,6 +37,7 @@ impl<T: Clone> Writer<T> {
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 
 		Self {
+			token: Arc::new(AtomicBool::new(false)).into(),
 			local: Some(local),
 			remote,
 			arc,
