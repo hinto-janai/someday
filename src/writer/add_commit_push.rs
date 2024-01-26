@@ -110,6 +110,16 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(*w.head().data(), 0);
 	/// ```
 	pub fn commit(&mut self) -> CommitInfo {
+		self.commit_inner::<false>()
+	}
+
+	/// TODO
+	pub fn commit_unsynced(&mut self) -> CommitInfo {
+		self.commit_inner::<true>()
+	}
+
+	/// TODO
+	fn commit_inner<const UNSYNCED: bool>(&mut self) -> CommitInfo {
 		let patch_len = self.patches.len();
 
 		// Early return if there was nothing to do.
@@ -122,20 +132,22 @@ impl<T: Clone> Writer<T> {
 
 		self.local_as_mut().timestamp += 1;
 
-		// Pre-allocate some space for the new patches.
-		self.patches_old.reserve_exact(patch_len);
-
 		// Apply the patches and add to the old vector.
-		for mut patch in self.patches.drain(..) {
-			patch.apply(
-				// We can't use `self.local_as_mut()` here
-				// We can't have `&mut self` and `&self`.
-				//
-				// INVARIANT: local must be initialized after push()
-				&mut self.local.as_mut().unwrap().data,
-				&self.remote.data,
-			);
-			self.patches_old.push(patch);
+		if !UNSYNCED {
+			// Pre-allocate some space for the new patches.
+			self.patches_old.reserve_exact(patch_len);
+
+			for mut patch in self.patches.drain(..) {
+				patch.apply(
+					// We can't use `self.local_as_mut()` here
+					// We can't have `&mut self` and `&self`.
+					//
+					// INVARIANT: local must be initialized after push()
+					&mut self.local.as_mut().unwrap().data,
+					&self.remote.data,
+				);
+				self.patches_old.push(patch);
+			}
 		}
 
 		CommitInfo {
@@ -210,7 +222,23 @@ impl<T: Clone> Writer<T> {
 	///
 	/// # Timestamp
 	/// This function will always increment the [`Writer`]'s local [`Timestamp`] by `1`.
-	pub fn add_commit<P, Output>(&mut self, mut patch: P) -> (CommitInfo, Output)
+	pub fn add_commit<P, Output>(&mut self, patch: P) -> (CommitInfo, Output)
+	where
+		P: FnMut(&mut T, &T) -> Output + Send + 'static
+	{
+		self.add_commit_inner::<P, Output, false>(patch)
+	}
+
+	/// TODO
+	pub fn add_commit_unsynced<P, Output>(&mut self, patch: P) -> (CommitInfo, Output)
+	where
+		P: FnMut(&mut T, &T) -> Output + Send + 'static
+	{
+		self.add_commit_inner::<P, Output, true>(patch)
+	}
+
+	/// TODO
+	fn add_commit_inner<P, Output, const UNSYNCED: bool>(&mut self, mut patch: P) -> (CommitInfo, Output)
 	where
 		P: FnMut(&mut T, &T) -> Output + Send + 'static
 	{
@@ -233,8 +261,10 @@ impl<T: Clone> Writer<T> {
 			&self.remote.data,
 		);
 
-		// Convert patch to immediately drop return value.
-		self.patches_old.push(Patch::boxed(move |w, r| drop(patch(w, r))));
+		if UNSYNCED {
+			// Convert patch to immediately drop return value.
+			self.patches_old.push(Patch::boxed(move |w, r| drop(patch(w, r))));
+		}
 
 		(commit_info, r)
 	}
