@@ -167,10 +167,16 @@ impl<T: Clone> Writer<T> {
 	}
 
 	/// TODO
-	fn overwrite_from_tag(&mut self, tag_timestamp: Timestamp) -> Option<CommitOwned<T>> {
+	fn revert(&mut self, tag_timestamp: Timestamp) -> Option<CommitOwned<T>> {
+		// INVARIANT: the `Writer` must never be _behind_ the `Reader`'s.
+		if tag_timestamp < self.timestamp_remote() {
+			return None;
+		}
+
 		let Some(commit_ref) = self.tags().get(&tag_timestamp) else {
 			return None;
 		};
+
 		Some(self.overwrite_inner(commit_ref.to_data()))
 	}
 
