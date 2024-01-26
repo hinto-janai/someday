@@ -251,7 +251,7 @@ impl<T: Clone> Reader<T> {
 	/// AND that the associated [`Writer`] has been dropped.
 	///
 	/// If this returns `true`, it means:
-	/// 1. This is the only `Reader` in existance
+	/// 1. This is the only `Reader` in existence
 	/// 2. The associated `Writer` has been dropped
 	///
 	/// If this returns `false`, it means:

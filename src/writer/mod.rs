@@ -7,7 +7,7 @@ mod add_commit_push;
 mod get;
 mod push;
 mod pull;
-mod fork;
+mod fork_and_merge;
 mod timestamp;
 mod tag;
 mod misc;
