@@ -256,6 +256,9 @@ impl<T: Clone> Writer<T> {
 	/// How many [`Reader`]'s are _currently_ accessing
 	/// the current `Reader` head [`Commit`]?
 	///
+	/// Note that this will always at least return `2`, as the
+	/// [`Writer`] carries 2 strong references to the backing data `T`.
+	///
 	/// ```rust
 	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
@@ -302,6 +305,9 @@ impl<T: Clone> Writer<T> {
 	/// Unlike [`Writer::head_count()`], this doesn't count references
 	/// to the current data, it counts how many `Reader` objects are in existence.
 	///
+	/// Note that this will always at least return `1`,
+	/// as the [`Writer`] counts as a `Reader`.
+	///
 	/// ```rust
 	/// # use someday::*;
 	/// # use std::{thread::*,time::*};
@@ -326,6 +332,18 @@ impl<T: Clone> Writer<T> {
 		// The fact that we have are passing an Arc
 		// means this will always at-least output 1.
 		NonZeroUsize::new(count).expect("head_count() returned 0")
+	}
+
+	/// Does a [`Reader`] object associated with this [`Writer`] exist?
+	///
+	/// As noted in [`Writer::reader_count`], the `Writer` will always
+	/// count as a `Reader`, meaning the strong count will always at
+	/// least be `1`.
+	///
+	/// If it is `1`, that means no `Reader` object exists,
+	/// in that case, this function will return `false`.
+	pub fn readers_exists(&self) -> bool {
+		Arc::strong_count(&self.arc) != 1
 	}
 
 	/// Get the current status on the [`Writer`] and [`Reader`]
