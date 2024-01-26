@@ -28,6 +28,10 @@ use crate::{
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
+	/// Same as [`crate::free::new`] but without creating a [`Reader`].
+	pub fn new(data: T) -> Self {
+		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+	}
 	#[inline]
 	#[allow(clippy::type_complexity)]
 	/// Restore all the staged changes.
@@ -129,9 +133,18 @@ impl<T: Clone> Writer<T> {
 		self.patches_old.reserve_exact(additional);
 	}
 
-	/// Same as [`crate::free::new`] but without creating a [`Reader`].
-	pub fn new(data: T) -> Self {
-		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+	/// TODO
+	pub fn connected(&self, reader: &Reader<T>) -> bool {
+		Arc::ptr_eq(&self.arc, &reader.arc)
+	}
+
+	/// TODO
+	pub fn disconnect(&mut self) {
+		let token = Arc::new(AtomicBool::new(false));
+		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));
+
+		self.token = token.into();
+		self.arc = arc;
 	}
 
 	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]

@@ -52,6 +52,9 @@ impl WriterToken {
 		}
 	}
 
+	#[must_use]
+	/// TODO
+	///
 	/// Acquire ordering.
 	pub(crate) fn is_dead(&self) -> bool {
 		self.inner.load(Ordering::Acquire)

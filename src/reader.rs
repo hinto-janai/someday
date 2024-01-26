@@ -144,7 +144,7 @@ pub struct Reader<T: Clone> {
 	/// This is `swap()` updated by the `Writer`.
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
 	/// Has the associated `Writer` to this `Reader` been dropped?
-	pub(super) writer_token: WriterToken,
+	pub(super) token: WriterToken,
 }
 
 impl<T: Clone> Reader<T> {
@@ -259,14 +259,14 @@ impl<T: Clone> Reader<T> {
 	///
 	/// It is guaranteed _one_ of them will succeed, but not necessarily _this_ `Reader`.
 	pub fn writer_dead(&self) -> bool {
-		self.writer_token.is_dead()
+		self.token.is_dead()
 	}
 
 	/// TODO
 	/// # Errors
 	/// TODO
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
-		let writer_revive_token = match self.writer_token.try_revive() {
+		let writer_revive_token = match self.token.try_revive() {
 			Some(wrt) => wrt,
 			None => return Err(self),
 		};
@@ -280,7 +280,7 @@ impl<T: Clone> Reader<T> {
 		let remote = self.head();
 
 		let writer = Writer {
-			token: self.writer_token,
+			token: self.token,
 			local: Some(remote.to_commit_owned()),
 			remote,
 			arc: self.arc,

@@ -46,7 +46,7 @@ impl<T: Clone> Writer<T> {
 	pub fn reader(&self) -> Reader<T> {
 		Reader {
 			arc: Arc::clone(&self.arc),
-			writer_token: self.token.clone(),
+			token: self.token.clone(),
 		}
 	}
 

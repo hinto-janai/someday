@@ -6,6 +6,7 @@
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
+	writer::WriterToken,
 	patch::Patch,
 	commit::{CommitOwned,CommitRef},
 };
@@ -121,18 +122,22 @@ pub struct WriterInfo<T: Clone> {
 	///
 	/// [`Writer::head`].
 	pub writer: CommitOwned<T>,
+
 	/// The latest [`Reader`]'s [`Commit`].
 	///
 	/// [`Writer::head_remote`].
 	pub reader: CommitRef<T>,
+
 	/// The "staged" `Patch`'s that haven't been [`commit()`](Writer::commit)'ed.
 	///
 	/// [`Writer::staged`].
 	pub staged: Vec<Patch<T>>,
+
 	/// The committed `Patch`'s that haven't been [`push()`](Writer::push)'ed.
 	///
 	/// [`Writer::committed_patches`].
 	pub committed_patches: Vec<Patch<T>>,
+
 	/// [`Writer::tags`].
 	pub tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
