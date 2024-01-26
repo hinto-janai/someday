@@ -121,7 +121,7 @@ use crate::{
 /// ## Invariants
 /// Some invariants that the `Writer` always upholds, that you can rely on:
 /// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::timestamp()`]
-/// - [`Writer::tags()`] will always return `Commit`'s that were previously [`push()`](Writer::push)'ed
+/// - [`Writer::tags()`] will always return `Commit`'s that were previously [`Writer::tag()`]'ed or [`Writer::merge()`]'ed in
 /// - If a `Writer` that is being shared (e.g `Arc<Mutex<Writer<T>>`) panics mid-push, the other `Writer`'s
 ///   may also panic on any operation that touches local data - i.e. the local data `T` will never
 ///   be seen in an uninitialized state
@@ -274,5 +274,14 @@ impl<T: Clone> AsRef<T> for Writer<T> {
 	#[inline]
 	fn as_ref(&self) -> &T {
 		&self.local_as_ref().data
+	}
+}
+
+impl<T: Clone> TryFrom<Reader<T>> for Writer<T> {
+	type Error = Reader<T>;
+
+	/// Calls [`Reader::try_into_writer`].
+	fn try_from(reader: Reader<T>) -> Result<Self, Self::Error> {
+		Reader::try_into_writer(reader)
 	}
 }
