@@ -14,6 +14,11 @@ use std::{
 };
 
 //---------------------------------------------------------------------------------------------------- Free functions
+/// The default `Vec` capacity for the
+/// `Patch`'s when using using `new()`.
+pub(crate) const INIT_VEC_CAP: usize = 16;
+
+//---------------------------------------------------------------------------------------------------- Free functions
 #[inline]
 #[must_use]
 /// Create a new [`Reader`] & [`Writer`] pair.
@@ -90,10 +95,6 @@ pub fn from_commit<T: Clone, C: Commit<T>>(commit: C) -> (Reader<T>, Writer<T>) 
 
 /// Inner function for constructors.
 pub(crate) fn new_inner<T: Clone>(local: CommitOwned<T>) -> Writer<T> {
-	/// The default `Vec` capacity for the
-	/// `Patch`'s when using using `new()`.
-	const INIT_VEC_CAP: usize = 16;
-
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
 

@@ -10,9 +10,10 @@ use std::{
 		},
 	},
 	time::Duration,
-	num::NonZeroUsize,
+	num::NonZeroUsize, collections::BTreeMap,
 };
 use crate::{
+	free::INIT_VEC_CAP,
 	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
 	Writer,
@@ -257,6 +258,23 @@ impl<T: Clone> Reader<T> {
 	/// - Other `Reader`'s exist (maybe including the `Writer`)
 	pub fn alone(&self) -> bool {
 		Arc::strong_count(&self.arc) == 1
+	}
+
+	#[must_use]
+	/// TODO
+	pub fn fork(&self) -> Writer<T> {
+		let remote = self.head();
+		let local = remote.to_commit_owned();
+		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
+
+		Writer {
+			local: Some(local),
+			remote,
+			arc,
+			patches: Vec::with_capacity(INIT_VEC_CAP),
+			patches_old: Vec::with_capacity(INIT_VEC_CAP),
+			tags: BTreeMap::new(),
+		}
 	}
 }
 
