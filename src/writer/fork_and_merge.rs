@@ -51,7 +51,11 @@ impl<T: Clone> Writer<T> {
 	/// # Errors
 	/// TODO
 	#[allow(clippy::missing_panics_doc)]
-	pub fn merge(&mut self, mut other: Self) -> Result<CommitOwned<T>, usize> {
+	pub fn merge<M>(&mut self, mut other: Self, mut merge: M) -> Result<Timestamp, usize>
+	where
+		T: Send + 'static,
+		M: FnMut(&mut T, &T) + Send + 'static,
+	{
 		// INVARIANT: local should always be initialized.
 		let other_local = other.local.unwrap();
 
@@ -63,10 +67,18 @@ impl<T: Clone> Writer<T> {
 		}
 
 		// Overwrite our data with `other`'s.
-		let old_writer_commit = self.overwrite(other_local.data);
+		// let old_writer_commit = self.overwrite(other_local.data);
+		merge(
+			&mut self.local.as_mut().unwrap().data,
+			&other_local.data,
+		);
 
 		// Make sure the timestamp is now the new commit's.
 		self.local_as_mut().timestamp = other_local.timestamp;
+
+		self.patches_old.push(Patch::boxed(move |w, _| {
+			merge(w, &other_local.data);
+		}));
 
 		// If we have tags...
 		if let Some(max_entry) = self.tags.last_entry() {
@@ -94,6 +106,6 @@ impl<T: Clone> Writer<T> {
 		// Take the old patches.
 		self.patches_old.extend(other.patches_old);
 
-		Ok(old_writer_commit)
+		Ok(self.timestamp())
 	}
 }
