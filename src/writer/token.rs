@@ -28,7 +28,7 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- Writer
 #[derive(Clone, Debug)]
 #[repr(transparent)]
-/// TODO
+/// Token representing a certain `Writer`, and if it has been dropped.
 pub(crate) struct WriterToken {
 	/// Only set to `false` when we are `drop()`'ed.
 	inner: Arc<AtomicBool>,
@@ -77,12 +77,15 @@ impl Drop for WriterToken {
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
-/// If this thread somehow panics in-between setting `writer_dead` to `false`
-/// and returning the `Writer`, it'll be set to `false` forever which will
-/// block (potential) future `Reader`'s from successfully calling this function.
+/// A token giving permission to become the new `Writer`.
 ///
-/// In order to prevent this, create some drop clue to
-/// set it to `true` if this function exits prematurely.
+/// If this token exists, it means:
+/// 1. The previous `Writer` was dropped
+/// 2. Thus, we have permission to "become" the `Writer`
+///
+/// This struct has drop-glue in-order to prevent it from
+/// blocking other `Reader`'s who would like to become `Writer`'s
+/// if a panic occurs, or if the "revive" function exits prematurely.
 pub(crate) struct WriterReviveToken {
 	/// The writer token.
 	writer_token: WriterToken,
