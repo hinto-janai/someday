@@ -30,7 +30,20 @@ use crate::{
 impl<T: Clone> Writer<T> {
 	#[must_use]
 	#[allow(clippy::missing_panics_doc)]
-	/// TODO
+	/// Fork off from the current [`Reader::head`] commit and create a [`Writer`].
+	///
+	/// This function:
+	/// - Clones the current latest `Reader` data
+	/// - Clones the [`Writer::tags`]
+	/// - Creates a completely new `Writer` that is _disconnected_ from this `Reader` (and others)
+	///
+	/// The new `Writer`:
+	/// - will contain no [`Patch`]'s
+	/// - is disconnected, meaning it has absolutely no
+	/// relation to `self` or any other previous `Reader`'s.
+	/// - has the latest `Reader` data as the local, mutable [`Writer::data`]
+	///
+	/// The [`Commit`]'s pushed by the returned `Writer` will not be visible to previous `Reader`'s
 	pub fn fork(&self) -> Self {
 		let remote = Arc::clone(&self.remote);
 		let local = remote.to_commit_owned();

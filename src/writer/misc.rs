@@ -133,12 +133,27 @@ impl<T: Clone> Writer<T> {
 		self.patches_old.reserve_exact(additional);
 	}
 
-	/// TODO
+	/// Is this [`Writer`] associated with this [`Reader`]?
+	///
+	/// This returns `true` if both `self` and `other` are `Reader`'s from the same `Writer`.
+	///
+	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
 	pub fn connected(&self, reader: &Reader<T>) -> bool {
 		Arc::ptr_eq(&self.arc, &reader.arc)
 	}
 
-	/// TODO
+	/// Disconnect from the [`Reader`]'s associated with this [`Writer`].
+	///
+	/// This completely severs the link between the
+	/// `Reader`'s associated with this `Writer`.
+	///
+	/// Any older `Reader`'s will no longer receive [`Commit`]'s
+	/// from this `Writer`, and [`Reader::writer_dead`] will start
+	/// to return `true`. From the perspective of the older `Reader`'s,
+	/// calling this function is the same as this `Writer` being dropped.
+	///
+	/// Any future `Reader`'s created after this function
+	/// are completely separate from the past `Reader`'s.
 	pub fn disconnect(&mut self) {
 		let token = Arc::new(AtomicBool::new(false));
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));

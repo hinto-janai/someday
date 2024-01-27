@@ -250,21 +250,51 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[must_use]
-	/// This returns whether the associated [`Writer`]
-	/// to this [`Reader`] has been dropped.
+	/// This returns whether the associated [`Writer`] to this
+	/// [`Reader`] has been dropped (or [`Writer::disconnect`]'ed).
 	///
 	/// Note that even if this returns `true`, [`Reader::try_into_writer`]
 	/// is not guaranteed to succeed as other `Reader`'s could race towards
 	/// becoming the new `Writer`.
 	///
 	/// It is guaranteed _one_ of them will succeed, but not necessarily _this_ `Reader`.
-	pub fn writer_dead(&self) -> bool {
+	pub fn writer_dropped(&self) -> bool {
 		self.token.is_dead()
 	}
 
-	/// TODO
+	#[must_use]
+	/// Are both these [`Reader`]'s associated with the same [`Writer`]?
+	///
+	/// This returns `true` if both `self` and `other` are `Reader`'s from the same `Writer`.
+	///
+	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
+	pub fn connnected(&self, other: &Self) -> bool {
+		Arc::ptr_eq(&self.arc, &other.arc)
+	}
+
+	#[must_use]
+	/// Is this [`Reader`] associated with this [`Writer`]?
+	///
+	/// This returns `true` if `self` is associated with the passed `writer`.
+	///
+	/// This means `self` receives the [`Commit`]'s that `writer` pushes.
+	pub fn connnected_writer(&self, writer: &Writer<T>) -> bool {
+		Arc::ptr_eq(&self.arc, &writer.arc)
+	}
+
+	/// Attempt to transform this [`Reader`] into an associated [`Writer`].
+	///
+	/// If the original `Writer` associated with this `Reader` is gone,
+	/// this function will turn `self` into a new `Writer`, while maintaining
+	/// the connection with any other `Reader`'s.
+	///
+	/// Any future [`Commit`] pushed by the returned `Writer`
+	/// will be observed by other `Reader`'s.
+	///
 	/// # Errors
-	/// TODO
+	/// This returns back `Err(self)` if either:
+	/// 1. The associated `Writer` is still alive
+	/// 2. Another `Reader` is currently in this function, becoming the `Writer`
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
 		let writer_revive_token = match self.token.try_revive() {
 			Some(wrt) => wrt,
@@ -296,7 +326,10 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[must_use]
-	/// TODO
+	/// Fork off from the current [`Reader::head`] commit and create a [`Writer`].
+	///
+	/// This function is identical [`Writer::fork`], although the [`Writer::tags`]'s
+	/// will not be carried over, they will be empty in the new `Writer`.
 	pub fn fork(&self) -> Writer<T> {
 		let remote = self.head();
 		let local = remote.to_commit_owned();
