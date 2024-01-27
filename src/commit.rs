@@ -52,6 +52,8 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	#[inline]
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
 	/// if you are the only one holding onto it.
+	///
+	/// TODO: doc test.
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
 		Arc::try_unwrap(commit)
 	}
@@ -61,6 +63,7 @@ impl<T> std::fmt::Display for CommitOwned<T>
 where
 	T: Clone + std::fmt::Display
 {
+	/// TODO: doc test.
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Display::fmt(&self.data, f)
 	}
@@ -82,11 +85,14 @@ where
 /// This is just an alias for [`Arc<CommitOwned<T>>`].
 ///
 /// [`Commit`] is implemented on this (`Arc<CommitOwned<T>>`).
+///
+/// TODO: doc test.
 pub type CommitRef<T> = Arc<CommitOwned<T>>;
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 	#[inline]
+	/// TODO: doc test.
 	fn from(reader: &Reader<T>) -> Self {
 		reader.head()
 	}
@@ -151,30 +157,40 @@ where
 
 	#[inline]
 	/// If there is a difference in `self` and `other`'s timestamps or data.
+	///
+	/// TODO: doc test.
 	fn diff(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
 		(self.diff_timestamp(other)) || (self.diff_data(other))
 	}
 
 	#[inline]
 	/// If there is a difference in `self` & `other`'s timestamps.
+	///
+	/// TODO: doc test.
 	fn diff_timestamp(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() != other.timestamp()
 	}
 
 	#[inline]
 	/// If there is a difference in `self` & `other`'s timestamps.
+	///
+	/// TODO: doc test.
 	fn diff_data(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
 		self.data() != other.data()
 	}
 
 	#[inline]
 	/// If `self`'s timestamp is ahead of `other`'s timestamp.
+	///
+	/// TODO: doc test.
 	fn ahead(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() > other.timestamp()
 	}
 
 	#[inline]
 	/// If `self`'s timestamp is behind of `other`'s timestamp.
+	///
+	/// TODO: doc test.
 	fn behind(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() < other.timestamp()
 	}

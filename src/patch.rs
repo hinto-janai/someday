@@ -156,6 +156,8 @@ pub enum Patch<T> {
 impl<T> Patch<T> {
 	#[inline]
 	/// Short-hand for `Self::Box(Box::new(patch))`.
+	///
+	/// TODO: doc test.
 	pub fn boxed<P>(patch: P) -> Self
 	where
 		P: FnMut(&mut T, &T) + Send + 'static,
@@ -165,6 +167,8 @@ impl<T> Patch<T> {
 
 	#[inline]
 	/// Short-hand for `Self::Arc(Arc::new(patch))`.
+	///
+	/// TODO: doc test.
 	pub fn arc<P>(patch: P) -> Self
 	where
 		P: Fn(&mut T, &T) + Send + Sync + 'static,
@@ -174,6 +178,8 @@ impl<T> Patch<T> {
 
 	#[inline]
 	/// Apply the [`Patch`] onto the [`Writer`] data.
+	///
+	/// TODO: test.
 	pub(crate) fn apply(&mut self, writer: &mut T, reader: &T) {
 		match self {
 			Self::Box(f) => f(writer, reader),
@@ -184,42 +190,52 @@ impl<T> Patch<T> {
 
 	#[must_use]
 	/// If `self` is the `Patch::Box` variant.
+	///
+	/// TODO: doc test.
 	pub const fn is_box(&self) -> bool {
 		matches!(self, Self::Box(_))
 	}
 
 	#[must_use]
 	/// If `self` is the `Patch::Arc` variant.
+	///
+	/// TODO: doc test.
 	pub const fn is_arc(&self) -> bool {
 		matches!(self, Self::Arc(_))
 	}
 
 	#[must_use]
 	/// If `self` is the `Patch::Ptr` variant.
+	///
+	/// TODO: doc test.
 	pub const fn is_ptr(&self) -> bool {
 		matches!(self, Self::Ptr(_))
 	}
 }
 
 impl<T> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
+	/// TODO: doc test.
 	fn from(patch: Box<dyn FnMut(&mut T, &T) + Send + 'static>) -> Self {
 		Self::Box(patch)
 	}
 }
 
 impl<T> From<Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+	/// TODO: doc test.
 	fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(patch)
 	}
 }
 
 impl<T> From<&Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+	/// TODO: doc test.
 	fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(Arc::clone(patch))
 	}
 }
 
 impl<T> From<fn(&mut T, &T)> for Patch<T> {
+	/// TODO: doc test.
 	fn from(patch: fn(&mut T, &T)) -> Self {
 		Self::Ptr(patch)
 	}

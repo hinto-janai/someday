@@ -198,18 +198,11 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[inline]
-	#[must_use]
-	/// Acquire a [`CommitOwned`] that owns the underlying data
-	///
-	/// This will expensively clone the underlying data `T`.
-	pub fn head_owned(&self) -> CommitOwned<T> {
-		self.head().into_commit_owned()
-	}
-
-	#[inline]
 	/// If the [`Reader`]'s current [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	///
+	/// TODO: doc test.
 	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
 		self.head().ahead(commit)
 	}
@@ -218,6 +211,8 @@ impl<T: Clone> Reader<T> {
 	/// If the [`Reader`]'s current [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
 	///
 	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	///
+	/// TODO: doc test.
 	pub fn behind(&self, commit: &impl Commit<T>) -> bool {
 		self.head().behind(commit)
 	}
@@ -230,6 +225,8 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This number starts at `0`, increments by `1` every time a [`Writer::commit()`]
 	/// -like operation is called, and it will never be greater than the [`Writer`]'s [`Timestamp`].
+	///
+	/// TODO: doc test.
 	pub fn timestamp(&self) -> Timestamp {
 		self.head().timestamp()
 	}
@@ -240,6 +237,8 @@ impl<T: Clone> Reader<T> {
 	/// How many [`Reader`]'s are there?
 	///
 	/// This is the same as [`Writer::reader_count()`].
+	///
+	/// TODO: doc test.
 	pub fn reader_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.arc);
 
@@ -258,6 +257,8 @@ impl<T: Clone> Reader<T> {
 	/// becoming the new `Writer`.
 	///
 	/// It is guaranteed _one_ of them will succeed, but not necessarily _this_ `Reader`.
+	///
+	/// TODO: doc test.
 	pub fn writer_dropped(&self) -> bool {
 		self.token.is_dead()
 	}
@@ -268,6 +269,8 @@ impl<T: Clone> Reader<T> {
 	/// This returns `true` if both `self` and `other` are `Reader`'s from the same `Writer`.
 	///
 	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
+	///
+	/// TODO: doc test.
 	pub fn connnected(&self, other: &Self) -> bool {
 		Arc::ptr_eq(&self.arc, &other.arc)
 	}
@@ -278,6 +281,8 @@ impl<T: Clone> Reader<T> {
 	/// This returns `true` if `self` is associated with the passed `writer`.
 	///
 	/// This means `self` receives the [`Commit`]'s that `writer` pushes.
+	///
+	/// TODO: doc test.
 	pub fn connnected_writer(&self, writer: &Writer<T>) -> bool {
 		Arc::ptr_eq(&self.arc, &writer.arc)
 	}
@@ -295,6 +300,9 @@ impl<T: Clone> Reader<T> {
 	/// This returns back `Err(self)` if either:
 	/// 1. The associated `Writer` is still alive
 	/// 2. Another `Reader` is currently in this function, becoming the `Writer`
+	///
+	/// # Example
+	/// TODO: doc test.
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
 		let writer_revive_token = match self.token.try_revive() {
 			Some(wrt) => wrt,
@@ -330,6 +338,8 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This function is identical [`Writer::fork`], although the [`Writer::tags`]'s
 	/// will not be carried over, they will be empty in the new `Writer`.
+	///
+	/// TODO: doc test.
 	pub fn fork(&self) -> Writer<T> {
 		let remote = self.head();
 		let local = remote.to_commit_owned();

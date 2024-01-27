@@ -26,6 +26,10 @@ use crate::{
 	},
 };
 
+/// TODO:
+/// - preserve timestamps
+/// - error on incorrect data (tag timestamp > local.timestamp)
+
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]
 impl<T> serde::Serialize for Writer<T>

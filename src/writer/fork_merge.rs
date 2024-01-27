@@ -44,6 +44,8 @@ impl<T: Clone> Writer<T> {
 	/// - has the latest `Reader` data as the local, mutable [`Writer::data`]
 	///
 	/// The [`Commit`]'s pushed by the returned `Writer` will not be visible to previous `Reader`'s
+	///
+	/// TODO: doc test.
 	pub fn fork(&self) -> Self {
 		let remote = Arc::clone(&self.remote);
 		let local = remote.to_commit_owned();

@@ -29,6 +29,8 @@ use crate::{
 #[derive(Clone, Debug)]
 #[repr(transparent)]
 /// Token representing a certain `Writer`, and if it has been dropped.
+///
+/// TODO: test.
 pub(crate) struct WriterToken {
 	/// Only set to `false` when we are `drop()`'ed.
 	inner: Arc<AtomicBool>,
@@ -86,6 +88,8 @@ impl Drop for WriterToken {
 /// This struct has drop-glue in-order to prevent it from
 /// blocking other `Reader`'s who would like to become `Writer`'s
 /// if a panic occurs, or if the "revive" function exits prematurely.
+///
+/// TODO: test.
 pub(crate) struct WriterReviveToken {
 	/// The writer token.
 	writer_token: WriterToken,

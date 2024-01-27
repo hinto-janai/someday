@@ -29,6 +29,8 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
 	/// Same as [`crate::free::new`] but without creating a [`Reader`].
+	///
+	/// TODO: doc test.
 	pub fn new(data: T) -> Self {
 		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
 	}
@@ -138,6 +140,8 @@ impl<T: Clone> Writer<T> {
 	/// This returns `true` if both `self` and `other` are `Reader`'s from the same `Writer`.
 	///
 	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
+	///
+	/// TODO: doc test.
 	pub fn connected(&self, reader: &Reader<T>) -> bool {
 		Arc::ptr_eq(&self.arc, &reader.arc)
 	}
@@ -154,6 +158,8 @@ impl<T: Clone> Writer<T> {
 	///
 	/// Any future `Reader`'s created after this function
 	/// are completely separate from the past `Reader`'s.
+	///
+	/// TODO: doc test.
 	pub fn disconnect(&mut self) {
 		let token = Arc::new(AtomicBool::new(false));
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));

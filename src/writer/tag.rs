@@ -118,6 +118,8 @@ impl<T: Clone> Writer<T> {
 	/// Therefore the `Timestamp` and `CommitRef` data can be relied upon.
 	///
 	/// These "tags" are created with [`Writer::tag()`].
+	///
+	/// TODO: doc test.
 	pub const fn tags(&self) -> &BTreeMap<Timestamp, CommitRef<T>> {
 		&self.tags
 	}

@@ -343,6 +343,8 @@ impl<T: Clone> Writer<T> {
 	///
 	/// If it is `1`, that means no `Reader` object exists,
 	/// in that case, this function will return `false`.
+	///
+	/// TODO: doc test.
 	pub fn readers_exists(&self) -> bool {
 		Arc::strong_count(&self.arc) != 1
 	}
@@ -354,6 +356,8 @@ impl<T: Clone> Writer<T> {
 	///
 	/// If you only need 1 or a few of the fields in [`StatusInfo`],
 	/// consider using their individual methods instead.
+	///
+	/// TODO: doc test.
 	pub fn status(&self) -> StatusInfo<'_, T> {
 		StatusInfo {
 			staged_patches: &self.patches,
