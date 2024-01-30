@@ -369,9 +369,7 @@ where
 	T: Clone + serde::Serialize
 {
 	#[inline]
-	/// This will call `head()`, then serialize your `T`.
-	///
-	/// `T::serialize(self.head().data(), serializer)`.
+	/// This will call `head()`, then serialize the resulting [`CommitRef`].
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -379,13 +377,13 @@ where
 	/// let (r, _) = someday::new(String::from("hello"));
 	///
 	/// let json = serde_json::to_string(&r).unwrap();
-	/// assert_eq!(json, "\"hello\"");
+	/// assert_eq!(json, "{\"timestamp\":0,\"data\":\"hello\"}");
 	/// ```
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        T::serialize(self.head().data(), serializer)
+        CommitRef::serialize(&self.head(), serializer)
     }
 }
 
@@ -395,9 +393,7 @@ where
 	T: Clone + bincode::Encode
 {
 	#[inline]
-	/// This will call `head()`, then serialize your `T`.
-	///
-	/// `T::encode(self.head().data(), encoder)`
+	/// This will call `head()`, then serialize the resulting [`CommitRef`].
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -405,11 +401,12 @@ where
 	/// let (r, _) = someday::new(String::from("hello"));
 	/// let config = bincode::config::standard();
 	///
-	/// let bytes = bincode::encode_to_vec(&r, config).unwrap();
-	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
+	/// let encoded = bincode::encode_to_vec(&r, config).unwrap();
+	/// let decoded: CommitOwned<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
+	/// assert_eq!(decoded, CommitOwned { timestamp: 0, data: String::from("hello") });
 	/// ```
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-		T::encode(self.head().data(), encoder)
+		CommitRef::encode(&self.head(), encoder)
 	}
 }
 
@@ -426,10 +423,11 @@ where
 	///
 	/// let (r, _) = someday::new(String::from("hello"));
 	///
-	/// let bytes = borsh::to_vec(&r).unwrap();
-	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
+	/// let encoded = borsh::to_vec(&r).unwrap();
+	/// let decoded: CommitOwned<String> = borsh::from_slice(&encoded).unwrap();
+	/// assert_eq!(decoded, CommitOwned { timestamp: 0, data: String::from("hello") });
 	/// ```
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-		T::serialize(self.head().data(), writer)
+		CommitRef::serialize(&self.head(), writer)
 	}
 }
