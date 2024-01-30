@@ -292,6 +292,7 @@ impl<T: Clone> Writer<T> {
 	/// ```
 	pub fn head_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.remote);
+		assert!(count >= 2, "head_count() returned less than 2");
 
 		// INVARIANT:
 		// The fact that we have are passing an Arc

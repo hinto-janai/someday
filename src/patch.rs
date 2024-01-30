@@ -95,7 +95,7 @@ use crate::{
 /// assert_eq!(*w.data(), 100);
 /// assert_eq!(*w.reader().head().data(), 10);
 /// ```
-pub enum Patch<T> {
+pub enum Patch<T: Clone> {
 	/// Dynamically dispatched, potentially capturing, boxed function.
 	///
 	/// ```rust
@@ -153,7 +153,7 @@ pub enum Patch<T> {
 	Ptr(fn(&mut T, &T)),
 }
 
-impl<T> Patch<T> {
+impl<T: Clone> Patch<T> {
 	#[inline]
 	/// Short-hand for `Self::Box(Box::new(patch))`.
 	///
@@ -211,30 +211,68 @@ impl<T> Patch<T> {
 	pub const fn is_ptr(&self) -> bool {
 		matches!(self, Self::Ptr(_))
 	}
+
+	#[must_use]
+	/// TODO
+	pub const fn clone() -> Self {
+		Self::Ptr(|w, r| {
+			*w = r.clone();
+		})
+	}
+
+	#[must_use]
+	/// TODO
+	pub const fn clone_if_diff() -> Self
+	where
+		T: PartialEq,
+	{
+		Self::Ptr(|w, r| {
+			if w != r {
+				*w = r.clone();
+			}
+		})
+	}
+
+	#[must_use]
+	/// TODO
+	pub const fn nothing() -> Self {
+		Self::Ptr(|_, _| {})
+	}
+
+	#[must_use]
+	/// TODO
+	pub const fn default() -> Self
+	where
+		T: Default
+	{
+		Self::Ptr(|w, _| {
+			*w = Default::default();
+		})
+	}
 }
 
-impl<T> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
+impl<T: Clone> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
 	/// TODO: doc test.
 	fn from(patch: Box<dyn FnMut(&mut T, &T) + Send + 'static>) -> Self {
 		Self::Box(patch)
 	}
 }
 
-impl<T> From<Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+impl<T: Clone> From<Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
 	/// TODO: doc test.
 	fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(patch)
 	}
 }
 
-impl<T> From<&Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
+impl<T: Clone> From<&Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
 	/// TODO: doc test.
 	fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
 		Self::Arc(Arc::clone(patch))
 	}
 }
 
-impl<T> From<fn(&mut T, &T)> for Patch<T> {
+impl<T: Clone> From<fn(&mut T, &T)> for Patch<T> {
 	/// TODO: doc test.
 	fn from(patch: fn(&mut T, &T)) -> Self {
 		Self::Ptr(patch)
