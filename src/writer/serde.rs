@@ -26,10 +26,6 @@ use crate::{
 	},
 };
 
-/// TODO:
-/// - preserve timestamps
-/// - error on incorrect data (tag timestamp > local.timestamp)
-
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]
 impl<T> serde::Serialize for Writer<T>
@@ -37,23 +33,12 @@ where
 	T: Clone + serde::Serialize
 {
 	#[inline]
-	/// This will call `data()`, then serialize your `T`.
-	///
-	/// `T::serialize(self.data(), serializer)`
-	///
-	/// ```rust
-	/// # use someday::*;
-	///
-	/// let (_, w) = someday::new(String::from("hello"));
-	///
-	/// let json = serde_json::to_string(&w).unwrap();
-	/// assert_eq!(json, "\"hello\"");
-	/// ```
+	/// This will serialize the latest `Commit` of the `Writer`.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-		T::serialize(self.data(), serializer)
+		CommitOwned::serialize(self.head(), serializer)
     }
 }
 
@@ -63,26 +48,31 @@ where
 	T: Clone + serde::Deserialize<'de>
 {
 	#[inline]
-	/// This will deserialize your data `T` directly into a `Writer`.
-	///
-	/// `T::deserialize(deserializer).map(|t| crate::new(t).1)`.
+	/// This will deserialize a [`Commit`] directly into a `Writer`.
 	///
 	/// ```rust
 	/// # use someday::*;
-	///
-	/// let (_, w) = someday::new(String::from("hello"));
+	/// let (r, mut w) = someday::new(String::from("hello"));
+	/// w.add_commit(|w, _| {
+	///     w.push_str(" world!");
+	/// });
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(w.data(), "hello world!");
+	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data(), "hello");
 	///
 	/// let json = serde_json::to_string(&w).unwrap();
-	/// assert_eq!(json, "\"hello\"");
+	/// assert_eq!(json, "{\"timestamp\":1,\"data\":\"hello world!\"}");
 	///
 	/// let writer: Writer<String> = serde_json::from_str(&json).unwrap();
-	/// assert_eq!(writer.data(), "hello");
+	/// assert_eq!(writer.timestamp(), 1);
+	/// assert_eq!(writer.data(), "hello world!");
 	/// ```
 	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where
 		D: serde::Deserializer<'de>
 	{
-		T::deserialize(deserializer).map(Self::from)
+		CommitOwned::deserialize(deserializer).map(Self::from)
 	}
 }
 
@@ -92,19 +82,9 @@ where
 	T: Clone + bincode::Encode
 {
 	#[inline]
-	/// This will call `data()`, then serialize your `T`.
-	///
-	/// ```rust
-	/// # use someday::*;
-	///
-	/// let (_, w) = someday::new(String::from("hello"));
-	/// let config = bincode::config::standard();
-	///
-	/// let bytes = bincode::encode_to_vec(&w, config).unwrap();
-	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
-	/// ```
+	/// This will serialize the latest `Commit` of the `Writer`.
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-		T::encode(self.data(), encoder)
+		CommitOwned::encode(self.head(), encoder)
 	}
 }
 
@@ -114,22 +94,33 @@ where
 	T: Clone + bincode::Decode
 {
 	#[inline]
-	/// This will deserialize your data `T` directly into a `Writer`.
+	/// This will deserialize a [`Commit`] directly into a `Writer`.
 	///
 	/// ```rust
 	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::from("hello"));
+	/// w.add_commit(|w, _| {
+	///     w.push_str(" world!");
+	/// });
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(w.data(), "hello world!");
+	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data(), "hello");
 	///
-	/// let (_, w) = someday::new(String::from("hello"));
 	/// let config = bincode::config::standard();
 	///
-	/// let bytes = bincode::encode_to_vec(&w, config).unwrap();
-	/// assert_eq!(bytes, bincode::encode_to_vec(&"hello", config).unwrap());
+	/// // Decode into a `Commit`.
+	/// let encoded = bincode::encode_to_vec(&w, config).unwrap();
+	/// let decoded: CommitOwned<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
+	/// assert_eq!(decoded, CommitOwned { timestamp: 1, data: String::from("hello world!") });
 	///
-	/// let writer: Writer<String> = bincode::decode_from_slice(&bytes, config).unwrap().0;
-	/// assert_eq!(writer.data(), "hello");
+	/// // Decode directly into a `Writer<T>`.
+	/// let writer: Writer<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
+	/// assert_eq!(writer.timestamp(), 1);
+	/// assert_eq!(writer.data(), "hello world!");
 	/// ```
 	fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
-		T::decode(decoder).map(Self::from)
+		CommitOwned::decode(decoder).map(Self::from)
 	}
 }
 
@@ -138,18 +129,9 @@ impl<T> borsh::BorshSerialize for Writer<T>
 where
 	T: Clone + borsh::BorshSerialize
 {
-	/// This will call `data()`, then serialize your `T`.
-	///
-	/// ```rust
-	/// # use someday::*;
-	///
-	/// let (_, w) = someday::new(String::from("hello"));
-	///
-	/// let bytes = borsh::to_vec(&w).unwrap();
-	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
-	/// ```
+	/// This will serialize the latest `Commit` of the `Writer`.
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-		T::serialize(self.data(), writer)
+		CommitOwned::serialize(self.head(), writer)
 	}
 }
 
@@ -162,16 +144,26 @@ where
 	///
 	/// ```rust
 	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::from("hello"));
+	/// w.add_commit(|w, _| {
+	///     w.push_str(" world!");
+	/// });
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(w.data(), "hello world!");
+	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data(), "hello");
 	///
-	/// let (_, w) = someday::new(String::from("hello"));
+	/// // Decode into a `Commit`.
+	/// let encoded = borsh::to_vec(&w).unwrap();
+	/// let decoded: CommitOwned<String> = borsh::from_slice(&encoded).unwrap();
+	/// assert_eq!(decoded, CommitOwned { timestamp: 1, data: String::from("hello world!") });
 	///
-	/// let bytes = borsh::to_vec(&w).unwrap();
-	/// assert_eq!(bytes, borsh::to_vec(&"hello").unwrap());
-	///
-	/// let writer: Writer<String> = borsh::from_slice(&bytes).unwrap();
-	/// assert_eq!(writer.data(), "hello");
+	/// // Decode directly into a `Writer<T>`.
+	/// let writer: Writer<String> = borsh::from_slice(&encoded).unwrap();
+	/// assert_eq!(writer.timestamp(), 1);
+	/// assert_eq!(writer.data(), "hello world!");
 	/// ```
 	fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
-		T::deserialize_reader(reader).map(Self::from)
+		CommitOwned::deserialize_reader(reader).map(Self::from)
 	}
 }
