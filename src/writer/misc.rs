@@ -179,7 +179,6 @@ impl<T: Clone> Writer<T> {
 	/// // Commit some changes.
 	/// w.add(Patch::Ptr(|w, _| w.push_str("a")));
 	/// w.commit();
-	/// w.tag();
 	///
 	/// // Add but don't commit.
 	/// w.add(Patch::Ptr(|w, _| w.push_str("b")));
@@ -189,14 +188,12 @@ impl<T: Clone> Writer<T> {
 	///     reader,
 	///     staged,
 	///     committed_patches,
-	///     tags,
 	/// } = w.into_inner();
 	///
 	/// assert_eq!(writer.data(), "a");
 	/// assert_eq!(reader.data(), ""); // We never `push()`'ed, so Readers saw nothing.
 	/// assert_eq!(staged.len(), 1);
 	/// assert_eq!(committed_patches.len(), 1);
-	/// assert_eq!(tags.len(), 1);
 	/// ```
 	pub fn into_inner(self) -> WriterInfo<T> {
 		WriterInfo {

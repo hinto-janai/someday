@@ -7,7 +7,6 @@ use crate::{Reader,Timestamp};
 use crate::Writer;
 
 //---------------------------------------------------------------------------------------------------- CommitOwned
-#[allow(clippy::module_name_repetitions)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
@@ -70,11 +69,6 @@ where
 }
 
 //---------------------------------------------------------------------------------------------------- CommitRef
-#[allow(clippy::module_name_repetitions)]
-// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-// #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
-// #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-// #[derive(Clone,Debug,Hash,PartialEq,PartialOrd,Eq,Ord)]
 /// Cheaply cloneable snapshot of some data `T` and its [`Timestamp`]
 ///
 /// This is a [`Commit`] of data received from operations
