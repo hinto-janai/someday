@@ -12,6 +12,5 @@ mod push;
 mod pull;
 mod fork_merge;
 mod timestamp;
-mod tag;
 mod misc;
 mod serde;

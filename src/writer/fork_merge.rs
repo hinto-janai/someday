@@ -58,7 +58,6 @@ impl<T: Clone> Writer<T> {
 			arc,
 			patches: Vec::with_capacity(self.patches.capacity()),
 			patches_old: Vec::with_capacity(self.patches_old.capacity()),
-			tags: self.tags.clone(),
 		}
 	}
 
@@ -67,7 +66,7 @@ impl<T: Clone> Writer<T> {
 	/// # Errors
 	/// TODO
 	#[allow(clippy::missing_panics_doc)]
-	pub fn merge<M>(&mut self, mut other: Self, mut merge: M) -> Result<Timestamp, usize>
+	pub fn merge<M>(&mut self, other: Self, mut merge: M) -> Result<Timestamp, usize>
 	where
 		T: Send + 'static,
 		M: FnMut(&mut T, &T) + Send + 'static,
@@ -95,29 +94,6 @@ impl<T: Clone> Writer<T> {
 		self.patches_old.push(Patch::boxed(move |w, _| {
 			merge(w, &other_local.data);
 		}));
-
-		// If we have tags...
-		if let Some(max_entry) = self.tags.last_entry() {
-			// And the `other` also had tags...
-			if let Some(other_max_entry) = other.tags.last_entry() {
-				// Then take all the ones that have a greater timestamp.
-				//
-				// We must not take the older ones since:
-				// 1. They may be different Commits
-				// 2. We must uphold the invariant each tag
-				//    actually existed at some point in our `self`
-				// 3. We must not overwrite older tags
-
-				// Only take if there are greater timestamps in `other.`
-				let latest_timestamp = max_entry.key();
-				if latest_timestamp < other_max_entry.key() {
-					// Take out all the less than timestamps.
-					other.tags.retain(|timestamp, _| timestamp < latest_timestamp);
-					// And append the rest.
-					self.tags.append(&mut other.tags);
-				}
-			}
-		}
 
 		// Take the old patches.
 		self.patches_old.extend(other.patches_old);

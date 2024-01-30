@@ -324,7 +324,6 @@ impl<T: Clone> Reader<T> {
 			arc: self.arc,
 			patches: Vec::with_capacity(INIT_VEC_CAP),
 			patches_old: Vec::with_capacity(INIT_VEC_CAP),
-			tags: BTreeMap::new(),
 		};
 
 		// INVARIANT: We must tell the token that we have successfully revived the `Writer`.
@@ -352,7 +351,6 @@ impl<T: Clone> Reader<T> {
 			arc,
 			patches: Vec::with_capacity(INIT_VEC_CAP),
 			patches_old: Vec::with_capacity(INIT_VEC_CAP),
-			tags: BTreeMap::new(),
 		}
 	}
 }

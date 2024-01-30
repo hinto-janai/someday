@@ -205,7 +205,6 @@ impl<T: Clone> Writer<T> {
 			reader:	self.remote,
 			staged:	self.patches,
 			committed_patches: self.patches_old,
-			tags: self.tags,
 		}
 	}
 }

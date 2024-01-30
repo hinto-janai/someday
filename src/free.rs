@@ -105,6 +105,5 @@ pub(crate) fn new_inner<T: Clone>(local: CommitOwned<T>) -> Writer<T> {
 		arc,
 		patches: Vec::with_capacity(INIT_VEC_CAP),
 		patches_old: Vec::with_capacity(INIT_VEC_CAP),
-		tags: BTreeMap::new(),
 	}
 }

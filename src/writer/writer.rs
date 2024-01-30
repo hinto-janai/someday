@@ -167,9 +167,6 @@ pub struct Writer<T: Clone> {
 	/// Patches that were already applied,
 	/// that must be re-applied to the old `T`.
 	pub(crate) patches_old: Vec<Patch<T>>,
-
-	/// Tags.
-	pub(crate) tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
 
 //---------------------------------------------------------------------------------------------------- Private writer functions
@@ -207,7 +204,6 @@ where
 			.field("local", &self.local)
 			.field("remote", &self.remote)
 			.field("arc", &self.arc)
-			.field("tags", &self.tags)
 			.finish_non_exhaustive()
 	}
 }

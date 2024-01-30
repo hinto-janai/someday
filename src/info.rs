@@ -137,7 +137,4 @@ pub struct WriterInfo<T: Clone> {
 	///
 	/// [`Writer::committed_patches`].
 	pub committed_patches: Vec<Patch<T>>,
-
-	/// [`Writer::tags`].
-	pub tags: BTreeMap<Timestamp, CommitRef<T>>,
 }
