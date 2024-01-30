@@ -16,6 +16,7 @@ use std::{
 
 use crate::{
 	writer::Writer,
+	writer::token::WriterToken,
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
@@ -52,7 +53,7 @@ impl<T: Clone> Writer<T> {
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 
 		Self {
-			token: Arc::new(AtomicBool::new(false)).into(),
+			token: WriterToken::new(),
 			local: Some(local),
 			remote,
 			arc,

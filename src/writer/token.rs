@@ -37,6 +37,13 @@ pub(crate) struct WriterToken {
 }
 
 impl WriterToken {
+	/// Return a new `Self` with a new `Arc(false)`.
+	pub(crate) fn new() -> Self {
+		Self {
+			inner: Arc::new(AtomicBool::new(false))
+		}
+	}
+
 	/// If the `Writer` is dead, try reviving it.
 	///
 	/// If this returns `true`, if means the `Writer` is revived,

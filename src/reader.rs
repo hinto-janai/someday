@@ -345,7 +345,7 @@ impl<T: Clone> Reader<T> {
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 
 		Writer {
-			token: Arc::new(AtomicBool::new(false)).into(),
+			token: WriterToken::new(),
 			local: Some(local),
 			remote,
 			arc,
