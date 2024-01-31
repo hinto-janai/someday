@@ -6,7 +6,7 @@
 	feature = "bincode",
 	feature = "borsh",
 ))]
-use crate::{Writer,Commit};
+use crate::{Writer,Commit,CommitOwned};
 
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]
