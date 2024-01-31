@@ -52,7 +52,18 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	/// This cheaply acquires ownership of a shared [`CommitRef`]
 	/// if you are the only one holding onto it.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::from("hello"));
+	///
+	/// let commit_ref = r.head();
+	/// // Force the `Writer` to advance onto the next commit.
+	/// w.add_commit_push(|_, _| {});
+	///
+	/// // Now there's only 1 strong count on `commit_ref`,
+	/// // this can be turned into an owned commit.
+	/// let commit_owned: CommitOwned<String> = commit_ref.try_into().unwrap();
+	/// ```
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
 		Arc::try_unwrap(commit)
 	}
@@ -62,7 +73,13 @@ impl<T> std::fmt::Display for CommitOwned<T>
 where
 	T: Clone + std::fmt::Display
 {
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::from("hello"));
+	///
+	/// let display: String = format!("{}", r.head());
+	/// assert_eq!(display, "hello");
+	/// ```
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		std::fmt::Display::fmt(&self.data, f)
 	}
@@ -79,14 +96,20 @@ where
 /// This is just an alias for [`Arc<CommitOwned<T>>`].
 ///
 /// [`Commit`] is implemented on this (`Arc<CommitOwned<T>>`).
-///
-/// TODO: doc test.
 pub type CommitRef<T> = Arc<CommitOwned<T>>;
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 	#[inline]
-	/// TODO: doc test.
+	/// Calls [`Reader::head`].
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, _) = someday::new(String::from("hello"));
+	///
+	/// let commit_ref: CommitRef<String> = (&r).into();
+	/// assert_eq!(commit_ref.data(), "hello");
+	/// ```
 	fn from(reader: &Reader<T>) -> Self {
 		reader.head()
 	}
@@ -152,7 +175,23 @@ where
 	#[inline]
 	/// If there is a difference in `self` and `other`'s timestamps or data.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different.
+	/// let commit_1 = CommitOwned { timestamp: 0, data: "a" };
+	/// let commit_2 = CommitOwned { timestamp: 1, data: "a" };
+	/// assert!(commit_1.diff(&commit_2));
+	///
+	/// // Data is different.
+	/// let commit_3 = CommitOwned { timestamp: 0, data: "a" };
+	/// let commit_4 = CommitOwned { timestamp: 0, data: "b" };
+	/// assert!(commit_3.diff(&commit_4));
+	///
+	/// // Same.
+	/// let commit_5 = CommitOwned { timestamp: 0, data: "a" };
+	/// let commit_6 = CommitOwned { timestamp: 0, data: "a" };
+	/// assert!(!commit_5.diff(&commit_6));
+	/// ```
 	fn diff(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
 		(self.diff_timestamp(other)) || (self.diff_data(other))
 	}
@@ -160,7 +199,18 @@ where
 	#[inline]
 	/// If there is a difference in `self` & `other`'s timestamps.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different, data is same.
+	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
+	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
+	/// assert!(commit_1.diff_timestamp(&commit_2));
+	///
+	/// // Timestamp is same, data is different.
+	/// let commit_3 = CommitOwned { timestamp: 0, data: "" };
+	/// let commit_4 = CommitOwned { timestamp: 0, data: "a" };
+	/// assert!(!commit_3.diff_timestamp(&commit_4));
+	/// ```
 	fn diff_timestamp(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() != other.timestamp()
 	}
@@ -168,7 +218,18 @@ where
 	#[inline]
 	/// If there is a difference in `self` & `other`'s timestamps.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different, data is same.
+	/// let commit_1 = CommitOwned { timestamp: 0, data: "a" };
+	/// let commit_2 = CommitOwned { timestamp: 1, data: "a" };
+	/// assert!(!commit_1.diff_data(&commit_2));
+	///
+	/// // Timestamp is same, data is different.
+	/// let commit_3 = CommitOwned { timestamp: 0, data: "a" };
+	/// let commit_4 = CommitOwned { timestamp: 0, data: "b" };
+	/// assert!(commit_3.diff_data(&commit_4));
+	/// ```
 	fn diff_data(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
 		self.data() != other.data()
 	}
@@ -176,7 +237,20 @@ where
 	#[inline]
 	/// If `self`'s timestamp is ahead of `other`'s timestamp.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
+	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
+	/// assert!(!commit_1.ahead(&commit_2));
+	///
+	/// let commit_3 = CommitOwned { timestamp: 2, data: "" };
+	/// let commit_4 = CommitOwned { timestamp: 1, data: "" };
+	/// assert!(commit_3.ahead(&commit_4));
+	///
+	/// let commit_5 = CommitOwned { timestamp: 2, data: "" };
+	/// let commit_6 = CommitOwned { timestamp: 2, data: "" };
+	/// assert!(!commit_5.ahead(&commit_6));
+	/// ```
 	fn ahead(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() > other.timestamp()
 	}
@@ -184,7 +258,20 @@ where
 	#[inline]
 	/// If `self`'s timestamp is behind of `other`'s timestamp.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
+	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
+	/// assert!(commit_1.behind(&commit_2));
+	///
+	/// let commit_3 = CommitOwned { timestamp: 2, data: "" };
+	/// let commit_4 = CommitOwned { timestamp: 1, data: "" };
+	/// assert!(!commit_3.behind(&commit_4));
+	///
+	/// let commit_5 = CommitOwned { timestamp: 2, data: "" };
+	/// let commit_6 = CommitOwned { timestamp: 2, data: "" };
+	/// assert!(!commit_5.behind(&commit_6));
+	/// ```
 	fn behind(&self, other: &impl Commit<T>) -> bool {
 		self.timestamp() < other.timestamp()
 	}
