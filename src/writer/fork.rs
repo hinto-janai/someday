@@ -94,44 +94,4 @@ impl<T: Clone> Writer<T> {
 			patches_old: Vec::with_capacity(self.patches_old.capacity()),
 		}
 	}
-
-	/// TODO
-	///
-	/// # Errors
-	/// TODO
-	#[allow(clippy::missing_panics_doc)]
-	pub fn merge<M>(&mut self, other: Self, mut merge: M) -> Result<Timestamp, usize>
-	where
-		T: Send + 'static,
-		M: FnMut(&mut T, &T) + Send + 'static,
-	{
-		// INVARIANT: local should always be initialized.
-		let other_local = other.local.unwrap();
-
-		// If timestamp if not greater, return, nothing to merge.
-		let timestamp = self.timestamp();
-		let timestamp_diff = other_local.timestamp.saturating_sub(timestamp);
-		if timestamp_diff == 0 {
-			return Err(timestamp - other_local.timestamp);
-		}
-
-		// Overwrite our data with `other`'s.
-		// let old_writer_commit = self.overwrite(other_local.data);
-		merge(
-			&mut self.local.as_mut().unwrap().data,
-			&other_local.data,
-		);
-
-		// Make sure the timestamp is now the new commit's.
-		self.local_as_mut().timestamp = other_local.timestamp;
-
-		self.patches_old.push(Patch::boxed(move |w, _| {
-			merge(w, &other_local.data);
-		}));
-
-		// Take the old patches.
-		self.patches_old.extend(other.patches_old);
-
-		Ok(self.timestamp())
-	}
 }

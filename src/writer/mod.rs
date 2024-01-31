@@ -10,7 +10,7 @@ mod add_commit_push;
 mod get;
 mod push;
 mod pull;
-mod fork_merge;
+mod fork;
 mod timestamp;
 mod misc;
 mod serde;
