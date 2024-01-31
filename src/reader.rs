@@ -137,6 +137,8 @@ pub struct Reader<T: Clone> {
 	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
 	/// Has the associated `Writer` to this `Reader` been dropped?
 	pub(super) token: WriterToken,
+	/// Optional cache of the latest `head()`.
+	pub(super) cache: Option<Arc<CommitOwned<T>>>,
 }
 
 impl<T: Clone> Reader<T> {
@@ -187,6 +189,41 @@ impl<T: Clone> Reader<T> {
 	/// ```
 	pub fn head(&self) -> CommitRef<T> {
 		self.arc.load_full()
+	}
+
+	/// TODO
+	pub fn cache(&mut self) -> CommitRef<T> {
+		if let Some(cache) = self.cache.as_ref() {
+			Arc::clone(cache)
+		} else {
+			// Else, update the cached commit and return it.
+			let head = self.head();
+			self.cache = Some(Arc::clone(&head));
+			head
+		}
+	}
+
+	/// TODO
+	pub fn cache_update(&mut self) -> CommitRef<T> {
+		if !self.cache_up_to_date() {
+			self.cache = Some(self.head());
+		}
+
+		self.cache()
+	}
+
+	#[must_use]
+	/// TODO
+	pub fn cache_up_to_date(&self) -> bool {
+		self.cache.as_ref().is_some_and(|cache| {
+			let head = self.arc.load();
+			Arc::ptr_eq(&head, cache)
+		})
+	}
+
+	/// TODO
+	pub fn cache_take(&mut self) -> Option<CommitRef<T>> {
+		self.cache.take()
 	}
 
 	#[inline]

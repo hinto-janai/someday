@@ -35,6 +35,7 @@ impl<T: Clone> Writer<T> {
 		Reader {
 			arc: Arc::clone(&self.arc),
 			token: self.token.clone(),
+			cache: None,
 		}
 	}
 
