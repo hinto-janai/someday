@@ -18,8 +18,8 @@ use crate::{
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`.
 ///
-/// The [`Writer`]:
-/// 1. Stores your `Patch`'s (functions) with [`add()`](Writer::add)
+/// The `Writer`:
+/// 1. Stores your [`Patch`]'s with [`add()`](Writer::add)
 /// 2. Actually applies them to `T` by [`commit()`](Writer::commit)'ing
 /// 3. Can [`push()`](Writer::push) so that [`Reader`]'s can see the changes
 ///

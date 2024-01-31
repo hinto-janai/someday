@@ -76,6 +76,26 @@ use crate::{Reader, Commit, Writer};
 /// assert_eq!(*w.data(), 100);
 /// assert_eq!(*w.reader().head().data(), 10);
 /// ```
+///
+/// # The 2nd apply
+/// Note that if/when the `Writer` applies your `Patch` for the 2nd time
+/// inside [`Writer::push`], the `Reader` side of the data has _just_ been updated.
+/// This means your `Patch`'s 2nd input `&T` will be referencing the _just_ pushed data.
+///
+/// ```rust
+/// let (_, mut writer) = someday::new::<usize>(0);
+///
+/// writer.add(Patch::Ptr(|w, r| {
+///     // `w` on the first apply of this Patch
+///     // is our local Writer data. `r` is the
+///     // current `Reader` data (whether out-of-date or not).
+///     //
+///     // The 2nd time this applies, `w` will be
+///     // the old `Reader` data we are attempting
+///     // to reclaim and "reproduce" with this Patch,
+///     // while `r` will be the data the `Writer` just pushed.
+/// }));
+/// ```
 pub enum Patch<T: Clone> {
 	/// Dynamically dispatched, potentially capturing, boxed function.
 	///
