@@ -204,7 +204,19 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This is the same as [`Writer::reader_count()`].
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(());
+	///
+	/// // `w` + `r` == 2 (Writer's count as a Reader).
+	/// assert_eq!(w.reader_count().get(), 2);
+	/// assert_eq!(r.reader_count().get(), 2);
+	///
+	/// let r3 = w.reader();
+	///
+	/// assert_eq!(w.reader_count().get(), 3);
+	/// assert_eq!(r.reader_count().get(), 3);
+	/// ```
 	pub fn reader_count(&self) -> NonZeroUsize {
 		let count = Arc::strong_count(&self.arc);
 
@@ -224,7 +236,14 @@ impl<T: Clone> Reader<T> {
 	///
 	/// It is guaranteed _one_ of them will succeed, but not necessarily _this_ `Reader`.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(());
+	/// assert_eq!(r.writer_dropped(), false);
+	///
+	/// drop(w);
+	/// assert_eq!(r.writer_dropped(), true);
+	/// ```
 	pub fn writer_dropped(&self) -> bool {
 		self.token.is_dead()
 	}
@@ -236,8 +255,21 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
 	///
-	/// TODO: doc test.
-	pub fn connnected(&self, other: &Self) -> bool {
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(());
+	///
+	/// // All `Reader`'s read from the same `Writer`.
+	/// let r2 = w.reader();
+	/// let r3 = r2.clone();
+	/// assert!(r.connected(&r2));
+	/// assert!(r.connected(&r3));
+	///
+	/// // This one is completely separate.
+	/// let (r4, _) = someday::new(());
+	/// assert!(!r.connected(&r4));
+	/// ```
+	pub fn connected(&self, other: &Self) -> bool {
 		Arc::ptr_eq(&self.arc, &other.arc)
 	}
 
@@ -248,8 +280,18 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This means `self` receives the [`Commit`]'s that `writer` pushes.
 	///
-	/// TODO: doc test.
-	pub fn connnected_writer(&self, writer: &Writer<T>) -> bool {
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(());
+	///
+	/// // Connected `Reader` <-> `Writer`.
+	/// assert!(r.connected_writer(&w));
+	///
+	/// // This one is completely separate.
+	/// let (_, w2) = someday::new(());
+	/// assert!(!r.connected_writer(&w2));
+	/// ```
+	pub fn connected_writer(&self, writer: &Writer<T>) -> bool {
 		Arc::ptr_eq(&self.arc, &writer.arc)
 	}
 
@@ -268,7 +310,34 @@ impl<T: Clone> Reader<T> {
 	/// 2. Another `Reader` is currently in this function, becoming the `Writer`
 	///
 	/// # Example
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(String::from("hello"));
+	///
+	/// // A secondary `Reader`, forget about this for now.
+	/// let r2 = r.clone();
+	///
+	/// // The `Writer` is still alive... this will fail.
+	/// let r: Reader<String> = match r.try_into_writer() {
+	///     Ok(_) => panic!("this can never happen"),
+	///     Err(r) => r,
+	/// };
+	///
+	/// // The `Writer` is now dropped, one of the
+	/// // `Reader`'s can now be "promoted".
+	/// drop(w);
+	/// assert!(r.writer_dropped());
+	/// let mut new_writer: Writer<String> = r.try_into_writer().unwrap();
+	///
+	/// // This new `Writer` is _still_ connected
+	/// // to the previous `Reader`'s...!
+	/// new_writer.add_commit_push(|w, _| {
+	///     w.push_str(" world!");
+	/// });
+	///
+	/// // The previous `Reader` sees the push!
+	/// assert_eq!(r2.head().data(), "hello world!");
+	/// ```
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
 		let writer_revive_token = match self.token.try_revive() {
 			Some(wrt) => wrt,
@@ -299,12 +368,10 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[must_use]
-	/// Fork off from the current [`Reader::head`] commit and create a [`Writer`].
+	/// Fork off from the current [`Reader::head`] [`Commit`] and create a [`Writer`].
 	///
-	/// This function is identical [`Writer::fork`], although the [`Writer::tags`]'s
-	/// will not be carried over, they will be empty in the new `Writer`.
-	///
-	/// TODO: doc test.
+	/// This function is identical [`Writer::fork`], although the
+	/// `Reader`'s most recent `Commit` will be used as the base instead.
 	pub fn fork(&self) -> Writer<T> {
 		let remote = self.head();
 		let local = remote.to_commit_owned();

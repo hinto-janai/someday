@@ -32,6 +32,8 @@ use crate::{
 ///
 /// TODO: test.
 pub(crate) struct WriterToken {
+	/// Is the `Writer` dead?
+	///
 	/// Only set to `false` when we are `drop()`'ed.
 	inner: Arc<AtomicBool>,
 }
@@ -51,7 +53,7 @@ impl WriterToken {
 	///
 	/// Acquire + Relaxed ordering.
 	pub(crate) fn try_revive(&self) -> Option<WriterReviveToken> {
-		if self.inner.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) == Ok(true) {
+		if self.inner.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed) == Ok(true) {
 			Some(WriterReviveToken {
 				writer_token: self.clone(),
 				dead: true,
