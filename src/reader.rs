@@ -191,7 +191,38 @@ impl<T: Clone> Reader<T> {
 		self.arc.load_full()
 	}
 
-	/// TODO
+	/// Cache a [`Commit`] and return it.
+	///
+	/// Upon first cache or cache after [`Reader::cache_take`], this function
+	/// will call [`Reader::head`] and store it internally for quick access.
+	///
+	/// Subsequent calls to [`Reader::cache`] will return the
+	/// _same_ [`Commit`] forever, and never update.
+	///
+	/// # Memory usage
+	/// Be aware that this causes the [`Reader`] to hold onto a [`CommitRef`].
+	/// As such, the `CommitRef` will not be dropped until the cache is cleared
+	/// or this [`Reader`] is dropped.
+	///
+	/// # Example
+	/// ```rust
+	/// # use someday::*;
+	/// let (mut r, mut w) = someday::new(());
+	///
+	/// // Our first cache access, this will call
+	/// // `Reader::head()` and save it internally.
+	/// let cache: CommitRef<()> = r.cache();
+	/// assert_eq!(cache.timestamp(), 0);
+	/// assert!(r.cache_up_to_date());
+	///
+	/// // But... the `Writer` continues to push.
+	/// w.add_commit_push(|_, _| {});
+	///
+	/// // Now our cache is technically out-of-date.
+	/// assert!(!r.cache_up_to_date());
+	/// // Future calls will return the out-of-date cache.
+	/// assert_eq!(r.cache().timestamp(), 0);
+	/// ```
 	pub fn cache(&mut self) -> CommitRef<T> {
 		if let Some(cache) = self.cache.as_ref() {
 			Arc::clone(cache)
@@ -203,7 +234,33 @@ impl<T: Clone> Reader<T> {
 		}
 	}
 
-	/// TODO
+	/// Cache a [`Commit`], updating it if needed, and return it.
+	///
+	/// This is the same as [`Reader::cache`] except it this function
+	/// will update the internal cache such that it _always_ returns
+	/// the latest [`Reader::head`].
+	///
+	/// If the cache is already the same, this is a much
+	/// cheaper access to the `Commit` than [`Reader::head`].
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (mut r, mut w) = someday::new(());
+	///
+	/// // Our first cache access, this will call
+	/// // `Reader::head()` and save it internally.
+	/// let cache: CommitRef<()> = r.cache_update();
+	/// assert_eq!(cache.timestamp(), 0);
+	/// assert!(r.cache_up_to_date());
+	///
+	/// // The `Writer` continues to push.
+	/// w.add_commit_push(|_, _| {});
+	///
+	/// // Using `cache_update()`, our cache always is up-to-date.
+	/// let cache: CommitRef<()> = r.cache_update();
+	/// assert_eq!(cache.timestamp(), 1);
+	/// assert!(r.cache_up_to_date());
+	/// ```
 	pub fn cache_update(&mut self) -> CommitRef<T> {
 		if !self.cache_up_to_date() {
 			self.cache = Some(self.head());
@@ -213,7 +270,35 @@ impl<T: Clone> Reader<T> {
 	}
 
 	#[must_use]
-	/// TODO
+	/// Is the [`Reader::cache`] up to date?
+	///
+	/// This returns `true` if [`Reader::cache`] and [`Reader::head`]
+	/// were to return the same [`CommitRef`].
+	///
+	/// If [`Reader::cache`] was never called (or [`Reader::cache_take`]'n),
+	/// then this function returns `false.`
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (mut r, mut w) = someday::new(());
+	///
+	/// // There is no cache, this returns `false`.
+	/// assert!(!r.cache_up_to_date());
+	///
+	/// // Set cache.
+	/// r.cache();
+	/// assert!(r.cache_up_to_date());
+	///
+	/// // The `Writer` pushes.
+	/// w.add_commit_push(|_, _| {});
+	///
+	/// // Cache is now out-of-date.
+	/// assert!(!r.cache_up_to_date());
+	///
+	/// // Clear the cache.
+	/// r.cache_take();
+	/// assert!(!r.cache_up_to_date());
+	/// ```
 	pub fn cache_up_to_date(&self) -> bool {
 		self.cache.as_ref().is_some_and(|cache| {
 			let head = self.arc.load();
@@ -221,9 +306,47 @@ impl<T: Clone> Reader<T> {
 		})
 	}
 
-	/// TODO
+	/// Take the cache out of the `Reader`.
+	///
+	/// This returns the internal [`CommitRef`] created by
+	/// [`Reader::cache`] and [`Reader::cache_update`].
+	///
+	/// This returns `None` if the cache was
+	/// never created or taken in the past.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (mut r, mut w) = someday::new(());
+	///
+	/// // Set cache...
+	/// r.cache();
+	/// assert!(r.cache_up_to_date());
+	///
+	/// // ...and take it.
+	/// let cache: CommitRef<()> = r.cache_take().unwrap();
+	/// assert!(!r.cache_up_to_date());
+	/// assert_eq!(cache.timestamp(), 0);
+	/// ```
 	pub fn cache_take(&mut self) -> Option<CommitRef<T>> {
 		self.cache.take()
+	}
+
+	#[must_use]
+	/// Borrow the internal cache, whether initialized or not.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (mut r, mut w) = someday::new(());
+	///
+	/// // No cache, returns None.
+	/// assert!(r.cache_as_ref().is_none());
+	///
+	/// // Set cache, and borrow it.
+	/// r.cache();
+	/// assert!(r.cache_as_ref().is_some());
+	/// ```
+	pub const fn cache_as_ref(&self) -> Option<&CommitRef<T>> {
+		self.cache.as_ref()
 	}
 
 	#[inline]
