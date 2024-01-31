@@ -30,10 +30,18 @@ use crate::{
 impl<T: Clone> Writer<T> {
 	/// Same as [`crate::free::new`] but without creating a [`Reader`].
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new("hello");
+	/// let w2 = Writer::new("hello");
+	///
+	/// assert_eq!(w.data(), w2.data());
+	/// assert_eq!(w.timestamp(), w2.timestamp());
+	/// ```
 	pub fn new(data: T) -> Self {
 		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
 	}
+
 	#[inline]
 	#[allow(clippy::type_complexity)]
 	/// Restore all the staged changes.
@@ -141,7 +149,21 @@ impl<T: Clone> Writer<T> {
 	///
 	/// This means both `Reader`'s receive the same [`Commit`] upon calling [`Reader::head`].
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, w) = someday::new(());
+	///
+	/// // All `Reader`'s read from the same `Writer`.
+	/// let r2 = w.reader();
+	/// let r3 = r2.clone();
+	/// assert!(w.connected(&r));
+	/// assert!(w.connected(&r2));
+	/// assert!(w.connected(&r3));
+	///
+	/// // This one is completely separate.
+	/// let (r4, _) = someday::new(());
+	/// assert!(!r.connected(&r4));
+	/// ```
 	pub fn connected(&self, reader: &Reader<T>) -> bool {
 		Arc::ptr_eq(&self.arc, &reader.arc)
 	}
@@ -159,7 +181,26 @@ impl<T: Clone> Writer<T> {
 	/// Any future `Reader`'s created after this function
 	/// are completely separate from the past `Reader`'s.
 	///
-	/// TODO: doc test.
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new("");
+	///
+	/// // Connected `Reader` <-> `Writer`.
+	/// assert!(w.connected(&r));
+	///
+	/// // Now, disconnected.
+	/// w.disconnect();
+	/// assert!(!w.connected(&r));
+	///
+	/// // The older `Reader` won't see pushes anymore.
+	/// w.add_commit_push(|w, _| *w = "hello");
+	/// assert_eq!(*w.data(), "hello");
+	/// assert_eq!(*r.head().data(), "");
+	///
+	/// // But, newer `Reader`'s will.
+	/// let r2 = w.reader();
+	/// assert_eq!(*r2.head().data(), "hello");
+	/// ```
 	pub fn disconnect(&mut self) {
 		let token = Arc::new(AtomicBool::new(false));
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));
