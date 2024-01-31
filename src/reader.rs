@@ -527,6 +527,33 @@ impl<T: Clone> Reader<T> {
 	///
 	/// This function is identical [`Writer::fork`], although the
 	/// `Reader`'s most recent `Commit` will be used as the base instead.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::new());
+	///
+	/// // Connected `Reader` <-> `Writer`.
+	/// assert!(r.connected_writer(&w));
+	///
+	/// // Add local changes, but don't push.
+	/// w.add_commit(|s, _| {
+	///     s.push_str("hello");
+	/// });
+	/// assert_eq!(w.data(), "hello");
+	/// assert_eq!(w.timestamp(), 1);
+	/// assert_eq!(r.head().data(), "");
+	/// assert_eq!(r.head().timestamp(), 0);
+	///
+	/// // Fork the _Reader_ off into another `Writer`.
+	/// let mut w2 = r.fork();
+	///
+	/// // It inherits the data of the `Reader`.
+	/// assert_eq!(w2.data(), "");
+	/// assert_eq!(w2.timestamp(), 0);
+	///
+	/// // And has no relation to the previous `Writer/Reader`'s.
+	/// assert!(!w2.connected(&r));
+	/// ```
 	pub fn fork(&self) -> Writer<T> {
 		let remote = self.head();
 		let local = remote.to_commit_owned();
