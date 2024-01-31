@@ -109,12 +109,9 @@ use crate::{
 ///
 /// ## Invariants
 /// Some invariants that the `Writer` always upholds, that you can rely on:
-/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::timestamp()`]
-/// - [`Writer::tags()`] will always return `Commit`'s that were previously [`Writer::tag()`]'ed or [`Writer::merge()`]'ed in
-/// - If a `Writer` that is being shared (e.g `Arc<Mutex<Writer<T>>`) panics mid-push, the other `Writer`'s
-///   may also panic on any operation that touches local data - i.e. the local data `T` will never
-///   be seen in an uninitialized state
-/// - `Reader`'s will be completely fine in the case a `Writer` panics mid-push
+/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::head()`]'s timestamp.
+/// - If a `Writer` panics, no data is poisoned - i.e. the local data `T`
+///   will never be seen in an uninitialized state, `Reader`'s will be completely fine
 pub struct Writer<T: Clone> {
 	/// Only set to `false` when we are `drop()`'ed.
 	pub(crate) token: WriterToken,

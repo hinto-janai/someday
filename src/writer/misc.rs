@@ -7,6 +7,7 @@ use std::sync::{
 };
 
 use crate::{
+	writer::token::WriterToken,
 	writer::Writer,
 	patch::Patch,
 	reader::Reader,
@@ -190,11 +191,8 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(*r2.head().data(), "hello");
 	/// ```
 	pub fn disconnect(&mut self) {
-		let token = Arc::new(AtomicBool::new(false));
-		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));
-
-		self.token = token.into();
-		self.arc = arc;
+		self.token = WriterToken::new();
+		self.arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&self.remote)));
 	}
 
 	#[allow(clippy::missing_panics_doc, clippy::type_complexity)]
