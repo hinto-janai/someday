@@ -2,26 +2,10 @@
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
-};
-
-use crate::{
-	patch::Patch,
-	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
+	sync::Arc,
+	sync::atomic::{
+		AtomicBool,
+		Ordering,
 	},
 };
 

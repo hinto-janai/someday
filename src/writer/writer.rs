@@ -2,16 +2,8 @@
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
+	sync::Arc,
 	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
 };
 
 use crate::{
@@ -19,12 +11,9 @@ use crate::{
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
-	},
 };
+
+// #[allow(unused_imports)] // docs
 
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`.

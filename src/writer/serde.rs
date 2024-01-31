@@ -1,30 +1,12 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
-};
-
-use crate::{
-	writer::Writer,
-	patch::Patch,
-	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
-	},
-};
+#[cfg(any(
+	feature = "serde",
+	feature = "bincode",
+	feature = "borsh",
+))]
+use crate::{Writer,Commit};
 
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]

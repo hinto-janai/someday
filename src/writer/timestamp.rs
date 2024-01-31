@@ -1,30 +1,14 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
-};
 
 use crate::{
 	writer::Writer,
-	patch::Patch,
-	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
 	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
-	},
 };
+
+#[allow(unused_imports)] // docs
+use crate::commit::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {

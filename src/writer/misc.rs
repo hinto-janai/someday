@@ -1,29 +1,17 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
+use std::sync::{
+	Arc,
+	atomic::AtomicBool,
 };
 
 use crate::{
 	writer::Writer,
 	patch::Patch,
 	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
-	},
+	commit::CommitOwned,
+	info::WriterInfo,
 };
 
 //---------------------------------------------------------------------------------------------------- Writer

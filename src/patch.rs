@@ -1,29 +1,10 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{
-	sync::{Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	borrow::Borrow,
-	collections::BTreeMap,
-	num::NonZeroUsize,
-};
+use std::sync::Arc;
 
-use crate::{
-	writer::Writer,
-	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
-	info::{
-		CommitInfo,StatusInfo,
-		PullInfo,PushInfo,WriterInfo,
-	},
-};
+#[allow(unused_imports)] // docs
+use crate::{Reader, Commit, Writer};
 
 //---------------------------------------------------------------------------------------------------- Patch
 /// Functions to be applied to your data `T`.

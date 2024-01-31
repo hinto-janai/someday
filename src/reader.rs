@@ -2,21 +2,13 @@
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
-	sync::{
-		Arc,
-		atomic::{
-			AtomicBool,
-			Ordering,
-		},
-	},
-	time::Duration,
-	num::NonZeroUsize, collections::BTreeMap,
+	sync::Arc,
+	num::NonZeroUsize,
 };
 use crate::{
 	writer::{WriterToken,WriterReviveToken},
 	free::INIT_VEC_CAP,
 	commit::{CommitRef,CommitOwned,Commit},
-	Timestamp,
 	Writer,
 };
 

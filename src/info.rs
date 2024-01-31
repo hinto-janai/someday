@@ -6,14 +6,10 @@
 //---------------------------------------------------------------------------------------------------- Use
 use crate::{
 	Timestamp,
-	writer::WriterToken,
 	patch::Patch,
 	commit::{CommitOwned,CommitRef},
 };
-use std::{
-	num::NonZeroUsize,
-	collections::BTreeMap,
-};
+use std::num::NonZeroUsize;
 #[allow(unused_imports)] // docs
 use crate::{Commit,Writer,Reader};
 

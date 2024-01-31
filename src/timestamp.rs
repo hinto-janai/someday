@@ -1,10 +1,11 @@
 //! `Reader<T>` & `Writer<T>` commit timestamps.
 
 //---------------------------------------------------------------------------------------------------- Use
+#[allow(unused_imports)] // docs
 use crate::{
 	Writer,
 	Reader,
-	commit::{Commit,CommitOwned,CommitRef},
+	commit::Commit,
 };
 
 //---------------------------------------------------------------------------------------------------- Timestamp

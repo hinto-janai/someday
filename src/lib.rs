@@ -108,4 +108,3 @@ pub use free::{
 	default,
 	from_commit,
 };
-pub(crate) use free::new_inner;

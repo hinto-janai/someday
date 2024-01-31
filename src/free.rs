@@ -4,14 +4,10 @@
 use crate::{
 	reader::Reader,
 	writer::Writer,
-	commit::{Commit,CommitOwned,CommitRef},
-	timestamp::Timestamp,
+	commit::{Commit,CommitOwned},
 };
 use arc_swap::ArcSwapAny;
-use std::{
-	sync::{Arc,atomic::AtomicBool},
-	collections::BTreeMap,
-};
+use std::sync::{Arc,atomic::AtomicBool};
 
 //---------------------------------------------------------------------------------------------------- Free functions
 /// The default `Vec` capacity for the
