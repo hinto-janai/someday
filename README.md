@@ -5,27 +5,16 @@
 
 A lock-free, but more memory hungry alternative to `Mutex<T>` or `RwLock<T>`.
 
----
-
-All [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s receive [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s of data along with a timestamp.
-
-The single [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) can write [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) and chooses when to [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) their changes to the readers.
-
-[`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) is atomic and all future readers from that point will be able to see the new data.
-
-Readers who are holding onto old copies of data will be able to continue to do so indefinitely. If needed, they can always acquire a fresh copy of the data using [`head()`](https://docs.rs/someday/latest/someday/struct.Reader.html#method.head), but them holding onto the old [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s will not block the writer from continuing.
-
-
 ## Lock-free
-Readers are [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) and most of the time [wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom).
+[`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s are [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom) and most of the time [wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom).
 
-The writer is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom), but may clone data.
+The single [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) is [lock-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Lock-freedom), but may clone data.
 
-When the writer wants to [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) updates to readers, it must:
+When the `Writer` wants to [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) updates to `Reader`'s, it must:
 1. Atomically update a pointer, at which point all _future_ readers will see the new data
 2. Re-apply the patches to the old reclaimed data OR clone the data if it cannot be reclaimed
 
-The old data _can_ be cheaply reclaimed and re-used by the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) if there are no [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s hanging onto old [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)'s.
+The old data _can_ be cheaply reclaimed and re-used by the `Writer` if there are no `Reader`'s hanging onto old [`Commit`](https://docs.rs/someday/latest/someday/commit/type.CommitRef.html)'s.
 
 If there are still `Reader`'s hanging onto old data, the `Writer` will clone the data such that it can continue.
 
@@ -46,41 +35,39 @@ and a writer that:
 - Is normally in contention with readers using normal locks (`Mutex`, `RwLock`)
 
 ## Tradeoffs
-`someday` has all the regular tradeoffs that MVCC has.
+- **Increased memory use:** The `Writer` keeps at least two copies of the backing data structure, and `Reader`'s can keep an infinite amount (as long as they continue to hold onto references)
 
-- **Increased memory use:** The [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) keeps at least two copies of the backing data structure, and [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s can keep an infinite amount (as long as they continue to hold onto references)
-
-- **Deterministic patches:** The patches/functions applied to your data must be deterministic, since the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) may apply them twice
+- **Deterministic patches:** The patches/functions applied to your data must be deterministic, since the `Writer` may apply them twice
 
 - **Slow writes:** Writes are slower than they would be directly against the backing data structure
 
 ## API
-`someday`'s API uses [`git`](https://git-scm.com) syntax and semantically does similar actions.
+`someday`'s API is similar to [`git`](https://git-scm.com) and semantically does similar actions.
 
-The [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html):
-1. Calls [`add()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.add) to add a `Patch` (function) to their data
+The `Writer`:
+1. Calls [`add()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.add) to add a [`Patch`](https://docs.rs/someday/latest/someday/enum.Patch.html) (function) to their data
 2. Actually executes those changes by [`commit()`](https://docs.rs/someday/latest/someday/struct.Writer.html#commit.add)'ing
 3. Can see local or remote (reader) data whenever
-4. Can atomically [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) those changes to the [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s
-5. Can continue writing without having to wait on [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html)'s
+4. Can atomically [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push) those changes to the `Reader`'s
+5. Can continue writing without having to wait on `Reader`'s
 
-The [`Reader(s)`](struct.Reader.html):
-1. Can continually call [`head()`](https://docs.rs/someday/latest/someday/struct.Reader.html#method.head) to cheaply acquire the latest "head" [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html)
-2. Can hang onto those [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html) objects forever (although at the peril of memory-usage)
-3. Will eventually catch up whenever the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) calls [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push)
+The `Reader(s)`:
+1. Can continually call [`head()`](https://docs.rs/someday/latest/someday/struct.Reader.html#method.head) to cheaply acquire the latest "head" `Commit`
+2. Can hang onto those `Commit` objects forever (although at the peril of memory-usage)
+3. Will eventually catch up whenever the `Writer` calls `push()`
 
 ## Example
 <img src="https://github.com/hinto-janai/someday/assets/101352116/b190db72-c56b-4336-a601-78296040d044" width="60%"/>
 
-This example shows the typical use case where the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html):
+This example shows the typical use case where the `Writer`:
 1. Adds some changes
 2. Reads their local changes
-3. Locks in those changes by calling [`commit()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.commit)
-4. Finally reveals those changes to the readers by calling [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push)
+3. Locks in those changes by calling `commit()`
+4. Finally reveals those changes to the readers by calling `push()`
 
-and the [`Reader`](https://docs.rs/someday/latest/someday/struct.Reader.html):
-1. Continually reads their latest head [`Commit`](https://docs.rs/someday/latest/someday/struct.CommitRef.html) of the current data
-2. Eventually catches up when the [`Writer`](https://docs.rs/someday/latest/someday/struct.Writer.html) publishes with [`push()`](https://docs.rs/someday/latest/someday/struct.Writer.html#method.push)
+and the `Reader`:
+1. Continually reads their latest head `Commit` of the current data
+2. Eventually catches up when the `Writer` publishes with `push()`
 
 The code:
 ```rust
@@ -140,11 +127,9 @@ assert_eq!(commit.timestamp(), 1);
 These features are for (de)serialization.
 
 You can directly (de)serialize your data `T` from a:
-- [`Writer<T>`](https://docs.rs/someday/latest/someday/struct.Writer.html)
-- [`Reader<T>`](https://docs.rs/someday/latest/someday/struct.Reader.html)
-- [`Commit<T>`](https://docs.rs/someday/latest/someday/trait.Commit.html)
-
-In the `Writer/Reader` pair, only the `Writer` can be deserialized as the `Writer` can produce `Reader`'s, but not vice-versa. It does not make much sense to deserialize into a `Reader` that has no relation with any `Writer`.
+- `Writer<T>`
+- `Reader<T>`
+- `Commit<T>`
 
 | Feature Flag | Purpose |
 |--------------|---------|
