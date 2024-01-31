@@ -345,9 +345,20 @@ impl<T: Clone> Writer<T> {
 	/// If it is `1`, that means no `Reader` object exists,
 	/// in that case, this function will return `false`.
 	///
-	/// TODO: doc test.
-	pub fn readers_exists(&self) -> bool {
-		Arc::strong_count(&self.arc) != 1
+	/// ```rust
+	/// # use someday::*;
+	/// # use std::{thread::*,time::*};
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// // 1 `Reader` exists.
+	/// assert!(w.readers_exist());
+	///
+	/// // 0 `Reader`'s (excluding the `Writer`) exist.
+	/// drop(r);
+	/// assert!(!w.readers_exist());
+	/// ```
+	pub fn readers_exist(&self) -> bool {
+		self.reader_count().get() > 1
 	}
 
 	/// Get the current status on the [`Writer`] and [`Reader`]
@@ -357,8 +368,6 @@ impl<T: Clone> Writer<T> {
 	///
 	/// If you only need 1 or a few of the fields in [`StatusInfo`],
 	/// consider using their individual methods instead.
-	///
-	/// TODO: doc test.
 	pub fn status(&self) -> StatusInfo<'_, T> {
 		StatusInfo {
 			staged_patches: &self.patches,
