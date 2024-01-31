@@ -8,6 +8,9 @@ use crate::{
 	info::PullInfo,
 };
 
+#[allow(unused_imports)] // docs
+use crate::{Commit,Reader,Timestamp};
+
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
 	#[inline]

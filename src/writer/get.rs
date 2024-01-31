@@ -14,6 +14,9 @@ use crate::{
 	info::StatusInfo,
 };
 
+#[allow(unused_imports)] // docs
+use crate::Commit;
+
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
 	#[inline]

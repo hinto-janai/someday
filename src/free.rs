@@ -9,6 +9,9 @@ use crate::{
 use arc_swap::ArcSwapAny;
 use std::sync::{Arc,atomic::AtomicBool};
 
+#[allow(unused_imports)] // docs
+use crate::{Timestamp,CommitRef};
+
 //---------------------------------------------------------------------------------------------------- Free functions
 /// The default `Vec` capacity for the
 /// `Patch`'s when using using `new()`.

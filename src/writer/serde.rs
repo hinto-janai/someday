@@ -6,7 +6,9 @@
 	feature = "bincode",
 	feature = "borsh",
 ))]
-use crate::{Writer,Commit,CommitOwned};
+use crate::{Writer,CommitOwned};
+#[allow(unused_imports)] // docs
+use crate::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]
@@ -15,7 +17,7 @@ where
 	T: Clone + serde::Serialize
 {
 	#[inline]
-	/// This will serialize the latest `Commit` of the `Writer`.
+	/// This will serialize the latest [`Commit`] of the [`Writer`].
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -30,7 +32,7 @@ where
 	T: Clone + serde::Deserialize<'de>
 {
 	#[inline]
-	/// This will deserialize a [`Commit`] directly into a `Writer`.
+	/// This will deserialize a [`Commit`] directly into a [`Writer`].
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -64,7 +66,7 @@ where
 	T: Clone + bincode::Encode
 {
 	#[inline]
-	/// This will serialize the latest `Commit` of the `Writer`.
+	/// This will serialize the latest [`Commit`] of the [`Writer`].
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
 		CommitOwned::encode(self.head(), encoder)
 	}
@@ -76,7 +78,7 @@ where
 	T: Clone + bincode::Decode
 {
 	#[inline]
-	/// This will deserialize a [`Commit`] directly into a `Writer`.
+	/// This will deserialize a [`Commit`] directly into a [`Writer`].
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -111,7 +113,7 @@ impl<T> borsh::BorshSerialize for Writer<T>
 where
 	T: Clone + borsh::BorshSerialize
 {
-	/// This will serialize the latest `Commit` of the `Writer`.
+	/// This will serialize the latest [`Commit`] of the [`Writer`].
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
 		CommitOwned::serialize(self.head(), writer)
 	}
@@ -122,7 +124,7 @@ impl<T> borsh::BorshDeserialize for Writer<T>
 where
 	T: Clone + borsh::BorshDeserialize
 {
-	/// This will deserialize your data `T` directly into a `Writer`.
+	/// This will deserialize a [`Commit`] directly into a [`Writer`].
 	///
 	/// ```rust
 	/// # use someday::*;

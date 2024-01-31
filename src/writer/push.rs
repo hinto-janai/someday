@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[allow(unused_imports)] // docs
-use crate::commit::Commit;
+use crate::{Commit,Reader};
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {

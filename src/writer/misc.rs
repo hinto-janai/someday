@@ -1,10 +1,7 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::sync::{
-	Arc,
-	atomic::AtomicBool,
-};
+use std::sync::Arc;
 
 use crate::{
 	writer::token::WriterToken,
@@ -14,6 +11,9 @@ use crate::{
 	commit::CommitOwned,
 	info::WriterInfo,
 };
+
+#[allow(unused_imports)] // docs
+use crate::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -163,7 +163,7 @@ impl<T: Clone> Writer<T> {
 	/// `Reader`'s associated with this `Writer`.
 	///
 	/// Any older `Reader`'s will no longer receive [`Commit`]'s
-	/// from this `Writer`, and [`Reader::writer_dead`] will start
+	/// from this `Writer`, and [`Reader::writer_dropped`] will start
 	/// to return `true`. From the perspective of the older `Reader`'s,
 	/// calling this function is the same as this `Writer` being dropped.
 	///

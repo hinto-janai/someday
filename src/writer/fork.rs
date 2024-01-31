@@ -8,6 +8,9 @@ use crate::{
 	writer::token::WriterToken,
 };
 
+#[allow(unused_imports)] // docs
+use crate::{Patch,Reader};
+
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
 	#[must_use]
