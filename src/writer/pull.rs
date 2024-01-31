@@ -126,7 +126,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Reader's sees them.
 	/// assert_eq!(r.head().data(), "hello");
-	/// assert_eq!(r.timestamp(), 1);
+	/// assert_eq!(r.head().timestamp(), 1);
 	///
 	/// // Commit some changes.
 	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
@@ -157,7 +157,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // 5 commits total.
 	/// assert_eq!(w.timestamp(), 5);
-	/// assert_eq!(r.timestamp(), 5);
+	/// assert_eq!(r.head().timestamp(), 5);
 	/// ```
 	///
 	/// ## Timestamp

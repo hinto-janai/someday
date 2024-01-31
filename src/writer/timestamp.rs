@@ -107,7 +107,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 10);
 	///
 	/// // Reader at timestamp 0.
-	/// assert_eq!(r.timestamp(), 0);
+	/// assert_eq!(r.head().timestamp(), 0);
 	///
 	/// // Writer is ahead of the Reader's.
 	/// assert!(w.ahead());
@@ -197,7 +197,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 1);
 	/// // We haven't pushed, so Reader's
 	/// // are still at timestamp 0.
-	/// assert_eq!(r.timestamp(), 0);
+	/// assert_eq!(r.head().timestamp(), 0);
 	/// ```
 	pub const fn timestamp(&self) -> Timestamp {
 		self.local_as_ref().timestamp
@@ -225,13 +225,13 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 1);
 	/// // We haven't pushed, so Reader's
 	/// // are still at timestamp 0.
-	/// assert_eq!(r.timestamp(), 0);
+	/// assert_eq!(r.head().timestamp(), 0);
 	///
 	/// // Push changes
 	/// w.push();
 	///
 	/// // Readers are now up-to-date.
-	/// assert_eq!(r.timestamp(), 1);
+	/// assert_eq!(r.head().timestamp(), 1);
 	/// ```
 	pub fn timestamp_remote(&self) -> Timestamp {
 		self.remote.timestamp
@@ -267,7 +267,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is at timestamp 5.
 	/// assert_eq!(w.timestamp(), 6);
 	/// // Reader's are still at timestamp 1.
-	/// assert_eq!(r.timestamp(), 1);
+	/// assert_eq!(r.head().timestamp(), 1);
 	///
 	/// // The difference is 5.
 	/// assert_eq!(w.timestamp_diff(), 5);
@@ -303,7 +303,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is at timestamp 5.
 	/// assert_eq!(w.timestamp(), 6);
 	/// // Reader's are still at timestamp 1.
-	/// assert_eq!(r.timestamp(), 1);
+	/// assert_eq!(r.head().timestamp(), 1);
 	///
 	/// // They aren't in sync.
 	/// assert_eq!(w.synced(), false);

@@ -65,7 +65,7 @@ use crate::{
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(w.timestamp(), 0);
-/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(r.head().timestamp(), 0);
 /// assert_eq!(w.data(), "");
 /// assert_eq!(r.head().data(), "");
 ///
@@ -79,7 +79,7 @@ use crate::{
 /// // local (Writer) or remote (Readers) data, it
 /// // just "stages" them.
 /// assert_eq!(w.timestamp(), 0);
-/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(r.head().timestamp(), 0);
 /// assert_eq!(w.data(), "");
 /// assert_eq!(r.head().data(), "");
 ///
@@ -100,7 +100,7 @@ use crate::{
 /// // We haven't pushed yet, so the Readers
 /// // are still un-aware of our local changes.
 /// assert_eq!(w.timestamp(), 1);
-/// assert_eq!(r.timestamp(), 0);
+/// assert_eq!(r.head().timestamp(), 0);
 /// assert_eq!(w.data(), "abcdefghi");
 /// assert_eq!(r.head().data(), "");
 ///
@@ -113,7 +113,7 @@ use crate::{
 ///
 /// // The Readers are now in sync.
 /// assert_eq!(w.timestamp(), 1);
-/// assert_eq!(r.timestamp(), 1);
+/// assert_eq!(r.head().timestamp(), 1);
 /// assert_eq!(w.data(), "abcdefghi");
 /// assert_eq!(r.head().data(), "abcdefghi");
 /// ```

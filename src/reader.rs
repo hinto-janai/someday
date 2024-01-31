@@ -76,7 +76,7 @@ use crate::{
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(writer.timestamp(), 0);
-/// assert_eq!(reader.timestamp(), 0);
+/// assert_eq!(reader.head().timestamp(), 0);
 /// assert_eq!(*writer.data(), "");
 /// assert_eq!(reader.head().data(), "");
 ///
@@ -168,7 +168,7 @@ impl<T: Clone> Reader<T> {
 	///
 	/// // Both Reader and Writer are at timestamp 0 and see no changes.
 	/// assert_eq!(w.timestamp(), 0);
-	/// assert_eq!(r.timestamp(), 0);
+	/// assert_eq!(r.head().timestamp(), 0);
 	/// assert_eq!(w.data(), "");
 	/// assert_eq!(r.head().data(), "");
 	///
@@ -195,40 +195,6 @@ impl<T: Clone> Reader<T> {
 	/// ```
 	pub fn head(&self) -> CommitRef<T> {
 		self.arc.load_full()
-	}
-
-	#[inline]
-	/// If the [`Reader`]'s current [`Timestamp`] is greater than an arbitrary [`Commit`]'s [`Timestamp`]
-	///
-	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
-	///
-	/// TODO: doc test.
-	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
-		self.head().ahead(commit)
-	}
-
-	#[inline]
-	/// If the [`Reader`]'s current [`Timestamp`] is less than an arbitrary [`Commit`]'s [`Timestamp`]
-	///
-	/// This takes any type of [`Commit`], so either [`CommitRef`] or [`CommitOwned`] can be used as input.
-	///
-	/// TODO: doc test.
-	pub fn behind(&self, commit: &impl Commit<T>) -> bool {
-		self.head().behind(commit)
-	}
-
-	#[inline]
-	#[must_use]
-	/// Get the current [`Timestamp`] of the [`Reader`]'s head [`Commit`]
-	///
-	/// This returns the number indicating the [`Reader`]'s data's version.
-	///
-	/// This number starts at `0`, increments by `1` every time a [`Writer::commit()`]
-	/// -like operation is called, and it will never be greater than the [`Writer`]'s [`Timestamp`].
-	///
-	/// TODO: doc test.
-	pub fn timestamp(&self) -> Timestamp {
-		self.head().timestamp()
 	}
 
 	#[inline]
