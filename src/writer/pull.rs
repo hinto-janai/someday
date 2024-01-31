@@ -163,11 +163,6 @@ impl<T: Clone> Writer<T> {
 	/// ## Timestamp
 	/// This increments the `Writer`'s local `Timestamp` by `1`.
 	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
-		self.overwrite_inner(data)
-	}
-
-	/// TODO
-	fn overwrite_inner(&mut self, data: T) -> CommitOwned<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
