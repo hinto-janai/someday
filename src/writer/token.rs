@@ -29,20 +29,18 @@ use crate::{
 #[derive(Clone, Debug)]
 #[repr(transparent)]
 /// Token representing a certain `Writer`, and if it has been dropped.
-///
-/// TODO: test.
 pub(crate) struct WriterToken {
 	/// Is the `Writer` dead?
 	///
-	/// Only set to `false` when we are `drop()`'ed.
-	inner: Arc<AtomicBool>,
+	/// Only set to `true` when we are `drop()`'ed.
+	dead: Arc<AtomicBool>,
 }
 
 impl WriterToken {
 	/// Return a new `Self` with a new `Arc(false)`.
 	pub(crate) fn new() -> Self {
 		Self {
-			inner: Arc::new(AtomicBool::new(false))
+			dead: Arc::new(AtomicBool::new(false))
 		}
 	}
 
@@ -53,29 +51,26 @@ impl WriterToken {
 	///
 	/// Acquire + Relaxed ordering.
 	pub(crate) fn try_revive(&self) -> Option<WriterReviveToken> {
-		if self.inner.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed) == Ok(true) {
-			Some(WriterReviveToken {
-				writer_token: self.clone(),
-				dead: true,
-			})
+		if self.dead.compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed) == Ok(true) {
+			Some(WriterReviveToken::new(self))
 		} else {
 			None
 		}
 	}
 
 	#[must_use]
-	/// TODO
+	/// Is the `Writer` who held onto this token dead?
 	///
 	/// Acquire ordering.
 	pub(crate) fn is_dead(&self) -> bool {
-		self.inner.load(Ordering::Acquire)
+		self.dead.load(Ordering::Acquire)
 	}
 }
 
 impl From<Arc<AtomicBool>> for WriterToken {
-	fn from(inner: Arc<AtomicBool>) -> Self {
+	fn from(dead: Arc<AtomicBool>) -> Self {
 		Self {
-			inner,
+			dead,
 		}
 	}
 }
@@ -83,7 +78,7 @@ impl From<Arc<AtomicBool>> for WriterToken {
 
 impl Drop for WriterToken {
 	fn drop(&mut self) {
-		self.inner.store(true, Ordering::Release);
+		self.dead.store(true, Ordering::Release);
 	}
 }
 
@@ -97,26 +92,93 @@ impl Drop for WriterToken {
 /// This struct has drop-glue in-order to prevent it from
 /// blocking other `Reader`'s who would like to become `Writer`'s
 /// if a panic occurs, or if the "revive" function exits prematurely.
-///
-/// TODO: test.
-pub(crate) struct WriterReviveToken {
+pub(crate) struct WriterReviveToken<'a> {
 	/// The writer token.
-	writer_token: WriterToken,
+	///
+	/// Must be borrowed such that we don't
+	/// call its `drop()` when _we_ drop.
+	writer_token: &'a WriterToken,
 	/// If this is `true`, it will set the `Writer`
-	/// to dead (false) on `drop()`, it must manually
-	/// be set to `false` to avoid this.
+	/// to dead `drop()`, it must manually be set
+	/// to `false` to avoid this.
 	dead: bool,
 }
 
-impl WriterReviveToken {
+impl<'a> WriterReviveToken<'a> {
+	/// Attempt a revival, this must be "finished" by calling `Self::revived`.
+	pub(crate) const fn new(writer_token: &'a WriterToken) -> WriterReviveToken<'a> {
+		Self {
+			writer_token,
+			dead: true,
+		}
+	}
+
 	/// We successfully revived the `Writer`, no need to reset it to dead.
 	pub(crate) fn revived(mut this: Self) {
 		this.dead = false;
 	}
 }
 
-impl Drop for WriterReviveToken {
+impl Drop for WriterReviveToken<'_> {
 	fn drop(&mut self) {
-		self.writer_token.inner.store(self.dead, Ordering::Release);
+		self.writer_token.dead.store(self.dead, Ordering::Release);
+	}
+}
+
+//---------------------------------------------------------------------------------------------------- Tests
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	/// Assure token is set to `dead` set on drop.
+	fn dead_on_drop() {
+		let w = WriterToken::new();
+		let r = w.clone();
+
+		assert!(!r.is_dead());
+
+		drop(w);
+		assert!(r.is_dead());
+	}
+
+	#[test]
+	/// Assure revival works.
+	fn try_revive() {
+		let w = WriterToken::new();
+		let r = w.clone();
+
+		assert!(r.try_revive().is_none());
+
+		drop(w);
+		assert!(r.is_dead());
+
+		assert!(r.try_revive().is_some());
+	}
+
+	#[test]
+	/// Assure the revival token sets state correctly after drop.
+	fn revive_token() {
+		let w = WriterToken::new();
+		let r = w.clone();
+
+		assert!(r.try_revive().is_none());
+
+		assert!(!r.is_dead());
+		drop(w);
+		assert!(r.is_dead());
+
+		let revive_token = r.try_revive().unwrap();
+		assert!(!r.is_dead());
+		// Should be set to automatically reset to `dead`
+		// if we don't "complete" the revival.
+		drop(revive_token);
+		assert!(r.is_dead());
+
+		// Try again, completing the revival.
+		let revive_token = r.try_revive().unwrap();
+		assert!(!r.is_dead());
+		WriterReviveToken::revived(revive_token);
+		assert!(!r.is_dead());
 	}
 }

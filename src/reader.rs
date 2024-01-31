@@ -339,9 +339,8 @@ impl<T: Clone> Reader<T> {
 	/// assert_eq!(r2.head().data(), "hello world!");
 	/// ```
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
-		let writer_revive_token = match self.token.try_revive() {
-			Some(wrt) => wrt,
-			None => return Err(self),
+		let Some(writer_revive_token) = self.token.try_revive() else {
+			return Err(self);
 		};
 
 		//------------------------------------------------------------
@@ -350,19 +349,23 @@ impl<T: Clone> Reader<T> {
 		// 2. Can safely turn into a `Writer` since it was dropped
 		//------------------------------------------------------------
 
-		let remote = self.head();
-
-		let writer = Writer {
-			token: self.token,
-			local: Some(remote.to_commit_owned()),
-			remote,
-			arc: self.arc,
-			patches: Vec::with_capacity(INIT_VEC_CAP),
-			patches_old: Vec::with_capacity(INIT_VEC_CAP),
-		};
+		let remote      = self.head();
+		let local       = Some(remote.to_commit_owned());
+		let arc         = self.arc;
+		let patches     = Vec::with_capacity(INIT_VEC_CAP);
+		let patches_old = Vec::with_capacity(INIT_VEC_CAP);
 
 		// INVARIANT: We must tell the token that we have successfully revived the `Writer`.
 		WriterReviveToken::revived(writer_revive_token);
+
+		let writer = Writer {
+			token: self.token,
+			local,
+			remote,
+			arc,
+			patches,
+			patches_old,
+		};
 
 		Ok(writer)
 	}
