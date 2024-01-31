@@ -83,6 +83,7 @@ use crate::{Reader, Commit, Writer};
 /// This means your `Patch`'s 2nd input `&T` will be referencing the _just_ pushed data.
 ///
 /// ```rust
+/// # use someday::*;
 /// let (_, mut writer) = someday::new::<usize>(0);
 ///
 /// writer.add(Patch::Ptr(|w, r| {

@@ -18,29 +18,17 @@ use crate::{
 /// [`Reader`]'s can cheaply [`Clone`] themselves and there
 /// is no limit to how many there can be.
 ///
-/// [`Reader`]'s can cheaply acquire access to the latest data
+/// `Reader`'s can cheaply acquire access to the latest data
 /// that the [`Writer`] has [`push()`](Writer::push)'ed by using [`Reader::head()`].
 ///
 /// This access:
 /// - Is wait-free and sometimes lock-free
-/// - Will never block the [`Writer`]
-/// - Will gain a shared owned [`Commit`] of the data `T`
-///
-/// ## Commits
-/// The main object [`CommitRef`], returned from the main function [`Reader::head()`] is more or less:
-/// ```rust
-/// struct CommitRef<T> {
-///     timestamp: usize,
-///     data: std::sync::Arc<T>,
-/// }
-/// ```
-/// so as long as that [`CommitRef`] is alive, the data will stay alive.
-///
-/// These [`CommitRef`]'s are cheaply clonable and sharable with other threads.
+/// - Will never block the `Writer`
+/// - Will gain a [`CommitRef`] of the data `T`
 ///
 /// ## Usage
 /// This example covers the typical usage of a `Reader`:
-/// - Creating some other [`Reader`]'s
+/// - Creating some other `Reader`'s
 /// - Acquiring the latest head [`Commit`] of data
 /// - Viewing the data, the timestamp
 /// - Hanging onto that data for a while

@@ -25,6 +25,12 @@ use crate::{
 ///
 /// The `Writer` can also generate infinite `Reader`'s with [`Writer::reader()`].
 ///
+/// ## Invariants
+/// Some invariants that the `Writer` always upholds, that you can rely on:
+/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::head()`]'s timestamp.
+/// - If a `Writer` panics, no data is poisoned - i.e. the local data `T`
+///   will never be seen in an uninitialized state, `Reader`'s will be completely fine
+///
 /// ## Usage
 /// This example covers the typical usage of a `Writer`:
 /// - Creating some `Reader`'s
@@ -106,12 +112,6 @@ use crate::{
 /// assert_eq!(w.data(), "abcdefghi");
 /// assert_eq!(r.head().data(), "abcdefghi");
 /// ```
-///
-/// ## Invariants
-/// Some invariants that the `Writer` always upholds, that you can rely on:
-/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::head()`]'s timestamp.
-/// - If a `Writer` panics, no data is poisoned - i.e. the local data `T`
-///   will never be seen in an uninitialized state, `Reader`'s will be completely fine
 pub struct Writer<T: Clone> {
 	/// Only set to `false` when we are `drop()`'ed.
 	pub(crate) token: WriterToken,
