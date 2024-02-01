@@ -169,7 +169,7 @@ impl<T: Clone> Writer<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_ref() {
 			Some(local) => local,
-			None => panic!("the `Writer`'s local data <T> was not initialized"),
+			None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
 		}
 	}
 
@@ -180,7 +180,7 @@ impl<T: Clone> Writer<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_mut() {
 			Some(local) => local,
-			None => panic!("the `Writer`'s local data <T> was not initialized"),
+			None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
 		}
 	}
 }
@@ -237,7 +237,7 @@ where
 	/// assert_eq!(*w2.data(), 0);
 	/// ```
 	fn default() -> Self {
-		crate::free::new_inner(CommitOwned { data: T::default(), timestamp: 0 })
+		Self::new(T::default())
 	}
 }
 
