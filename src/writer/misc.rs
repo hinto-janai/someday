@@ -8,12 +8,12 @@ use crate::{
 	writer::Writer,
 	patch::Patch,
 	reader::Reader,
-	commit::CommitOwned,
+	commit::Commit,
 	info::WriterInfo,
 };
 
 #[allow(unused_imports)] // docs
-use crate::Commit;
+// use crate::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -28,7 +28,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), w2.timestamp());
 	/// ```
 	pub fn new(data: T) -> Self {
-		crate::free::new_inner(CommitOwned { data, timestamp: 0 })
+		crate::free::new_inner(Commit { data, timestamp: 0 })
 	}
 
 	#[inline]
@@ -184,11 +184,11 @@ impl<T: Clone> Writer<T> {
 	/// // The older `Reader` won't see pushes anymore.
 	/// w.add_commit_push(|w, _| *w = "hello");
 	/// assert_eq!(*w.data(), "hello");
-	/// assert_eq!(*r.head().data(), "");
+	/// assert_eq!(r.head().data, "");
 	///
 	/// // But, newer `Reader`'s will.
 	/// let r2 = w.reader();
-	/// assert_eq!(*r2.head().data(), "hello");
+	/// assert_eq!(r2.head().data, "hello");
 	/// ```
 	pub fn disconnect(&mut self) {
 		self.token = WriterToken::new();
@@ -217,8 +217,8 @@ impl<T: Clone> Writer<T> {
 	///     committed_patches,
 	/// } = w.into_inner();
 	///
-	/// assert_eq!(writer.data(), "a");
-	/// assert_eq!(reader.data(), ""); // We never `push()`'ed, so Readers saw nothing.
+	/// assert_eq!(writer.data, "a");
+	/// assert_eq!(reader.data, ""); // We never `push()`'ed, so Readers saw nothing.
 	/// assert_eq!(staged.len(), 1);
 	/// assert_eq!(committed_patches.len(), 1);
 	/// ```

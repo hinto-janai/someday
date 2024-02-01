@@ -36,8 +36,8 @@ impl<T: Clone> Writer<T> {
 	/// });
 	/// assert_eq!(w.data(), "hello");
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(r.head().data(), "");
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data, "");
+	/// assert_eq!(r.head().timestamp, 0);
 	///
 	/// // Fork off into another `Writer`.
 	/// let mut w2 = w.fork();
@@ -46,8 +46,8 @@ impl<T: Clone> Writer<T> {
 	/// // It inherits the data of the previous `Writer`.
 	/// assert_eq!(w.data(), "hello");
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(w.head().data(), "hello");
-	/// assert_eq!(w.head().timestamp(), 1);
+	/// assert_eq!(w.head().data, "hello");
+	/// assert_eq!(w.head().timestamp, 1);
 	///
 	/// // And has no relation to the previous `Writer/Reader`'s.
 	/// assert!(!r.connected(&r2));
@@ -61,8 +61,8 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w2.timestamp(), 2);
 	/// assert_eq!(w.data(), "hello");
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(r.head().data(), "");
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data, "");
+	/// assert_eq!(r.head().timestamp, 0);
 	/// ```
 	pub fn fork(&self) -> Self {
 		let local = self.local.as_ref().unwrap().clone();

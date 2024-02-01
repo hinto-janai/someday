@@ -8,7 +8,7 @@ use std::{
 use crate::{
 	writer::{WriterToken,WriterReviveToken},
 	free::INIT_VEC_CAP,
-	commit::{CommitRef,CommitOwned,Commit},
+	commit::{CommitRef,Commit},
 	Writer,
 };
 
@@ -48,7 +48,7 @@ use crate::{
 ///     // Pretty cheap operation.
 ///     let another_reader = reader.clone();
 ///     // We can send Reader's to other threads.
-///     std::thread::spawn(move || assert_eq!(another_reader.head().data(), ""));
+///     std::thread::spawn(move || assert_eq!(another_reader.head().data, ""));
 /// }
 ///
 /// // This is the single Writer, it cannot clone itself.
@@ -56,9 +56,9 @@ use crate::{
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(writer.timestamp(), 0);
-/// assert_eq!(reader.head().timestamp(), 0);
+/// assert_eq!(reader.head().timestamp, 0);
 /// assert_eq!(*writer.data(), "");
-/// assert_eq!(reader.head().data(), "");
+/// assert_eq!(reader.head().data, "");
 ///
 /// // Move the Writer into another thread
 /// // and make it do some work in the background.
@@ -84,10 +84,10 @@ use crate::{
 /// // pretty long at this point.
 /// let head_commit: CommitRef<String> = reader.head();
 /// // Wow, longer than 5,000 bytes!
-/// assert!(head_commit.data().len() > 5_000);
+/// assert!(head_commit.data.len() > 5_000);
 ///
 /// // The timestamp is probably pretty high already too.
-/// assert!(head_commit.timestamp() > 500);
+/// assert!(head_commit.timestamp > 500);
 ///
 /// // We can continually call `.head()` and keep
 /// // retrieving the latest data. Doing this
@@ -106,7 +106,7 @@ use crate::{
 ///
 ///     // We got new data!
 ///     assert!(last_head != new_head);
-///     assert!(last_head.timestamp() < new_head.timestamp());
+///     assert!(last_head.timestamp < new_head.timestamp);
 /// }
 ///
 /// // We can hold onto these `CommitRef`'s _forever_
@@ -122,11 +122,11 @@ pub struct Reader<T: Clone> {
 	/// The atomic pointer to the `Arc` that all readers enter through.
 	///
 	/// This is `swap()` updated by the `Writer`.
-	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<CommitOwned<T>>>>,
+	pub(super) arc: Arc<arc_swap::ArcSwapAny<Arc<Commit<T>>>>,
 	/// Has the associated `Writer` to this `Reader` been dropped?
 	pub(super) token: WriterToken,
 	/// Optional cache of the latest `head()`.
-	pub(super) cache: Option<Arc<CommitOwned<T>>>,
+	pub(super) cache: Option<Arc<Commit<T>>>,
 }
 
 impl<T: Clone> Reader<T> {
@@ -150,9 +150,9 @@ impl<T: Clone> Reader<T> {
 	///
 	/// // Both Reader and Writer are at timestamp 0 and see no changes.
 	/// assert_eq!(w.timestamp(), 0);
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().timestamp, 0);
 	/// assert_eq!(w.data(), "");
-	/// assert_eq!(r.head().data(), "");
+	/// assert_eq!(r.head().data, "");
 	///
 	/// // Writer commits some changes locally.
 	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
@@ -164,16 +164,16 @@ impl<T: Clone> Reader<T> {
 	///
 	/// // Reader does not, because Writer did not `push()`.
 	/// let head: CommitRef<String> = r.head();
-	/// assert_eq!(head.timestamp(), 0);
-	/// assert_eq!(head.data(), "");
+	/// assert_eq!(head.timestamp, 0);
+	/// assert_eq!(head.data, "");
 	///
 	/// // Writer pushs to the Readers.
 	/// w.push();
 	///
 	/// // Now Readers see changes.
 	/// let head: CommitRef<String> = r.head();
-	/// assert_eq!(head.timestamp(), 1);
-	/// assert_eq!(head.data(), "hello");
+	/// assert_eq!(head.timestamp, 1);
+	/// assert_eq!(head.data, "hello");
 	/// ```
 	pub fn head(&self) -> CommitRef<T> {
 		self.arc.load_full()
@@ -200,7 +200,7 @@ impl<T: Clone> Reader<T> {
 	/// // Our first cache access, this will call
 	/// // `Reader::head()` and save it internally.
 	/// let cache: CommitRef<()> = r.cache();
-	/// assert_eq!(cache.timestamp(), 0);
+	/// assert_eq!(cache.timestamp, 0);
 	/// assert!(r.cache_up_to_date());
 	///
 	/// // But... the `Writer` continues to push.
@@ -209,7 +209,7 @@ impl<T: Clone> Reader<T> {
 	/// // Now our cache is technically out-of-date.
 	/// assert!(!r.cache_up_to_date());
 	/// // Future calls will return the out-of-date cache.
-	/// assert_eq!(r.cache().timestamp(), 0);
+	/// assert_eq!(r.cache().timestamp, 0);
 	/// ```
 	pub fn cache(&mut self) -> CommitRef<T> {
 		if let Some(cache) = self.cache.as_ref() {
@@ -238,7 +238,7 @@ impl<T: Clone> Reader<T> {
 	/// // Our first cache access, this will call
 	/// // `Reader::head()` and save it internally.
 	/// let cache: CommitRef<()> = r.cache_update();
-	/// assert_eq!(cache.timestamp(), 0);
+	/// assert_eq!(cache.timestamp, 0);
 	/// assert!(r.cache_up_to_date());
 	///
 	/// // The `Writer` continues to push.
@@ -246,7 +246,7 @@ impl<T: Clone> Reader<T> {
 	///
 	/// // Using `cache_update()`, our cache always is up-to-date.
 	/// let cache: CommitRef<()> = r.cache_update();
-	/// assert_eq!(cache.timestamp(), 1);
+	/// assert_eq!(cache.timestamp, 1);
 	/// assert!(r.cache_up_to_date());
 	/// ```
 	pub fn cache_update(&mut self) -> CommitRef<T> {
@@ -313,7 +313,7 @@ impl<T: Clone> Reader<T> {
 	/// // ...and take it.
 	/// let cache: CommitRef<()> = r.cache_take().unwrap();
 	/// assert!(!r.cache_up_to_date());
-	/// assert_eq!(cache.timestamp(), 0);
+	/// assert_eq!(cache.timestamp, 0);
 	/// ```
 	pub fn cache_take(&mut self) -> Option<CommitRef<T>> {
 		self.cache.take()
@@ -476,7 +476,7 @@ impl<T: Clone> Reader<T> {
 	/// });
 	///
 	/// // The previous `Reader` sees the push!
-	/// assert_eq!(r2.head().data(), "hello world!");
+	/// assert_eq!(r2.head().data, "hello world!");
 	/// ```
 	pub fn try_into_writer(self) -> Result<Writer<T>, Self> {
 		let Some(writer_revive_token) = self.token.try_revive() else {
@@ -490,7 +490,7 @@ impl<T: Clone> Reader<T> {
 		//------------------------------------------------------------
 
 		let remote      = self.head();
-		let local       = Some(remote.to_commit_owned());
+		let local       = Some(remote.as_ref().clone());
 		let arc         = self.arc;
 		let patches     = Vec::with_capacity(INIT_VEC_CAP);
 		let patches_old = Vec::with_capacity(INIT_VEC_CAP);
@@ -529,8 +529,8 @@ impl<T: Clone> Reader<T> {
 	/// });
 	/// assert_eq!(w.data(), "hello");
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(r.head().data(), "");
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().data, "");
+	/// assert_eq!(r.head().timestamp, 0);
 	///
 	/// // Fork the _Reader_ off into another `Writer`.
 	/// let mut w2 = r.fork();
@@ -544,7 +544,7 @@ impl<T: Clone> Reader<T> {
 	/// ```
 	pub fn fork(&self) -> Writer<T> {
 		let remote = self.head();
-		let local = remote.to_commit_owned();
+		let local = remote.as_ref().clone();
 		let arc = Arc::new(arc_swap::ArcSwap::new(Arc::clone(&remote)));
 
 		Writer {
@@ -605,8 +605,8 @@ where
 	/// let config = bincode::config::standard();
 	///
 	/// let encoded = bincode::encode_to_vec(&r, config).unwrap();
-	/// let decoded: CommitOwned<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
-	/// assert_eq!(decoded, CommitOwned { timestamp: 0, data: String::from("hello") });
+	/// let decoded: Commit<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
+	/// assert_eq!(decoded, Commit { timestamp: 0, data: String::from("hello") });
 	/// ```
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
 		CommitRef::encode(&self.head(), encoder)
@@ -619,7 +619,7 @@ where
 	T: Clone + borsh::BorshSerialize
 {
 	#[inline]
-	/// This will call `self.head().data()`, then serialize your `T`.
+	/// This will call `self.head().data`, then serialize your `T`.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -627,8 +627,8 @@ where
 	/// let (r, _) = someday::new(String::from("hello"));
 	///
 	/// let encoded = borsh::to_vec(&r).unwrap();
-	/// let decoded: CommitOwned<String> = borsh::from_slice(&encoded).unwrap();
-	/// assert_eq!(decoded, CommitOwned { timestamp: 0, data: String::from("hello") });
+	/// let decoded: Commit<String> = borsh::from_slice(&encoded).unwrap();
+	/// assert_eq!(decoded, Commit { timestamp: 0, data: String::from("hello") });
 	/// ```
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
 		CommitRef::serialize(&self.head(), writer)

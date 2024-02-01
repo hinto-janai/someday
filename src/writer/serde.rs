@@ -6,9 +6,9 @@
 	feature = "bincode",
 	feature = "borsh",
 ))]
-use crate::{Writer,CommitOwned};
+use crate::{Writer,Commit};
 #[allow(unused_imports)] // docs
-use crate::Commit;
+// use crate::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 #[cfg(feature = "serde")]
@@ -22,7 +22,7 @@ where
     where
         S: serde::Serializer,
     {
-		CommitOwned::serialize(self.head(), serializer)
+		Commit::serialize(self.head(), serializer)
     }
 }
 
@@ -42,8 +42,8 @@ where
 	/// });
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello world!");
-	/// assert_eq!(r.head().timestamp(), 0);
-	/// assert_eq!(r.head().data(), "hello");
+	/// assert_eq!(r.head().timestamp, 0);
+	/// assert_eq!(r.head().data, "hello");
 	///
 	/// let json = serde_json::to_string(&w).unwrap();
 	/// assert_eq!(json, "{\"timestamp\":1,\"data\":\"hello world!\"}");
@@ -56,7 +56,7 @@ where
 	where
 		D: serde::Deserializer<'de>
 	{
-		CommitOwned::deserialize(deserializer).map(Self::from)
+		Commit::deserialize(deserializer).map(Self::from)
 	}
 }
 
@@ -68,7 +68,7 @@ where
 	#[inline]
 	/// This will serialize the latest [`Commit`] of the [`Writer`].
 	fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
-		CommitOwned::encode(self.head(), encoder)
+		Commit::encode(self.head(), encoder)
 	}
 }
 
@@ -88,15 +88,15 @@ where
 	/// });
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello world!");
-	/// assert_eq!(r.head().timestamp(), 0);
-	/// assert_eq!(r.head().data(), "hello");
+	/// assert_eq!(r.head().timestamp, 0);
+	/// assert_eq!(r.head().data, "hello");
 	///
 	/// let config = bincode::config::standard();
 	///
 	/// // Decode into a `Commit`.
 	/// let encoded = bincode::encode_to_vec(&w, config).unwrap();
-	/// let decoded: CommitOwned<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
-	/// assert_eq!(decoded, CommitOwned { timestamp: 1, data: String::from("hello world!") });
+	/// let decoded: Commit<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
+	/// assert_eq!(decoded, Commit { timestamp: 1, data: String::from("hello world!") });
 	///
 	/// // Decode directly into a `Writer<T>`.
 	/// let writer: Writer<String> = bincode::decode_from_slice(&encoded, config).unwrap().0;
@@ -104,7 +104,7 @@ where
 	/// assert_eq!(writer.data(), "hello world!");
 	/// ```
 	fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
-		CommitOwned::decode(decoder).map(Self::from)
+		Commit::decode(decoder).map(Self::from)
 	}
 }
 
@@ -115,7 +115,7 @@ where
 {
 	/// This will serialize the latest [`Commit`] of the [`Writer`].
 	fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-		CommitOwned::serialize(self.head(), writer)
+		Commit::serialize(self.head(), writer)
 	}
 }
 
@@ -134,13 +134,13 @@ where
 	/// });
 	/// assert_eq!(w.timestamp(), 1);
 	/// assert_eq!(w.data(), "hello world!");
-	/// assert_eq!(r.head().timestamp(), 0);
-	/// assert_eq!(r.head().data(), "hello");
+	/// assert_eq!(r.head().timestamp, 0);
+	/// assert_eq!(r.head().data, "hello");
 	///
 	/// // Decode into a `Commit`.
 	/// let encoded = borsh::to_vec(&w).unwrap();
-	/// let decoded: CommitOwned<String> = borsh::from_slice(&encoded).unwrap();
-	/// assert_eq!(decoded, CommitOwned { timestamp: 1, data: String::from("hello world!") });
+	/// let decoded: Commit<String> = borsh::from_slice(&encoded).unwrap();
+	/// assert_eq!(decoded, Commit { timestamp: 1, data: String::from("hello world!") });
 	///
 	/// // Decode directly into a `Writer<T>`.
 	/// let writer: Writer<String> = borsh::from_slice(&encoded).unwrap();
@@ -148,6 +148,6 @@ where
 	/// assert_eq!(writer.data(), "hello world!");
 	/// ```
 	fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
-		CommitOwned::deserialize_reader(reader).map(Self::from)
+		Commit::deserialize_reader(reader).map(Self::from)
 	}
 }

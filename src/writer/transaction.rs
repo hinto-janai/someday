@@ -12,7 +12,7 @@ use crate::{
 	writer::Writer,
 	patch::Patch,
 	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
+	commit::{CommitRef,Commit},
 	info::CommitInfo,
 };
 
@@ -39,13 +39,13 @@ use std::sync::Mutex;
 ///
 /// assert_eq!(writer.data(), "hello world!");
 /// assert_eq!(writer.timestamp(), 4);
-/// assert_eq!(reader.head().data(), "");
-/// assert_eq!(reader.head().timestamp(), 0);
+/// assert_eq!(reader.head().data, "");
+/// assert_eq!(reader.head().timestamp, 0);
 ///
 /// assert_eq!(writer.staged().len(), 1);
 /// writer.push();
-/// assert_eq!(reader.head().data(), "hello world!");
-/// assert_eq!(reader.head().timestamp(), 4);
+/// assert_eq!(reader.head().data, "hello world!");
+/// assert_eq!(reader.head().timestamp, 4);
 /// ```
 pub struct Transaction<'writer, T: Clone> {
 	/// TODO

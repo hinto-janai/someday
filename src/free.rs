@@ -4,7 +4,7 @@
 use crate::{
 	reader::Reader,
 	writer::Writer,
-	commit::{Commit,CommitOwned},
+	commit::Commit,
 };
 use arc_swap::ArcSwapAny;
 use std::sync::{Arc,atomic::AtomicBool};
@@ -32,7 +32,7 @@ pub(crate) const INIT_VEC_CAP: usize = 16;
 /// assert_eq!(writer.data_remote(), "hello world!");
 /// ```
 pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(CommitOwned { data, timestamp: 0 });
+	let writer = new_inner(Commit { data, timestamp: 0 });
 	(writer.reader(), writer)
 }
 
@@ -48,7 +48,7 @@ pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 /// assert_eq!(*writer.data_remote(), 0);
 /// ```
 pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(CommitOwned { data: T::default(), timestamp: 0 });
+	let writer = new_inner(Commit { data: T::default(), timestamp: 0 });
 	(writer.reader(), writer)
 }
 
@@ -63,14 +63,14 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 /// panics if/when the timestamp gets updated).
 ///
 /// The input `Commit` can either be:
-/// - [`CommitOwned<T>`] where this function will take the data as it, or
+/// - [`Commit<T>`] where this function will take the data as it, or
 /// - [`CommitRef<T>`] where this function will _attempt_ to acquire the data
 /// if there are no other strong references to it. It will [`Clone`] otherwise.
 ///
 /// ## Example
 /// ```rust
 /// # use someday::*;
-/// let commit = CommitOwned {
+/// let commit = Commit {
 ///     data: String::from("hello world!"),
 ///     timestamp: 123,
 /// };
@@ -87,13 +87,13 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 /// if the `Timestamp` surpasses [`usize::MAX`].
 ///
 /// It should not be set to an extremely high value.
-pub fn from_commit<T: Clone, C: Commit<T>>(commit: C) -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(commit.into_commit_owned());
+pub fn from_commit<T: Clone>(commit: Commit<T>) -> (Reader<T>, Writer<T>) {
+	let writer = new_inner(commit);
 	(writer.reader(), writer)
 }
 
 /// Inner function for constructors.
-pub(crate) fn new_inner<T: Clone>(local: CommitOwned<T>) -> Writer<T> {
+pub(crate) fn new_inner<T: Clone>(local: Commit<T>) -> Writer<T> {
 	let remote = Arc::new(local.clone());
 	let arc    = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
 

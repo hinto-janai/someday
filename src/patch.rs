@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 #[allow(unused_imports)] // docs
-use crate::{Reader, Commit, Writer};
+use crate::{Reader, Writer};
 
 //---------------------------------------------------------------------------------------------------- Patch
 /// Functions to be applied to your data `T`.
@@ -74,7 +74,7 @@ use crate::{Reader, Commit, Writer};
 /// // was non-deterministic, so now the `Writer`
 /// // and `Reader` have non-matching data...
 /// assert_eq!(*w.data(), 100);
-/// assert_eq!(*w.reader().head().data(), 10);
+/// assert_eq!(w.reader().head().data, 10);
 /// ```
 ///
 /// # The 2nd apply

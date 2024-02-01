@@ -4,12 +4,12 @@
 use crate::{
 	writer::Writer,
 	patch::Patch,
-	commit::CommitOwned,
+	commit::Commit,
 	info::PullInfo,
 };
 
 #[allow(unused_imports)] // docs
-use crate::{Commit,Reader,Timestamp};
+use crate::{Reader,Timestamp};
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -43,17 +43,17 @@ impl<T: Clone> Writer<T> {
 	/// // Commit local changes.
 	/// w.add(Patch::Ptr(|w, _| w.push_str("hello")));
 	/// w.commit();
-	/// assert_eq!(w.head().data(), "hello");
+	/// assert_eq!(w.head().data, "hello");
 	///
 	/// // Reader's sees nothing
-	/// assert_eq!(r.head().data(), "");
+	/// assert_eq!(r.head().data, "");
 	///
 	/// // Pull from the Reader.
 	/// let pull_status: PullInfo<String> = w.pull().unwrap();
-	/// assert_eq!(pull_status.old_writer_commit.data(), "hello");
+	/// assert_eq!(pull_status.old_writer_commit.data, "hello");
 	///
 	/// // We're back to square 1.
-	/// assert_eq!(w.head().data(), "");
+	/// assert_eq!(w.head().data, "");
 	///
 	/// // If we try to pull again, nothing will happen
 	/// // since we are already synced with `Reader`s.
@@ -110,8 +110,8 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 1);
 	///
 	/// // Reader's sees them.
-	/// assert_eq!(r.head().data(), "hello");
-	/// assert_eq!(r.head().timestamp(), 1);
+	/// assert_eq!(r.head().data, "hello");
+	/// assert_eq!(r.head().timestamp, 1);
 	///
 	/// // Commit some changes.
 	/// w.add(Patch::Ptr(|w, _| *w = "hello".into()));
@@ -124,7 +124,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // Overwrite the Writer with arbitrary data.
 	/// let old_data = w.overwrite(String::from("world")); // <- commit 5
-	/// assert_eq!(old_data.data(), "hello");
+	/// assert_eq!(old_data.data, "hello");
 	/// assert_eq!(w.data(), "world");
 	/// // Committed functions were deleted, but 1 patch is leftover.
 	/// // This is an automatically inserted patch that makes the
@@ -132,22 +132,22 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.committed_patches().len(), 1);
 	///
 	/// // `Reader`'s still don't see changes.
-	/// assert_eq!(r.head().data(), "hello");
+	/// assert_eq!(r.head().data, "hello");
 	///
 	/// // Push that change.
 	/// w.push();
 	///
 	/// // Now `Reader`s see change.
-	/// assert_eq!(r.head().data(), "world");
+	/// assert_eq!(r.head().data, "world");
 	///
 	/// // 5 commits total.
 	/// assert_eq!(w.timestamp(), 5);
-	/// assert_eq!(r.head().timestamp(), 5);
+	/// assert_eq!(r.head().timestamp, 5);
 	/// ```
 	///
 	/// ## Timestamp
 	/// This increments the `Writer`'s local `Timestamp` by `1`.
-	pub fn overwrite(&mut self, data: T) -> CommitOwned<T> {
+	pub fn overwrite(&mut self, data: T) -> Commit<T> {
 		// Delete old functions, we won't need
 		// them anymore since we just overwrote
 		// our data anyway.
@@ -157,7 +157,7 @@ impl<T: Clone> Writer<T> {
 		let timestamp = self.timestamp() + 1;
 		let old_data = self.local.take().unwrap();
 
-		self.local = Some(CommitOwned {
+		self.local = Some(Commit {
 			timestamp,
 			data,
 		});

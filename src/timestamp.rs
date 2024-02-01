@@ -5,7 +5,7 @@
 use crate::{
 	Writer,
 	Reader,
-	commit::Commit,
+	// Commit,
 };
 
 //---------------------------------------------------------------------------------------------------- Timestamp
@@ -49,6 +49,6 @@ use crate::{
 ///
 /// // We haven't pushed though, so
 /// // readers will see timestamp of 0
-/// assert_eq!(r.head().timestamp(), 0);
+/// assert_eq!(r.head().timestamp, 0);
 /// ```
 pub type Timestamp = usize;

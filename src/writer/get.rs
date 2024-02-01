@@ -10,12 +10,12 @@ use crate::{
 	writer::{Writer,Transaction},
 	patch::Patch,
 	reader::Reader,
-	commit::{CommitRef,CommitOwned},
+	commit::{CommitRef,Commit},
 	info::StatusInfo,
 };
 
 #[allow(unused_imports)] // docs
-use crate::Commit;
+// use crate::Commit;
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -61,7 +61,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// // No changes yet.
 	/// assert_eq!(*w.data(), 0);
-	/// assert_eq!(*r.head().data(),  0);
+	/// assert_eq!(r.head().data,  0);
 	///
 	/// // Writer commits some changes.
 	/// w.add(Patch::Ptr(|w, _| *w += 1));
@@ -70,7 +70,7 @@ impl<T: Clone> Writer<T> {
 	/// //  Writer sees local change.
 	/// assert_eq!(*w.data(), 1);
 	/// // Reader doesn't see change.
-	/// assert_eq!(*r.head().data(), 0);
+	/// assert_eq!(r.head().data, 0);
 	/// ```
 	pub const fn data(&self) -> &T {
 		&self.local_as_ref().data
@@ -128,7 +128,7 @@ impl<T: Clone> Writer<T> {
 	/// let (_, mut w) = someday::new::<usize>(500);
 	///
 	/// // No changes yet.
-	/// let commit: &CommitOwned<usize> = w.head();
+	/// let commit: &Commit<usize> = w.head();
 	/// assert_eq!(commit.timestamp, 0);
 	/// assert_eq!(commit.data, 500);
 	///
@@ -137,11 +137,11 @@ impl<T: Clone> Writer<T> {
 	/// w.commit();
 	///
 	/// // Head commit is now changed.
-	/// let commit: &CommitOwned<usize> = w.head();
+	/// let commit: &Commit<usize> = w.head();
 	/// assert_eq!(commit.timestamp, 1);
 	/// assert_eq!(commit.data, 501);
 	/// ```
-	pub const fn head(&self) -> &CommitOwned<T> {
+	pub const fn head(&self) -> &Commit<T> {
 		self.local_as_ref()
 	}
 
@@ -157,9 +157,9 @@ impl<T: Clone> Writer<T> {
 	/// let (_, mut w) = someday::new::<usize>(500);
 	///
 	/// // No changes yet.
-	/// let commit: &CommitOwned<usize> = w.head_remote();
-	/// assert_eq!(commit.timestamp(), 0);
-	/// assert_eq!(*commit.data(), 500);
+	/// let commit: &Commit<usize> = w.head_remote();
+	/// assert_eq!(commit.timestamp, 0);
+	/// assert_eq!(commit.data, 500);
 	///
 	/// // Writer commits & pushes some changes.
 	/// w.add(Patch::Ptr(|w, _| *w += 1));
@@ -167,11 +167,11 @@ impl<T: Clone> Writer<T> {
 	/// w.push();
 	///
 	/// // Reader's head commit is now changed.
-	/// let commit: &CommitOwned<usize> = w.head_remote();
-	/// assert_eq!(commit.timestamp(), 1);
-	/// assert_eq!(*commit.data(), 501);
+	/// let commit: &Commit<usize> = w.head_remote();
+	/// assert_eq!(commit.timestamp, 1);
+	/// assert_eq!(commit.data, 501);
 	/// ```
-	pub fn head_remote(&self) -> &CommitOwned<T> {
+	pub fn head_remote(&self) -> &Commit<T> {
 		&self.remote
 	}
 

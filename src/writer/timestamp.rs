@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[allow(unused_imports)] // docs
-use crate::{Commit,Reader,CommitRef,CommitOwned};
+use crate::{Reader,CommitRef,Commit};
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -48,11 +48,11 @@ impl<T: Clone> Writer<T> {
 	/// w.push();
 	///
 	/// // Same timestamps...
-	/// assert_eq!(w.timestamp(), w.reader().head().timestamp());
+	/// assert_eq!(w.timestamp(), w.reader().head().timestamp);
 	///
 	/// // ⚠️ Out of sync data!
 	/// assert_eq!(*w.data(), 100);
-	/// assert_eq!(*w.reader().head().data(), 10);
+	/// assert_eq!(w.reader().head().data, 10);
 	///
 	/// // But, this function tells us the truth.
 	/// assert_eq!(w.diff(), true);
@@ -91,7 +91,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 10);
 	///
 	/// // Reader at timestamp 0.
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().timestamp, 0);
 	///
 	/// // Writer is ahead of the Reader's.
 	/// assert!(w.ahead());
@@ -104,7 +104,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Timestamp`] is greater than an arbitrary [`Commit`]'s `Timestamp`
 	///
-	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	/// This takes any type of `Commit`, so either [`CommitRef`] or [`Commit`] can be used as input.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -118,8 +118,8 @@ impl<T: Clone> Writer<T> {
 	/// // At timestamp 10.
 	/// assert_eq!(w.timestamp(), 10);
 	///
-	/// // Create fake `CommitOwned`
-	/// let fake_commit = CommitOwned {
+	/// // Create fake `Commit`
+	/// let fake_commit = Commit {
 	///     timestamp: 1,
 	///     data: String::new(),
 	/// };
@@ -127,7 +127,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is ahead of that commit.
 	/// assert!(w.ahead_of(&fake_commit));
 	/// ```
-	pub fn ahead_of(&self, commit: &impl Commit<T>) -> bool {
+	pub const fn ahead_of(&self, commit: &Commit<T>) -> bool {
 		self.local_as_ref().ahead(commit)
 	}
 
@@ -135,7 +135,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::missing_panics_doc)]
 	/// If the [`Writer`]'s local [`Timestamp`] is less than an arbitrary [`Commit`]'s `Timestamp`
 	///
-	/// This takes any type of `Commit`, so either [`CommitRef`] or [`CommitOwned`] can be used as input.
+	/// This takes any type of `Commit`, so either [`CommitRef`] or [`Commit`] can be used as input.
 	///
 	/// ```rust
 	/// # use someday::*;
@@ -144,8 +144,8 @@ impl<T: Clone> Writer<T> {
 	/// // At timestamp 0.
 	/// assert_eq!(w.timestamp(), 0);
 	///
-	/// // Create fake `CommitOwned`
-	/// let fake_commit = CommitOwned {
+	/// // Create fake `Commit`
+	/// let fake_commit = Commit {
 	///     timestamp: 1000,
 	///     data: String::new(),
 	/// };
@@ -153,7 +153,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is behind that commit.
 	/// assert!(w.behind(&fake_commit));
 	/// ```
-	pub fn behind(&self, commit: &impl Commit<T>) -> bool {
+	pub const fn behind(&self, commit: &Commit<T>) -> bool {
 		self.local_as_ref().behind(commit)
 	}
 
@@ -181,7 +181,7 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 1);
 	/// // We haven't pushed, so Reader's
 	/// // are still at timestamp 0.
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().timestamp, 0);
 	/// ```
 	pub const fn timestamp(&self) -> Timestamp {
 		self.local_as_ref().timestamp
@@ -209,13 +209,13 @@ impl<T: Clone> Writer<T> {
 	/// assert_eq!(w.timestamp(), 1);
 	/// // We haven't pushed, so Reader's
 	/// // are still at timestamp 0.
-	/// assert_eq!(r.head().timestamp(), 0);
+	/// assert_eq!(r.head().timestamp, 0);
 	///
 	/// // Push changes
 	/// w.push();
 	///
 	/// // Readers are now up-to-date.
-	/// assert_eq!(r.head().timestamp(), 1);
+	/// assert_eq!(r.head().timestamp, 1);
 	/// ```
 	pub fn timestamp_remote(&self) -> Timestamp {
 		self.remote.timestamp
@@ -251,7 +251,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is at timestamp 5.
 	/// assert_eq!(w.timestamp(), 6);
 	/// // Reader's are still at timestamp 1.
-	/// assert_eq!(r.head().timestamp(), 1);
+	/// assert_eq!(r.head().timestamp, 1);
 	///
 	/// // The difference is 5.
 	/// assert_eq!(w.timestamp_diff(), 5);
@@ -287,7 +287,7 @@ impl<T: Clone> Writer<T> {
 	/// // Writer is at timestamp 5.
 	/// assert_eq!(w.timestamp(), 6);
 	/// // Reader's are still at timestamp 1.
-	/// assert_eq!(r.head().timestamp(), 1);
+	/// assert_eq!(r.head().timestamp, 1);
 	///
 	/// // They aren't in sync.
 	/// assert_eq!(w.synced(), false);

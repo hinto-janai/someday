@@ -7,11 +7,11 @@
 use crate::{
 	Timestamp,
 	patch::Patch,
-	commit::{CommitOwned,CommitRef},
+	commit::{Commit,CommitRef},
 };
 use std::num::NonZeroUsize;
 #[allow(unused_imports)] // docs
-use crate::{Commit,Writer,Reader};
+use crate::{Writer,Reader};
 
 //---------------------------------------------------------------------------------------------------- Info
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -80,7 +80,7 @@ pub struct PullInfo<T: Clone> {
 	pub commits_reverted: std::num::NonZeroUsize,
 	/// The owned [`Commit`] the [`Writer`] had before
 	/// replacing it with the [`Reader`]'s data.
-	pub old_writer_commit: CommitOwned<T>,
+	pub old_writer_commit: Commit<T>,
 }
 
 #[derive(Copy,Clone)]
@@ -99,9 +99,9 @@ pub struct StatusInfo<'a, T: Clone> {
 	/// [`Writer::committed_patches`]
 	pub committed_patches: &'a Vec<Patch<T>>,
 	/// [`Writer::head`]
-	pub head: &'a CommitOwned<T>,
+	pub head: &'a Commit<T>,
 	/// [`Writer::head_remote`]
-	pub head_remote: &'a CommitOwned<T>,
+	pub head_remote: &'a Commit<T>,
 	/// [`Writer::head_count`]
 	pub head_count: NonZeroUsize,
 	/// [`Writer::reader_count`]
@@ -117,7 +117,7 @@ pub struct WriterInfo<T: Clone> {
 	/// The `Writer`'s local data.
 	///
 	/// [`Writer::head`].
-	pub writer: CommitOwned<T>,
+	pub writer: Commit<T>,
 
 	/// The latest [`Reader`]'s [`Commit`].
 	///

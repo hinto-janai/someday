@@ -10,7 +10,7 @@ use crate::{
 	writer::WriterToken,
 	patch::Patch,
 	reader::Reader,
-	commit::{CommitRef,CommitOwned,Commit},
+	commit::{CommitRef,Commit},
 };
 
 #[allow(unused_imports)] // docs
@@ -65,9 +65,9 @@ use std::sync::Mutex;
 ///
 /// // Both Reader and Writer are at timestamp 0 and see no changes.
 /// assert_eq!(w.timestamp(), 0);
-/// assert_eq!(r.head().timestamp(), 0);
+/// assert_eq!(r.head().timestamp, 0);
 /// assert_eq!(w.data(), "");
-/// assert_eq!(r.head().data(), "");
+/// assert_eq!(r.head().data, "");
 ///
 /// // The Writer can add many `Patch`'s
 /// w.add(Patch::Ptr(|w, _| w.push_str("abc")));
@@ -79,9 +79,9 @@ use std::sync::Mutex;
 /// // local (Writer) or remote (Readers) data, it
 /// // just "stages" them.
 /// assert_eq!(w.timestamp(), 0);
-/// assert_eq!(r.head().timestamp(), 0);
+/// assert_eq!(r.head().timestamp, 0);
 /// assert_eq!(w.data(), "");
-/// assert_eq!(r.head().data(), "");
+/// assert_eq!(r.head().data, "");
 ///
 /// // We can see our "staged" patches here.
 /// let staged = w.staged();
@@ -100,9 +100,9 @@ use std::sync::Mutex;
 /// // We haven't pushed yet, so the Readers
 /// // are still un-aware of our local changes.
 /// assert_eq!(w.timestamp(), 1);
-/// assert_eq!(r.head().timestamp(), 0);
+/// assert_eq!(r.head().timestamp, 0);
 /// assert_eq!(w.data(), "abcdefghi");
-/// assert_eq!(r.head().data(), "");
+/// assert_eq!(r.head().data, "");
 ///
 /// // Now we push.
 /// let push_info: PushInfo = w.push();
@@ -113,9 +113,9 @@ use std::sync::Mutex;
 ///
 /// // The Readers are now in sync.
 /// assert_eq!(w.timestamp(), 1);
-/// assert_eq!(r.head().timestamp(), 1);
+/// assert_eq!(r.head().timestamp, 1);
 /// assert_eq!(w.data(), "abcdefghi");
-/// assert_eq!(r.head().data(), "abcdefghi");
+/// assert_eq!(r.head().data, "abcdefghi");
 /// ```
 pub struct Writer<T: Clone> {
 	/// Only set to `false` when we are `drop()`'ed.
@@ -143,14 +143,14 @@ pub struct Writer<T: Clone> {
 	///
 	/// Thankfully it's an `Option`, and we `.unwrap()` on
 	/// each access, if it were a `MaybeUninit`, UB.
-	pub(crate) local: Option<CommitOwned<T>>,
+	pub(crate) local: Option<Commit<T>>,
 
 	/// The current data the remote `Reader`'s can see.
 	pub(crate) remote: CommitRef<T>,
 
 	/// The AtomicPtr that `Reader`'s enter through.
 	/// Calling `.load()` would load the `remote` above.
-	pub(crate) arc: Arc<arc_swap::ArcSwap<CommitOwned<T>>>,
+	pub(crate) arc: Arc<arc_swap::ArcSwap<Commit<T>>>,
 
 	/// Patches that have not yet been applied.
 	pub(crate) patches: Vec<Patch<T>>,
@@ -165,7 +165,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::option_if_let_else,clippy::inline_always)]
 	#[inline(always)]
 	/// Borrow `self.local`.
-	pub(super) const fn local_as_ref(&self) -> &CommitOwned<T> {
+	pub(super) const fn local_as_ref(&self) -> &Commit<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_ref() {
 			Some(local) => local,
@@ -176,7 +176,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::option_if_let_else,clippy::inline_always)]
 	#[inline(always)]
 	/// Borrow `self.local`.
-	pub(super) fn local_as_mut(&mut self) -> &mut CommitOwned<T> {
+	pub(super) fn local_as_mut(&mut self) -> &mut Commit<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_mut() {
 			Some(local) => local,
@@ -206,9 +206,9 @@ impl<T: Clone> From<T> for Writer<T> {
 	}
 }
 
-impl<T: Clone> From<CommitOwned<T>> for Writer<T> {
+impl<T: Clone> From<Commit<T>> for Writer<T> {
 	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
-	fn from(commit: CommitOwned<T>) -> Self {
+	fn from(commit: Commit<T>) -> Self {
 		crate::free::new_inner(commit)
 	}
 }
@@ -216,7 +216,7 @@ impl<T: Clone> From<CommitOwned<T>> for Writer<T> {
 impl<T: Clone> From<CommitRef<T>> for Writer<T> {
 	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
 	fn from(commit: CommitRef<T>) -> Self {
-		crate::free::new_inner(commit.into_commit_owned())
+		crate::free::new_inner(commit.as_ref().clone())
 	}
 }
 

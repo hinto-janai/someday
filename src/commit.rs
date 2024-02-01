@@ -6,7 +6,7 @@ use crate::{Reader,Timestamp};
 #[allow(unused_imports)] // docs
 use crate::Writer;
 
-//---------------------------------------------------------------------------------------------------- CommitOwned
+//---------------------------------------------------------------------------------------------------- Commit
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
@@ -25,7 +25,7 @@ use crate::Writer;
 /// let reference: CommitRef<String> = reader.head();
 ///
 /// // This is an owned String.
-/// let owned: CommitOwned<String> = reference.to_commit_owned();
+/// let owned: Commit<String> = reference.as_ref().clone();
 ///
 /// // This may or may not actually deallocate the String.
 /// drop(reference);
@@ -33,7 +33,7 @@ use crate::Writer;
 /// // The String's destructor will run here.
 /// drop(owned);
 /// ```
-pub struct CommitOwned<T: Clone> {
+pub struct Commit<T: Clone> {
 	/// Timestamp of this [`Commit`].
 	///
 	/// Starts at 0, and increments by 1 every time a `commit`-like
@@ -44,8 +44,115 @@ pub struct CommitOwned<T: Clone> {
 	pub data: T,
 }
 
-//---------------------------------------------------------------------------------------------------- CommitOwned Trait
-impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
+//---------------------------------------------------------------------------------------------------- Commit Impl
+impl<T: Clone> Commit<T> {
+	#[inline]
+	/// If there is a difference in `self` and `other`'s timestamps or data.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different.
+	/// let commit_1 = Commit { timestamp: 0, data: "a" };
+	/// let commit_2 = Commit { timestamp: 1, data: "a" };
+	/// assert!(commit_1.diff(&commit_2));
+	///
+	/// // Data is different.
+	/// let commit_3 = Commit { timestamp: 0, data: "a" };
+	/// let commit_4 = Commit { timestamp: 0, data: "b" };
+	/// assert!(commit_3.diff(&commit_4));
+	///
+	/// // Same.
+	/// let commit_5 = Commit { timestamp: 0, data: "a" };
+	/// let commit_6 = Commit { timestamp: 0, data: "a" };
+	/// assert!(!commit_5.diff(&commit_6));
+	/// ```
+	pub fn diff(&self, other: &Self) -> bool where T: PartialEq<T> {
+		(self.diff_timestamp(other)) || (self.diff_data(other))
+	}
+
+	#[inline]
+	/// If there is a difference in `self` & `other`'s timestamps.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different, data is same.
+	/// let commit_1 = Commit { timestamp: 0, data: "" };
+	/// let commit_2 = Commit { timestamp: 1, data: "" };
+	/// assert!(commit_1.diff_timestamp(&commit_2));
+	///
+	/// // Timestamp is same, data is different.
+	/// let commit_3 = Commit { timestamp: 0, data: "" };
+	/// let commit_4 = Commit { timestamp: 0, data: "a" };
+	/// assert!(!commit_3.diff_timestamp(&commit_4));
+	/// ```
+	pub const fn diff_timestamp(&self, other: &Self) -> bool {
+		self.timestamp != other.timestamp
+	}
+
+	#[inline]
+	/// If there is a difference in `self` & `other`'s timestamps.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// // Timestamp is different, data is same.
+	/// let commit_1 = Commit { timestamp: 0, data: "a" };
+	/// let commit_2 = Commit { timestamp: 1, data: "a" };
+	/// assert!(!commit_1.diff_data(&commit_2));
+	///
+	/// // Timestamp is same, data is different.
+	/// let commit_3 = Commit { timestamp: 0, data: "a" };
+	/// let commit_4 = Commit { timestamp: 0, data: "b" };
+	/// assert!(commit_3.diff_data(&commit_4));
+	/// ```
+	pub fn diff_data(&self, other: &Self) -> bool where T: PartialEq<T> {
+		self.data != other.data
+	}
+
+	#[inline]
+	/// If `self`'s timestamp is ahead of `other`'s timestamp.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let commit_1 = Commit { timestamp: 0, data: "" };
+	/// let commit_2 = Commit { timestamp: 1, data: "" };
+	/// assert!(!commit_1.ahead(&commit_2));
+	///
+	/// let commit_3 = Commit { timestamp: 2, data: "" };
+	/// let commit_4 = Commit { timestamp: 1, data: "" };
+	/// assert!(commit_3.ahead(&commit_4));
+	///
+	/// let commit_5 = Commit { timestamp: 2, data: "" };
+	/// let commit_6 = Commit { timestamp: 2, data: "" };
+	/// assert!(!commit_5.ahead(&commit_6));
+	/// ```
+	pub const fn ahead(&self, other: &Self) -> bool {
+		self.timestamp > other.timestamp
+	}
+
+	#[inline]
+	/// If `self`'s timestamp is behind of `other`'s timestamp.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let commit_1 = Commit { timestamp: 0, data: "" };
+	/// let commit_2 = Commit { timestamp: 1, data: "" };
+	/// assert!(commit_1.behind(&commit_2));
+	///
+	/// let commit_3 = Commit { timestamp: 2, data: "" };
+	/// let commit_4 = Commit { timestamp: 1, data: "" };
+	/// assert!(!commit_3.behind(&commit_4));
+	///
+	/// let commit_5 = Commit { timestamp: 2, data: "" };
+	/// let commit_6 = Commit { timestamp: 2, data: "" };
+	/// assert!(!commit_5.behind(&commit_6));
+	/// ```
+	pub const fn behind(&self, other: &Self) -> bool {
+		self.timestamp < other.timestamp
+	}
+}
+
+//---------------------------------------------------------------------------------------------------- Commit Trait
+impl<T: Clone> TryFrom<CommitRef<T>> for Commit<T> {
 	type Error = CommitRef<T>;
 
 	#[inline]
@@ -62,14 +169,14 @@ impl<T: Clone> TryFrom<CommitRef<T>> for CommitOwned<T> {
 	///
 	/// // Now there's only 1 strong count on `commit_ref`,
 	/// // this can be turned into an owned commit.
-	/// let commit_owned: CommitOwned<String> = commit_ref.try_into().unwrap();
+	/// let commit_owned: Commit<String> = commit_ref.try_into().unwrap();
 	/// ```
 	fn try_from(commit: CommitRef<T>) -> Result<Self, Self::Error> {
 		Arc::try_unwrap(commit)
 	}
 }
 
-impl<T> std::fmt::Display for CommitOwned<T>
+impl<T> std::fmt::Display for Commit<T>
 where
 	T: Clone + std::fmt::Display
 {
@@ -93,10 +200,8 @@ where
 ///
 /// It is shared data, and cheaply [`Clone`]-able.
 ///
-/// This is just an alias for [`Arc<CommitOwned<T>>`].
-///
-/// [`Commit`] is implemented on this (`Arc<CommitOwned<T>>`).
-pub type CommitRef<T> = Arc<CommitOwned<T>>;
+/// This is just an alias for [`Arc<Commit<T>>`].
+pub type CommitRef<T> = Arc<Commit<T>>;
 
 //---------------------------------------------------------------------------------------------------- CommitRef Trait impl
 impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
@@ -108,252 +213,9 @@ impl<T: Clone> From<&Reader<T>> for CommitRef<T> {
 	/// let (r, _) = someday::new(String::from("hello"));
 	///
 	/// let commit_ref: CommitRef<String> = (&r).into();
-	/// assert_eq!(commit_ref.data(), "hello");
+	/// assert_eq!(commit_ref.data, "hello");
 	/// ```
 	fn from(reader: &Reader<T>) -> Self {
 		reader.head()
-	}
-}
-
-//---------------------------------------------------------------------------------------------------- Commit
-#[allow(clippy::module_name_repetitions)]
-/// Objects that act like a `Commit`
-///
-/// Notably:
-/// 1. They store some data `T`
-/// 2. They store a timestamp of that data `T`
-///
-/// [`CommitRef`] & [`CommitOwned`] both implement this.
-///
-/// This trait is sealed and cannot be implemented for types outside of `someday`.
-pub trait Commit<T>
-where
-	Self: private::Sealed,
-	T: Clone,
-{
-	/// The timestamp of this [`CommitRef`].
-	///
-	/// Starts at 0, and increments by 1 every time [`Writer::commit()`] is called.
-	///
-	/// This means this also represents how many
-	/// `Patch`'s were applied to your data.
-	///
-	/// See [`Writer`] & [`Reader`] for more timestamp documentation.
-	fn timestamp(&self) -> Timestamp;
-
-	/// Acquire a reference to the shared inner data.
-	fn data(&self) -> &T;
-
-	/// Expensively clone the inner data, without consuming [`Self`]
-	fn to_data(&self) -> T;
-
-	/// Cheaply convert `Self` to the owned data `T` if possible
-	///
-	/// If this is a [`CommitRef`] and it is the only reference,
-	/// this call will acquire ownership for free.
-	///
-	/// If there are other instances of this [`CommitRef`], the
-	/// internal data will be cloned directly.
-	///
-	/// This is free for [`CommitOwned`].
-	fn into_data(self) -> T;
-
-	/// Expensively clone [`Self`], without consuming [`Self`]
-	fn to_commit_owned(&self) -> CommitOwned<T>;
-
-	/// Cheaply convert `Self` to owned if possible
-	///
-	/// If this is a [`CommitRef`] and it is the only reference,
-	/// this call will acquire ownership for free.
-	///
-	/// If there are other instances of this [`CommitRef`], the
-	/// internal data will be cloned directly.
-	///
-	/// This is a no-op for [`CommitOwned`].
-	fn into_commit_owned(self) -> CommitOwned<T>;
-
-	#[inline]
-	/// If there is a difference in `self` and `other`'s timestamps or data.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// // Timestamp is different.
-	/// let commit_1 = CommitOwned { timestamp: 0, data: "a" };
-	/// let commit_2 = CommitOwned { timestamp: 1, data: "a" };
-	/// assert!(commit_1.diff(&commit_2));
-	///
-	/// // Data is different.
-	/// let commit_3 = CommitOwned { timestamp: 0, data: "a" };
-	/// let commit_4 = CommitOwned { timestamp: 0, data: "b" };
-	/// assert!(commit_3.diff(&commit_4));
-	///
-	/// // Same.
-	/// let commit_5 = CommitOwned { timestamp: 0, data: "a" };
-	/// let commit_6 = CommitOwned { timestamp: 0, data: "a" };
-	/// assert!(!commit_5.diff(&commit_6));
-	/// ```
-	fn diff(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
-		(self.diff_timestamp(other)) || (self.diff_data(other))
-	}
-
-	#[inline]
-	/// If there is a difference in `self` & `other`'s timestamps.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// // Timestamp is different, data is same.
-	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
-	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
-	/// assert!(commit_1.diff_timestamp(&commit_2));
-	///
-	/// // Timestamp is same, data is different.
-	/// let commit_3 = CommitOwned { timestamp: 0, data: "" };
-	/// let commit_4 = CommitOwned { timestamp: 0, data: "a" };
-	/// assert!(!commit_3.diff_timestamp(&commit_4));
-	/// ```
-	fn diff_timestamp(&self, other: &impl Commit<T>) -> bool {
-		self.timestamp() != other.timestamp()
-	}
-
-	#[inline]
-	/// If there is a difference in `self` & `other`'s timestamps.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// // Timestamp is different, data is same.
-	/// let commit_1 = CommitOwned { timestamp: 0, data: "a" };
-	/// let commit_2 = CommitOwned { timestamp: 1, data: "a" };
-	/// assert!(!commit_1.diff_data(&commit_2));
-	///
-	/// // Timestamp is same, data is different.
-	/// let commit_3 = CommitOwned { timestamp: 0, data: "a" };
-	/// let commit_4 = CommitOwned { timestamp: 0, data: "b" };
-	/// assert!(commit_3.diff_data(&commit_4));
-	/// ```
-	fn diff_data(&self, other: &impl Commit<T>) -> bool where T: PartialEq<T> {
-		self.data() != other.data()
-	}
-
-	#[inline]
-	/// If `self`'s timestamp is ahead of `other`'s timestamp.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
-	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
-	/// assert!(!commit_1.ahead(&commit_2));
-	///
-	/// let commit_3 = CommitOwned { timestamp: 2, data: "" };
-	/// let commit_4 = CommitOwned { timestamp: 1, data: "" };
-	/// assert!(commit_3.ahead(&commit_4));
-	///
-	/// let commit_5 = CommitOwned { timestamp: 2, data: "" };
-	/// let commit_6 = CommitOwned { timestamp: 2, data: "" };
-	/// assert!(!commit_5.ahead(&commit_6));
-	/// ```
-	fn ahead(&self, other: &impl Commit<T>) -> bool {
-		self.timestamp() > other.timestamp()
-	}
-
-	#[inline]
-	/// If `self`'s timestamp is behind of `other`'s timestamp.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let commit_1 = CommitOwned { timestamp: 0, data: "" };
-	/// let commit_2 = CommitOwned { timestamp: 1, data: "" };
-	/// assert!(commit_1.behind(&commit_2));
-	///
-	/// let commit_3 = CommitOwned { timestamp: 2, data: "" };
-	/// let commit_4 = CommitOwned { timestamp: 1, data: "" };
-	/// assert!(!commit_3.behind(&commit_4));
-	///
-	/// let commit_5 = CommitOwned { timestamp: 2, data: "" };
-	/// let commit_6 = CommitOwned { timestamp: 2, data: "" };
-	/// assert!(!commit_5.behind(&commit_6));
-	/// ```
-	fn behind(&self, other: &impl Commit<T>) -> bool {
-		self.timestamp() < other.timestamp()
-	}
-}
-
-/// Sealed trait module
-mod private {
-	/// Sealed trait, prevents non-pub(crate) impls
-	pub trait Sealed {}
-	impl<T: Clone> Sealed for crate::CommitOwned<T> {}
-	impl<T: Clone> Sealed for crate::CommitRef<T> {}
-}
-
-impl<T: Clone> Commit<T> for CommitRef<T> {
-	#[inline]
-	fn timestamp(&self) -> Timestamp {
-		self.timestamp
-	}
-	#[inline]
-	fn data(&self) -> &T {
-		&self.data
-	}
-
-	#[inline]
-	fn to_data(&self) -> T {
-		self.data.clone()
-	}
-
-	#[inline]
-	fn into_data(self) -> T {
-		match Self::try_unwrap(self) {
-			Ok(s) => s.data,
-			Err(s) => s.data.clone(),
-		}
-	}
-
-	#[inline]
-	fn to_commit_owned(&self) -> CommitOwned<T> {
-		CommitOwned {
-			timestamp: self.timestamp,
-			data: self.data.clone(),
-		}
-	}
-
-	#[inline]
-	fn into_commit_owned(self) -> CommitOwned<T> where T: Clone {
-		match Self::try_unwrap(self) {
-			Ok(s) => s,
-			Err(s) => CommitOwned {
-				timestamp: s.timestamp,
-				data: s.data.clone(),
-			}
-		}
-	}
-}
-
-impl<T: Clone> Commit<T> for CommitOwned<T> {
-	#[inline]
-	fn timestamp(&self) -> Timestamp {
-		self.timestamp
-	}
-	#[inline]
-	fn data(&self) -> &T {
-		&self.data
-	}
-
-	#[inline]
-	fn to_data(&self) -> T {
-		self.data.clone()
-	}
-
-	#[inline]
-	fn into_data(self) -> T {
-		self.data
-	}
-
-	#[inline]
-	fn to_commit_owned(&self) -> Self {
-		self.clone()
-	}
-	#[inline]
-	fn into_commit_owned(self) -> Self {
-		self
 	}
 }

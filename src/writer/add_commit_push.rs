@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[allow(unused_imports)] // docs
-use crate::{Commit,Reader,Timestamp};
+use crate::{Reader,Timestamp};
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {
@@ -68,7 +68,7 @@ impl<T: Clone> Writer<T> {
 	/// w.commit();
 	///
 	/// assert_eq!(w.timestamp(), 1);
-	/// assert_eq!(*w.head().data(), 123);
+	/// assert_eq!(w.head().data, 123);
 	/// ```
 	///
 	/// # Timestamp
@@ -92,7 +92,7 @@ impl<T: Clone> Writer<T> {
 	/// // There was nothing to commit,
 	/// // so our timestamp did not change.
 	/// assert_eq!(w.timestamp(), 0);
-	/// assert_eq!(*w.head().data(), 0);
+	/// assert_eq!(w.head().data, 0);
 	/// ```
 	pub fn commit(&mut self) -> CommitInfo {
 		let patch_len = self.patches.len();
