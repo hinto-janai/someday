@@ -84,8 +84,8 @@
 )]
 
 //---------------------------------------------------------------------------------------------------- Mod
-pub mod commit;
-pub use commit::*;
+mod commit;
+pub use commit::{Commit, CommitRef, CommitOwned};
 
 pub mod info;
 pub use info::*;
