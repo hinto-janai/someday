@@ -284,12 +284,19 @@ impl<T: Clone> Clone for Writer<T> {
 	///
 	/// ```rust
 	/// # use someday::*;
+	/// # use std::sync::*;
 	/// let (r, mut w) = someday::new(String::new());
 	///
 	/// // The clone has no relation to the previous `Writer/Reader`'s.
 	/// let clone: Writer<String> = w.clone();
-	/// assert!(!clone.connected(&w));
-	/// assert!(!clone.connected_reader(&r));
+	/// assert!(!clone.connected(&r));
+	///
+	/// // Wrapping `Writer` in a shared mutual exclusion primitive
+	/// // allows it to be cheaply cloned, without `fork()`-like behavior.
+	/// let shared = Arc::new(Mutex::new(clone));
+	/// let reader = shared.lock().unwrap().reader();
+	/// assert!(shared.lock().unwrap().connected(&reader));
+	/// assert!(!shared.lock().unwrap().connected(&r));
 	/// ```
 	fn clone(&self) -> Self {
 		self.fork()
