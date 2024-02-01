@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[allow(unused_imports)] // docs
-use crate::{Reader,Timestamp};
+use crate::{Commit,Reader,Timestamp};
 
 //---------------------------------------------------------------------------------------------------- Writer
 impl<T: Clone> Writer<T> {

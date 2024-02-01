@@ -2,7 +2,6 @@
 
 //---------------------------------------------------------------------------------------------------- Use
 use std::{
-	sync::Arc,
 	borrow::{Borrow,BorrowMut},
 	ops::{Deref,DerefMut},
 };
@@ -11,8 +10,6 @@ use crate::{
 	Timestamp,
 	writer::Writer,
 	patch::Patch,
-	reader::Reader,
-	commit::{CommitRef,Commit},
 	info::CommitInfo,
 };
 
