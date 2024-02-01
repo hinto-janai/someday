@@ -7,7 +7,8 @@ use std::{
 };
 
 use crate::{
-	writer::{Writer,Transaction},
+	transaction::Transaction,
+	writer::Writer,
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,Commit},

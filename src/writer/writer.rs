@@ -165,7 +165,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::option_if_let_else,clippy::inline_always)]
 	#[inline(always)]
 	/// Borrow `self.local`.
-	pub(super) const fn local_as_ref(&self) -> &Commit<T> {
+	pub(crate) const fn local_as_ref(&self) -> &Commit<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_ref() {
 			Some(local) => local,
@@ -176,7 +176,7 @@ impl<T: Clone> Writer<T> {
 	#[allow(clippy::option_if_let_else,clippy::inline_always)]
 	#[inline(always)]
 	/// Borrow `self.local`.
-	pub(super) fn local_as_mut(&mut self) -> &mut Commit<T> {
+	pub(crate) fn local_as_mut(&mut self) -> &mut Commit<T> {
 		// INVARIANT: `local` must be initialized after push()
 		match self.local.as_mut() {
 			Some(local) => local,
