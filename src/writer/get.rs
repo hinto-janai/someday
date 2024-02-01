@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-	writer::Writer,
+	writer::{Writer,Transaction},
 	patch::Patch,
 	reader::Reader,
 	commit::{CommitRef,CommitOwned},
@@ -74,6 +74,21 @@ impl<T: Clone> Writer<T> {
 	/// ```
 	pub const fn data(&self) -> &T {
 		&self.local_as_ref().data
+	}
+
+	/// Mutate the [`Writer`]'s local data _without_ going through a [`Patch`].
+	///
+	/// This function gives you _direct_ access to the
+	/// underlying local `T` via a [`Transaction`].
+	///
+	/// In order to prevent out-of-sync situations, `Transaction` will
+	/// unconditionally add a `Patch` that clones data after it has been [`drop`]'ed.
+	///
+	/// This is cheaper than `Patch` if you had already planned to clone data anyway.
+	///
+	/// See `Transaction` for more details.
+	pub fn tx(&mut self) -> Transaction<'_, T> {
+		Transaction::new(self)
 	}
 
 	#[inline]

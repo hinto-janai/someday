@@ -94,7 +94,7 @@ mod reader;
 pub use reader::Reader;
 
 mod writer;
-pub use writer::Writer;
+pub use writer::{Writer,Transaction};
 
 mod patch;
 pub use patch::Patch;

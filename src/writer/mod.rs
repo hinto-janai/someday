@@ -14,3 +14,5 @@ mod fork;
 mod timestamp;
 mod misc;
 mod serde;
+mod transaction;
+pub use transaction::Transaction;
