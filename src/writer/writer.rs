@@ -13,7 +13,8 @@ use crate::{
 	commit::{CommitRef,CommitOwned,Commit},
 };
 
-// #[allow(unused_imports)] // docs
+#[allow(unused_imports)] // docs
+use std::sync::Mutex;
 
 //---------------------------------------------------------------------------------------------------- Writer
 /// The single [`Writer`] of some data `T`.
@@ -26,10 +27,14 @@ use crate::{
 /// The `Writer` can also generate infinite `Reader`'s with [`Writer::reader()`].
 ///
 /// ## Invariants
-/// Some invariants that the `Writer` always upholds, that you can rely on:
-/// - [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::head()`]'s timestamp.
-/// - If a `Writer` panics, no data is poisoned - i.e. the local data `T`
-///   will never be seen in an uninitialized state, `Reader`'s will be completely fine
+/// Some invariants that the `Writer` upholds, that you can rely on:
+///
+/// | Invariant           | Description |
+/// |---------------------|-------------|
+/// | No "rebasing" | [`Writer::timestamp()`] will always be greater than or equal to the [`Reader::head()`]'s timestamp.
+/// | [`PartialEq`] | If the [`Writer::timestamp()`] is the same as the [`Reader::head()`]'s timestamp, the data `T` is the same as well (as long as [`Patch`]'s are deterministic). This can serve as a very cheap way to compare data (just compare the timestamps).
+/// | 1 Writer            | There can only ever be 1 `Writer` at any given moment (at least, without shared mutual exclusion like [`Arc`] + [`Mutex`]).
+/// | Poison              | If a `Writer` panics mid-[`push()`](Writer::push), the data can only be poisoned on the `Writer` side - i.e. `Reader`'s will be completely fine if the `Writer` panics, other `Writer`'s (e.g [`Arc<Mutex<Writer<T>>>`]) _may_ panic as well on any function that accesses `T`.
 ///
 /// ## Usage
 /// This example covers the typical usage of a `Writer`:
@@ -265,5 +270,28 @@ impl<T: Clone> TryFrom<Reader<T>> for Writer<T> {
 	/// Calls [`Reader::try_into_writer`].
 	fn try_from(reader: Reader<T>) -> Result<Self, Self::Error> {
 		Reader::try_into_writer(reader)
+	}
+}
+
+impl<T: Clone> Clone for Writer<T> {
+	/// This is the exact same as [`Writer::fork`].
+	///
+	/// Note that this means cloning a [`Writer`] completely
+	/// disconnects it from previous [`Reader`]'s.
+	///
+	/// This does _not_ create 2 `Writer`'s to the same data,
+	/// as that is not allowed.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::new());
+	///
+	/// // The clone has no relation to the previous `Writer/Reader`'s.
+	/// let clone: Writer<String> = w.clone();
+	/// assert!(!clone.connected(&w));
+	/// assert!(!clone.connected_reader(&r));
+	/// ```
+	fn clone(&self) -> Self {
+		self.fork()
 	}
 }

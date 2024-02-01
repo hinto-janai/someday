@@ -73,7 +73,7 @@ impl<T: Clone> Writer<T> {
 	///
 	/// This returns `true` if the `Writer`'s timestamp
 	/// is greater than `Reader`'s timestamp (which means
-	/// [`Writer` is ahead of the [`Reader`]'s)
+	/// `Writer` is ahead of the `Reader`'s)
 	///
 	/// Note that this does not check the data itself, only the `Timestamp`.
 	///
