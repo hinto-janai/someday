@@ -163,9 +163,9 @@ impl<T: Clone> Default for Patch<T> {
 }
 
 impl<T: Clone> Patch<T> {
-	/// TODO
+	/// A [`Patch::Ptr`] that always clones the [`Reader`]'s data into the [`Writer`].
 	pub const CLONE: Self = Self::Ptr(|w, r| *w = r.clone());
-	/// TODO
+	/// A [`Patch::Ptr`] that does nothing.
 	pub const NOTHING: Self = Self::Ptr(|_, _| {});
 
 	#[inline]
@@ -245,7 +245,8 @@ impl<T: Clone> Patch<T> {
 }
 
 impl<T: Clone + PartialEq> Patch<T> {
-	/// TODO
+	/// A [`Patch::Ptr`] that clones the [`Reader`]'s data into
+	/// the [`Writer`], but only if they are not [`PartialEq::eq`].
 	pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
 		if w != r {
 			*w = r.clone();
