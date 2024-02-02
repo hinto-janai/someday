@@ -13,11 +13,13 @@ use crate::{Reader, Writer};
 ///
 /// The [`Writer`] expects `T` modifications in the form of `Patch`'s.
 ///
-/// The enumrated options are various forms of functions.
+/// The enumerated options are various forms of functions.
 ///
 /// The 2 inputs you are given are:
 /// - The `Writer`'s local mutable data, `T` (the thing you're modifying)
 /// - The [`Reader`]'s latest head commit
+///
+/// That is, `&mut T` is the `Writer` side, and `&T` is the `Reader`.
 ///
 /// ```rust
 /// # use someday::*;
@@ -87,13 +89,13 @@ use crate::{Reader, Writer};
 /// let (_, mut writer) = someday::new::<usize>(0);
 ///
 /// writer.add(Patch::Ptr(|w, r| {
-///     // `w` on the first apply of this Patch
-///     // is our local Writer data. `r` is the
-///     // current `Reader` data (whether out-of-date or not).
+///     // `w` on the 1st apply of this `Patch`
+///     // is our local `Writer` data. `r` is the
+///     // current `Reader` data.
 ///     //
 ///     // The 2nd time this applies, `w` will be
 ///     // the old `Reader` data we are attempting
-///     // to reclaim and "reproduce" with this Patch,
+///     // to reclaim and "reproduce" with this `Patch`,
 ///     // while `r` will be the data the `Writer` just pushed.
 /// }));
 /// ```
@@ -155,11 +157,14 @@ pub enum Patch<T: Clone> {
 	Ptr(fn(&mut T, &T)),
 }
 
-impl<T: Clone> Default for Patch<T> {
-	/// Returns [`Patch::NOTHING`].
-	fn default() -> Self {
-		Self::NOTHING
-	}
+impl<T: Clone + PartialEq> Patch<T> {
+	/// A [`Patch::Ptr`] that clones the [`Reader`]'s data into
+	/// the [`Writer`], but only if they are not [`PartialEq::eq`].
+	pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
+		if w != r {
+			*w = r.clone();
+		}
+	});
 }
 
 impl<T: Clone> Patch<T> {
@@ -244,14 +249,11 @@ impl<T: Clone> Patch<T> {
 	}
 }
 
-impl<T: Clone + PartialEq> Patch<T> {
-	/// A [`Patch::Ptr`] that clones the [`Reader`]'s data into
-	/// the [`Writer`], but only if they are not [`PartialEq::eq`].
-	pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
-		if w != r {
-			*w = r.clone();
-		}
-	});
+impl<T: Clone> Default for Patch<T> {
+	/// Returns [`Patch::NOTHING`].
+	fn default() -> Self {
+		Self::NOTHING
+	}
 }
 
 impl<T: Clone> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {

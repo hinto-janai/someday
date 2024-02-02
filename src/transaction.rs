@@ -19,7 +19,7 @@ use std::sync::{Arc,Mutex};
 use crate::Reader;
 
 //---------------------------------------------------------------------------------------------------- Tx
-/// Mutate the data `T` _directly_ without going through a [`Patch`].
+/// Mutate the data `T` _directly_.
 ///
 /// This structure is returned by [`Writer::tx`], and can be seen as a
 /// temporary handle for mutating your data `T`.
