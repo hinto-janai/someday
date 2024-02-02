@@ -88,10 +88,10 @@ use crate::Reader;
 ///
 /// ## ⚠️ `Patch` guardrails
 /// `Patch` exists as a means to make sure data is properly synced
-/// when reclaiming old data - `Transaction` slightly remove these
+/// when reclaiming old data - `Transaction` slightly removes these
 /// guardrails as it allows you to define the way data gets synced.
 ///
-/// Passing [`Patch::NOTHING`] to [`Transaction::commit`] is valid,
+/// Passing [`Patch::NOTHING`] to [`Transaction::sync_patch`] is valid,
 /// but will most inevitably leave your data in an invalid, unsynced state.
 ///
 /// `Transaction` gives you more control if you know what you're doing
@@ -284,7 +284,59 @@ impl<'writer, T: Clone> Transaction<'writer, T> {
 		/* drop code */
 	}
 
-	/// TODO
+	/// Customize the synchronization function used by [`Transaction`].
+	///
+	/// By default, dropping `Transaction` will add a [`Patch::CLONE`]
+	/// to synchronize the `Reader`'s side of the data (if reclaimed).
+	///
+	/// This function allows you to change that to a [`Patch`] of your choice.
+	///
+	/// # ⚠️ Non-deterministic `Patch`
+	/// As noted in [`Patch`] and [`Transaction`] documentation, this `Patch`
+	/// must be deterministic and not cause the `Writer/Reader` data to get
+	/// out-of-sync.
+	///
+	/// **However**, under the circumstance where you eventually _will_ sync
+	/// afterwards, `sync_patch` could technically break these rules, for example:
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new(String::new());
+	///
+	/// // Open up a `Transaction`
+	/// // and start mutating `T`...
+	/// let mut tx = w.tx();
+	/// tx.push_str("hello");
+	/// tx.push_str(" ");
+	/// tx.push_str("world");
+	///
+	/// // ⚠️ Kinda dangerous...!
+	/// // This function is supposed to sync
+	/// // our data, but instead it...
+	/// tx.sync_patch(Patch::Ptr(|_, _| {
+	///     /* ...does nothing! */
+	/// }));
+	///
+	/// drop(tx);
+	/// assert_eq!(w.data(), "hello world");
+	///
+	/// // But... it's okay, we're going to
+	/// // be adding a synchronization Patch here.
+	/// let mut tx = w.tx();
+	/// tx.push_str("!");
+	/// drop(tx); // <- `Patch::CLONE` gets added by default.
+	///
+	/// assert_eq!(w.data(), "hello world!");
+	/// assert_eq!(w.committed_patches().len(), 1); // <- `Patch::CLONE`
+	///
+	/// // Now, this push will use that clone patch
+	/// // to sync the data, everything is okay.
+	/// w.push();
+	/// assert_eq!(w.data(), "hello world!");
+	/// assert_eq!(w.timestamp(), 4);
+	/// assert_eq!(r.head().data, "hello world!");
+	/// assert_eq!(r.head().timestamp, 4);
+	/// ```
 	pub fn sync_patch(&mut self, sync_patch: Patch<T>) -> Patch<T> {
 		std::mem::replace(&mut self.sync_patch, sync_patch)
 	}
