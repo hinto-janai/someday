@@ -35,12 +35,46 @@ use crate::Reader;
 /// by `1`, regardless if the data was changed or not.
 ///
 /// ## [`Drop`]
-/// After `Transaction` has been [`Transaction::commit()`]'ed or [`drop()`]'ed:
+/// After `Transaction` has been [`drop()`]'ed:
 /// 1. All previous `Patch`'s get cleared
 /// 2. A `Patch` that simply clones all the data gets added
 ///
 /// It is worth noting that this only happens if a
 /// mutable reference is created (even if it is not used).
+///
+/// If [`Transaction::sync_patch()`] is used, it allows you
+/// to specify the `Patch` that actually syncs the data.
+///
+/// By default, this is [`Patch::CLONE`], although, if there
+/// are cheaper ways to de-duplicate data without cloning, that
+/// could be used instead, e.g:
+///
+/// ```rust
+/// # use someday::*;
+/// let (r, mut w) = someday::new(Vec::<&str>::new());
+///
+/// let mut tx = w.tx();
+/// tx.push("hello");
+/// tx.push(" ");
+/// tx.push("world");
+/// tx.push("!");
+///
+/// tx.sync_patch(Patch::Ptr(|w, r| {
+///     // Instead of `clone()`'ing the data,
+///     // just copy over the data to the current
+///     // `Vec` - this way we aren't discarding
+///     // the already allocated memory on this side.
+///     w.clear();
+///     w.extend_from_slice(r);
+/// }));
+/// drop(tx);
+/// let i = w.push();
+///
+/// assert_eq!(w.data().as_slice(), ["hello", " ", "world", "!"]);
+/// assert_eq!(w.timestamp(), 4);
+/// assert_eq!(r.head().data.as_slice(), ["hello", " ", "world", "!"]);
+/// assert_eq!(r.head().timestamp, 4);
+/// ```
 ///
 /// ## `Transaction` vs `Patch`
 /// Using `Transaction` instead of `Patch` when you are
@@ -51,6 +85,18 @@ use crate::Reader;
 /// `Patch`'s allow for turning cheaply reclaimed old
 /// [`Reader`] data back into a viable copy, however, if your `Patch`
 /// is simply cloning the data anyway, `Transaction` makes more sense.
+///
+/// ## ⚠️ `Patch` guardrails
+/// `Patch` exists as a means to make sure data is properly synced
+/// when reclaiming old data - `Transaction` slightly remove these
+/// guardrails as it allows you to define the way data gets synced.
+///
+/// Passing [`Patch::NOTHING`] to [`Transaction::commit`] is valid,
+/// but will most inevitably leave your data in an invalid, unsynced state.
+///
+/// `Transaction` gives you more control if you know what you're doing
+/// (e.g, we'll be cloning later anyway, so these intermediate patches don't matter)
+/// but comes at the risk of this unsynced behavior, so be careful.
 ///
 /// ## Example
 /// ```rust
@@ -79,7 +125,7 @@ use crate::Reader;
 /// drop(tx);
 /// // We can see dropping the `Transaction` added
 /// // a `Patch` - this just clones the data.
-/// assert_eq!(writer.staged().len(), 1);
+/// assert_eq!(writer.committed_patches().len(), 1);
 ///
 /// // Our changes were applied
 /// // to the `Writer` data directly.
@@ -100,6 +146,8 @@ pub struct Transaction<'writer, T: Clone> {
 	pub(crate) writer: &'writer mut Writer<T>,
 	/// TODO
 	pub(crate) original_timestamp: Timestamp,
+	/// TODO
+	pub(crate) sync_patch: Patch<T>,
 }
 
 impl<'writer, T: Clone> Transaction<'writer, T> {
@@ -110,6 +158,7 @@ impl<'writer, T: Clone> Transaction<'writer, T> {
 		Self {
 			original_timestamp: writer.timestamp(),
 			writer,
+			sync_patch: Patch::CLONE,
 		}
 	}
 
@@ -235,6 +284,11 @@ impl<'writer, T: Clone> Transaction<'writer, T> {
 		/* drop code */
 	}
 
+	/// TODO
+	pub fn sync_patch(&mut self, sync_patch: Patch<T>) -> Patch<T> {
+		std::mem::replace(&mut self.sync_patch, sync_patch)
+	}
+
 	/// Attempt to abort the `Transaction`.
 	///
 	/// This cancels the `Transaction` and returns `Ok(())`
@@ -282,13 +336,11 @@ impl<T: Clone> Drop for Transaction<'_, T> {
 		if self.original_timestamp != self.current_timestamp() {
 			// Clear old patches, they don't matter
 			// anymore since we are cloning regardless.
-			self.writer.patches.clear();
 			self.writer.patches_old.clear();
 
-			// Add a clone patch.
-			self.writer.add(Patch::Ptr(|w, r| {
-				*w = r.clone();
-			}));
+			// Take the sync `Patch`, add it.
+			let patch = std::mem::take(&mut self.sync_patch);
+			self.writer.patches_old.push(patch);
 		}
 	}
 }
