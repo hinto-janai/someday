@@ -32,6 +32,43 @@ impl<T: Clone> Writer<T> {
 	}
 
 	#[inline]
+	/// Replace all [`Writer::committed_patches`] with a simple clone operation.
+	///
+	/// This will clear all [`Patch`]'s meant for syncing
+	/// reclaimed data with [`Patch::CLONE`], which simply
+	/// clones the [`Reader`]'s data into the [`Writer`].
+	///
+	/// This could be used in the situation the `Patch`(s)
+	/// are actually more expensive than just cloning.
+	///
+	/// The committed `Patch`'s that were removed are returned.
+	///
+	/// ```rust
+	/// # use someday::*;
+	/// let (r, mut w) = someday::new::<String>("".into());
+	///
+	/// // Add _many_ `Patch`'s.
+	/// for _ in 0..100_000 {
+	///     w.add(Patch::Ptr(|w, _| w.push_str("abc")));
+	/// }
+	///
+	/// // Instead of re-executing all those functions,
+	/// // cloning the data is probably faster.
+	/// w.commit();
+	/// w.just_clone();
+	///
+	/// w.push();
+	/// assert_eq!(w.data().len(), 100_000 * 3);
+	/// assert_eq!(*w.data(), r.head().data);
+	/// ```
+	pub fn just_clone(&mut self) -> std::vec::Drain<'_, Patch<T>> {
+		self.patches_old.push(Patch::CLONE);
+
+		// Drain all but the Clone patch.
+		self.patches_old.drain(..self.patches_old.len() - 1)
+	}
+
+	#[inline]
 	#[allow(clippy::type_complexity)]
 	/// Restore all the staged changes.
 	///
