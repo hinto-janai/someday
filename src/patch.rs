@@ -155,7 +155,19 @@ pub enum Patch<T: Clone> {
 	Ptr(fn(&mut T, &T)),
 }
 
+impl<T: Clone> Default for Patch<T> {
+	/// Returns [`Patch::NOTHING`].
+	fn default() -> Self {
+		Self::NOTHING
+	}
+}
+
 impl<T: Clone> Patch<T> {
+	/// TODO
+	pub const CLONE: Self = Self::Ptr(|w, r| *w = r.clone());
+	/// TODO
+	pub const NOTHING: Self = Self::Ptr(|_, _| {});
+
 	#[inline]
 	/// Short-hand for `Self::Box(Box::new(patch))`.
 	///
@@ -232,6 +244,15 @@ impl<T: Clone> Patch<T> {
 	}
 }
 
+impl<T: Clone + PartialEq> Patch<T> {
+	/// TODO
+	pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
+		if w != r {
+			*w = r.clone();
+		}
+	});
+}
+
 impl<T: Clone> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
 	/// ```rust
 	/// # use someday::*;
@@ -297,5 +318,15 @@ impl<T: Clone> From<fn(&mut T, &T)> for Patch<T> {
 	/// ```
 	fn from(patch: fn(&mut T, &T)) -> Self {
 		Self::Ptr(patch)
+	}
+}
+
+impl<T: Clone> std::fmt::Debug for Patch<T> {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Box(ptr) => f.write_fmt(format_args!("Patch::Box({:?})", std::ptr::addr_of!(**ptr))),
+			Self::Arc(ptr) => f.write_fmt(format_args!("Patch::Arc({:?})", std::ptr::addr_of!(**ptr))),
+			Self::Ptr(ptr) => f.write_fmt(format_args!("Patch::Ptr({ptr:?})")),
+		}
 	}
 }
