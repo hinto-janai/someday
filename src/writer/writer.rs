@@ -1,16 +1,13 @@
 //! `Writer<T>`
 
 //---------------------------------------------------------------------------------------------------- Use
-use std::{
-	sync::Arc,
-	borrow::Borrow,
-};
+use std::{borrow::Borrow, sync::Arc};
 
 use crate::{
-	writer::WriterToken,
-	patch::Patch,
-	reader::Reader,
-	commit::{CommitRef,Commit},
+    commit::{Commit, CommitRef},
+    patch::Patch,
+    reader::Reader,
+    writer::WriterToken,
 };
 
 #[allow(unused_imports)] // docs
@@ -118,187 +115,187 @@ use std::sync::Mutex;
 /// assert_eq!(r.head().data, "abcdefghi");
 /// ```
 pub struct Writer<T: Clone> {
-	/// Only set to `false` when we are `drop()`'ed.
-	pub(crate) token: WriterToken,
+    /// Only set to `false` when we are `drop()`'ed.
+    pub(crate) token: WriterToken,
 
-	/// The writer's local mutually
-	/// exclusive copy of the data.
-	///
-	/// This is an `Option` only because there's
-	/// a brief moment in `push()` where we need
-	/// to send off `local`, but we can't yet swap it
-	/// with the old data.
-	///
-	/// It will be `None` in-between those moments and
-	/// the invariant is that is MUST be `Some` before
-	/// `push()` is over.
-	///
-	/// This _could_ be a `MaybeUninit` instead, although:
-	/// 1. Requires `unsafe`
-	/// 2. Is actually unsafe if we panic mid-`push()`
-	///
-	/// In the case code panics _right_ after we set this
-	/// to `None` and before we set it back to `Some`, it
-	/// will be in an uninitialized state.
-	///
-	/// Thankfully it's an `Option`, and we `.unwrap()` on
-	/// each access, if it were a `MaybeUninit`, UB.
-	pub(crate) local: Option<Commit<T>>,
+    /// The writer's local mutually
+    /// exclusive copy of the data.
+    ///
+    /// This is an `Option` only because there's
+    /// a brief moment in `push()` where we need
+    /// to send off `local`, but we can't yet swap it
+    /// with the old data.
+    ///
+    /// It will be `None` in-between those moments and
+    /// the invariant is that is MUST be `Some` before
+    /// `push()` is over.
+    ///
+    /// This _could_ be a `MaybeUninit` instead, although:
+    /// 1. Requires `unsafe`
+    /// 2. Is actually unsafe if we panic mid-`push()`
+    ///
+    /// In the case code panics _right_ after we set this
+    /// to `None` and before we set it back to `Some`, it
+    /// will be in an uninitialized state.
+    ///
+    /// Thankfully it's an `Option`, and we `.unwrap()` on
+    /// each access, if it were a `MaybeUninit`, UB.
+    pub(crate) local: Option<Commit<T>>,
 
-	/// The current data the remote `Reader`'s can see.
-	pub(crate) remote: CommitRef<T>,
+    /// The current data the remote `Reader`'s can see.
+    pub(crate) remote: CommitRef<T>,
 
-	/// The AtomicPtr that `Reader`'s enter through.
-	/// Calling `.load()` would load the `remote` above.
-	pub(crate) arc: Arc<arc_swap::ArcSwap<Commit<T>>>,
+    /// The AtomicPtr that `Reader`'s enter through.
+    /// Calling `.load()` would load the `remote` above.
+    pub(crate) arc: Arc<arc_swap::ArcSwap<Commit<T>>>,
 
-	/// Patches that have not yet been applied.
-	pub(crate) patches: Vec<Patch<T>>,
+    /// Patches that have not yet been applied.
+    pub(crate) patches: Vec<Patch<T>>,
 
-	/// Patches that were already applied,
-	/// that must be re-applied to the old `T`.
-	pub(crate) patches_old: Vec<Patch<T>>,
+    /// Patches that were already applied,
+    /// that must be re-applied to the old `T`.
+    pub(crate) patches_old: Vec<Patch<T>>,
 }
 
 //---------------------------------------------------------------------------------------------------- Private writer functions
 impl<T: Clone> Writer<T> {
-	#[allow(clippy::option_if_let_else,clippy::inline_always)]
-	#[inline(always)]
-	/// Borrow `self.local`.
-	pub(crate) const fn local_as_ref(&self) -> &Commit<T> {
-		// INVARIANT: `local` must be initialized after push()
-		match self.local.as_ref() {
-			Some(local) => local,
-			None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
-		}
-	}
+    #[allow(clippy::option_if_let_else, clippy::inline_always)]
+    #[inline(always)]
+    /// Borrow `self.local`.
+    pub(crate) const fn local_as_ref(&self) -> &Commit<T> {
+        // INVARIANT: `local` must be initialized after push()
+        match self.local.as_ref() {
+            Some(local) => local,
+            None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
+        }
+    }
 
-	#[allow(clippy::option_if_let_else,clippy::inline_always)]
-	#[inline(always)]
-	/// Borrow `self.local`.
-	pub(crate) fn local_as_mut(&mut self) -> &mut Commit<T> {
-		// INVARIANT: `local` must be initialized after push()
-		match self.local.as_mut() {
-			Some(local) => local,
-			None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
-		}
-	}
+    #[allow(clippy::option_if_let_else, clippy::inline_always)]
+    #[inline(always)]
+    /// Borrow `self.local`.
+    pub(crate) fn local_as_mut(&mut self) -> &mut Commit<T> {
+        // INVARIANT: `local` must be initialized after push()
+        match self.local.as_mut() {
+            Some(local) => local,
+            None => panic!("the `Writer`'s local data <T> was not initialized (poisoned)"),
+        }
+    }
 }
 
 //---------------------------------------------------------------------------------------------------- Writer trait impl
 impl<T> std::fmt::Debug for Writer<T>
 where
-	T: Clone + std::fmt::Debug,
+    T: Clone + std::fmt::Debug,
 {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("Writer")
-			.field("local", &self.local)
-			.field("remote", &self.remote)
-			.field("arc", &self.arc)
-			.finish_non_exhaustive()
-	}
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Writer")
+            .field("local", &self.local)
+            .field("remote", &self.remote)
+            .field("arc", &self.arc)
+            .finish_non_exhaustive()
+    }
 }
 
 impl<T: Clone> From<T> for Writer<T> {
-	/// Same as [`crate::free::new`] but without creating a [`Reader`].
-	fn from(data: T) -> Self {
-		Self::new(data)
-	}
+    /// Same as [`crate::free::new`] but without creating a [`Reader`].
+    fn from(data: T) -> Self {
+        Self::new(data)
+    }
 }
 
 impl<T: Clone> From<Commit<T>> for Writer<T> {
-	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
-	fn from(commit: Commit<T>) -> Self {
-		crate::free::new_inner(commit)
-	}
+    /// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
+    fn from(commit: Commit<T>) -> Self {
+        crate::free::new_inner(commit)
+    }
 }
 
 impl<T: Clone> From<CommitRef<T>> for Writer<T> {
-	/// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
-	fn from(commit: CommitRef<T>) -> Self {
-		crate::free::new_inner(commit.as_ref().clone())
-	}
+    /// Same as [`crate::free::from_commit`] but without creating a [`Reader`].
+    fn from(commit: CommitRef<T>) -> Self {
+        crate::free::new_inner(commit.as_ref().clone())
+    }
 }
 
 impl<T> Default for Writer<T>
 where
-	T: Clone + Default,
+    T: Clone + Default,
 {
-	/// Only generates the [`Writer`].
-	///
-	/// This initializes your data `T` with [`Default::default()`].
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let (_, w1) = someday::new::<usize>(Default::default());
-	/// let w2      = Writer::<usize>::default();
-	///
-	/// assert_eq!(*w1.data(), 0);
-	/// assert_eq!(*w2.data(), 0);
-	/// ```
-	fn default() -> Self {
-		Self::new(T::default())
-	}
+    /// Only generates the [`Writer`].
+    ///
+    /// This initializes your data `T` with [`Default::default()`].
+    ///
+    /// ```rust
+    /// # use someday::*;
+    /// let (_, w1) = someday::new::<usize>(Default::default());
+    /// let w2      = Writer::<usize>::default();
+    ///
+    /// assert_eq!(*w1.data(), 0);
+    /// assert_eq!(*w2.data(), 0);
+    /// ```
+    fn default() -> Self {
+        Self::new(T::default())
+    }
 }
 
 impl<T: Clone> std::ops::Deref for Writer<T> {
-	type Target = T;
+    type Target = T;
 
-	#[inline]
-	fn deref(&self) -> &Self::Target {
-		&self.local_as_ref().data
-	}
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.local_as_ref().data
+    }
 }
 
 impl<T: Clone> Borrow<T> for Writer<T> {
-	#[inline]
-	fn borrow(&self) -> &T {
-		&self.local_as_ref().data
-	}
+    #[inline]
+    fn borrow(&self) -> &T {
+        &self.local_as_ref().data
+    }
 }
 
 impl<T: Clone> AsRef<T> for Writer<T> {
-	#[inline]
-	fn as_ref(&self) -> &T {
-		&self.local_as_ref().data
-	}
+    #[inline]
+    fn as_ref(&self) -> &T {
+        &self.local_as_ref().data
+    }
 }
 
 impl<T: Clone> TryFrom<Reader<T>> for Writer<T> {
-	type Error = Reader<T>;
+    type Error = Reader<T>;
 
-	/// Calls [`Reader::try_into_writer`].
-	fn try_from(reader: Reader<T>) -> Result<Self, Self::Error> {
-		Reader::try_into_writer(reader)
-	}
+    /// Calls [`Reader::try_into_writer`].
+    fn try_from(reader: Reader<T>) -> Result<Self, Self::Error> {
+        Reader::try_into_writer(reader)
+    }
 }
 
 impl<T: Clone> Clone for Writer<T> {
-	/// This is the exact same as [`Writer::fork`].
-	///
-	/// Note that this means cloning a [`Writer`] completely
-	/// disconnects it from previous [`Reader`]'s.
-	///
-	/// This does _not_ create 2 `Writer`'s to the same data,
-	/// as that is not allowed.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::sync::*;
-	/// let (r, mut w) = someday::new(String::new());
-	///
-	/// // The clone has no relation to the previous `Writer/Reader`'s.
-	/// let clone: Writer<String> = w.clone();
-	/// assert!(!clone.connected(&r));
-	///
-	/// // Wrapping `Writer` in a shared mutual exclusion primitive
-	/// // allows it to be cheaply cloned, without `fork()`-like behavior.
-	/// let shared = Arc::new(Mutex::new(clone));
-	/// let reader = shared.lock().unwrap().reader();
-	/// assert!(shared.lock().unwrap().connected(&reader));
-	/// assert!(!shared.lock().unwrap().connected(&r));
-	/// ```
-	fn clone(&self) -> Self {
-		self.fork()
-	}
+    /// This is the exact same as [`Writer::fork`].
+    ///
+    /// Note that this means cloning a [`Writer`] completely
+    /// disconnects it from previous [`Reader`]'s.
+    ///
+    /// This does _not_ create 2 `Writer`'s to the same data,
+    /// as that is not allowed.
+    ///
+    /// ```rust
+    /// # use someday::*;
+    /// # use std::sync::*;
+    /// let (r, mut w) = someday::new(String::new());
+    ///
+    /// // The clone has no relation to the previous `Writer/Reader`'s.
+    /// let clone: Writer<String> = w.clone();
+    /// assert!(!clone.connected(&r));
+    ///
+    /// // Wrapping `Writer` in a shared mutual exclusion primitive
+    /// // allows it to be cheaply cloned, without `fork()`-like behavior.
+    /// let shared = Arc::new(Mutex::new(clone));
+    /// let reader = shared.lock().unwrap().reader();
+    /// assert!(shared.lock().unwrap().connected(&reader));
+    /// assert!(!shared.lock().unwrap().connected(&r));
+    /// ```
+    fn clone(&self) -> Self {
+        self.fork()
+    }
 }

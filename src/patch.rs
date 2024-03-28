@@ -100,236 +100,240 @@ use crate::{Reader, Writer};
 /// }));
 /// ```
 pub enum Patch<T: Clone> {
-	/// Dynamically dispatched, potentially capturing, boxed function.
-	///
-	/// ```rust
-	/// let string = String::new();
-	///
-	/// let mut boxed: Box<dyn FnMut()> = Box::new(move || {
-	///     // The outside string was captured.
-	///     println!("{string}");
-	/// });
-	///
-	/// // This cannot be cloned.
-	/// boxed();
-	/// ```
-	Box(Box<dyn FnMut(&mut T, &T) + Send + 'static>),
+    /// Dynamically dispatched, potentially capturing, boxed function.
+    ///
+    /// ```rust
+    /// let string = String::new();
+    ///
+    /// let mut boxed: Box<dyn FnMut()> = Box::new(move || {
+    ///     // The outside string was captured.
+    ///     println!("{string}");
+    /// });
+    ///
+    /// // This cannot be cloned.
+    /// boxed();
+    /// ```
+    Box(Box<dyn FnMut(&mut T, &T) + Send + 'static>),
 
-	/// Dynamically dispatched, potentially capturing, cheaply [`Clone`]-able function.
-	///
-	/// ```rust
-	/// # use std::sync::*;
-	/// let string = String::new();
-	///
-	/// let arc: Arc<dyn Fn()> = Arc::new(move || {
-	///     // The outside string was captured.
-	///     println!("{string}");
-	/// });
-	///
-	/// // We can clone this as much as we want though.
-	/// let arc2 = Arc::clone(&arc);
-	/// let arc3 = Arc::clone(&arc);
-	/// arc();
-	/// arc2();
-	/// arc3();
-	/// ```
-	Arc(Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>),
+    /// Dynamically dispatched, potentially capturing, cheaply [`Clone`]-able function.
+    ///
+    /// ```rust
+    /// # use std::sync::*;
+    /// let string = String::new();
+    ///
+    /// let arc: Arc<dyn Fn()> = Arc::new(move || {
+    ///     // The outside string was captured.
+    ///     println!("{string}");
+    /// });
+    ///
+    /// // We can clone this as much as we want though.
+    /// let arc2 = Arc::clone(&arc);
+    /// let arc3 = Arc::clone(&arc);
+    /// arc();
+    /// arc2();
+    /// arc3();
+    /// ```
+    Arc(Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>),
 
-	/// Non-capturing, static function pointer.
-	///
-	/// ```rust
-	/// let ptr: fn() = || {
-	///     // Nothing was captured.
-	///     //
-	///     // This closure can be coerced into
-	///     // a function pointer, same as `fn()`.
-	///     let string = String::new();
-	///     println!("{string}");
-	/// };
-	///
-	/// // Can copy it infinitely, it's just a pointer.
-	/// let ptr2 = ptr;
-	/// let ptr3 = ptr;
-	/// ptr();
-	/// ptr2();
-	/// ptr3();
-	/// ```
-	Ptr(fn(&mut T, &T)),
+    /// Non-capturing, static function pointer.
+    ///
+    /// ```rust
+    /// let ptr: fn() = || {
+    ///     // Nothing was captured.
+    ///     //
+    ///     // This closure can be coerced into
+    ///     // a function pointer, same as `fn()`.
+    ///     let string = String::new();
+    ///     println!("{string}");
+    /// };
+    ///
+    /// // Can copy it infinitely, it's just a pointer.
+    /// let ptr2 = ptr;
+    /// let ptr3 = ptr;
+    /// ptr();
+    /// ptr2();
+    /// ptr3();
+    /// ```
+    Ptr(fn(&mut T, &T)),
 }
 
 impl<T: Clone + PartialEq> Patch<T> {
-	/// A [`Patch::Ptr`] that clones the [`Reader`]'s data into
-	/// the [`Writer`], but only if they are not [`PartialEq::eq`].
-	pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
-		if w != r {
-			*w = r.clone();
-		}
-	});
+    /// A [`Patch::Ptr`] that clones the [`Reader`]'s data into
+    /// the [`Writer`], but only if they are not [`PartialEq::eq`].
+    pub const CLONE_IF_DIFF: Self = Self::Ptr(|w, r| {
+        if w != r {
+            *w = r.clone();
+        }
+    });
 }
 
 impl<T: Clone> Patch<T> {
-	/// A [`Patch::Ptr`] that always clones the [`Reader`]'s data into the [`Writer`].
-	pub const CLONE: Self = Self::Ptr(|w, r| *w = r.clone());
-	/// A [`Patch::Ptr`] that does nothing.
-	pub const NOTHING: Self = Self::Ptr(|_, _| {});
+    /// A [`Patch::Ptr`] that always clones the [`Reader`]'s data into the [`Writer`].
+    pub const CLONE: Self = Self::Ptr(|w, r| *w = r.clone());
+    /// A [`Patch::Ptr`] that does nothing.
+    pub const NOTHING: Self = Self::Ptr(|_, _| {});
 
-	#[inline]
-	/// Short-hand for `Self::Box(Box::new(patch))`.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let string = String::new();
-	///
-	/// let boxed_patch = Patch::<String>::boxed(move |_, _| {
-	///     let captured_variable = &string;
-	/// });
-	/// assert!(boxed_patch.is_box());
-	/// ```
-	pub fn boxed<P>(patch: P) -> Self
-	where
-		P: FnMut(&mut T, &T) + Send + 'static,
-	{
-		Self::Box(Box::new(patch))
-	}
+    #[inline]
+    /// Short-hand for `Self::Box(Box::new(patch))`.
+    ///
+    /// ```rust
+    /// # use someday::*;
+    /// let string = String::new();
+    ///
+    /// let boxed_patch = Patch::<String>::boxed(move |_, _| {
+    ///     let captured_variable = &string;
+    /// });
+    /// assert!(boxed_patch.is_box());
+    /// ```
+    pub fn boxed<P>(patch: P) -> Self
+    where
+        P: FnMut(&mut T, &T) + Send + 'static,
+    {
+        Self::Box(Box::new(patch))
+    }
 
-	#[inline]
-	/// Short-hand for `Self::Arc(Arc::new(patch))`.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let string = String::new();
-	///
-	/// let arc_patch = Patch::<String>::arc(move |_, _| {
-	///     let captured_variable = &string;
-	/// });
-	/// assert!(arc_patch.is_arc());
-	/// ```
-	pub fn arc<P>(patch: P) -> Self
-	where
-		P: Fn(&mut T, &T) + Send + Sync + 'static,
-	{
-		Self::Arc(Arc::new(patch))
-	}
+    #[inline]
+    /// Short-hand for `Self::Arc(Arc::new(patch))`.
+    ///
+    /// ```rust
+    /// # use someday::*;
+    /// let string = String::new();
+    ///
+    /// let arc_patch = Patch::<String>::arc(move |_, _| {
+    ///     let captured_variable = &string;
+    /// });
+    /// assert!(arc_patch.is_arc());
+    /// ```
+    pub fn arc<P>(patch: P) -> Self
+    where
+        P: Fn(&mut T, &T) + Send + Sync + 'static,
+    {
+        Self::Arc(Arc::new(patch))
+    }
 
-	#[inline]
-	/// Apply the [`Patch`] onto the [`Writer`] data.
-	pub(crate) fn apply(&mut self, writer: &mut T, reader: &T) {
-		match self {
-			Self::Box(f) => f(writer, reader),
-			Self::Arc(f) => f(writer, reader),
-			Self::Ptr(f) => f(writer, reader),
-		}
-	}
+    #[inline]
+    /// Apply the [`Patch`] onto the [`Writer`] data.
+    pub(crate) fn apply(&mut self, writer: &mut T, reader: &T) {
+        match self {
+            Self::Box(f) => f(writer, reader),
+            Self::Arc(f) => f(writer, reader),
+            Self::Ptr(f) => f(writer, reader),
+        }
+    }
 
-	#[must_use]
-	/// If `self` is the `Patch::Box` variant.
-	pub const fn is_box(&self) -> bool {
-		matches!(self, Self::Box(_))
-	}
+    #[must_use]
+    /// If `self` is the `Patch::Box` variant.
+    pub const fn is_box(&self) -> bool {
+        matches!(self, Self::Box(_))
+    }
 
-	#[must_use]
-	/// If `self` is the `Patch::Arc` variant.
-	pub const fn is_arc(&self) -> bool {
-		matches!(self, Self::Arc(_))
-	}
+    #[must_use]
+    /// If `self` is the `Patch::Arc` variant.
+    pub const fn is_arc(&self) -> bool {
+        matches!(self, Self::Arc(_))
+    }
 
-	#[must_use]
-	/// If `self` is the `Patch::Ptr` variant.
-	///
-	/// ```rust
-	/// # use someday::*;
-	/// let ptr_patch = Patch::<String>::Ptr(|w, _| {
-	///     // No captured variables, "pure" function.
-	///     w.push_str("hello");
-	/// });
-	/// assert!(ptr_patch.is_ptr());
-	/// ```
-	pub const fn is_ptr(&self) -> bool {
-		matches!(self, Self::Ptr(_))
-	}
+    #[must_use]
+    /// If `self` is the `Patch::Ptr` variant.
+    ///
+    /// ```rust
+    /// # use someday::*;
+    /// let ptr_patch = Patch::<String>::Ptr(|w, _| {
+    ///     // No captured variables, "pure" function.
+    ///     w.push_str("hello");
+    /// });
+    /// assert!(ptr_patch.is_ptr());
+    /// ```
+    pub const fn is_ptr(&self) -> bool {
+        matches!(self, Self::Ptr(_))
+    }
 }
 
 impl<T: Clone> Default for Patch<T> {
-	/// Returns [`Patch::NOTHING`].
-	fn default() -> Self {
-		Self::NOTHING
-	}
+    /// Returns [`Patch::NOTHING`].
+    fn default() -> Self {
+        Self::NOTHING
+    }
 }
 
 impl<T: Clone> From<Box<dyn FnMut(&mut T, &T) + Send + 'static>> for Patch<T> {
-	/// ```rust
-	/// # use someday::*;
-	/// let string = String::new();
-	///
-	/// let boxed: Box<dyn FnMut(&mut String, &String) + Send + 'static> = Box::new(move |_, _| {
-	///     let captured_variable = &string;
-	/// });
-	///
-	/// let patch = Patch::from(boxed);
-	/// assert!(patch.is_box());
-	/// ```
-	fn from(patch: Box<dyn FnMut(&mut T, &T) + Send + 'static>) -> Self {
-		Self::Box(patch)
-	}
+    /// ```rust
+    /// # use someday::*;
+    /// let string = String::new();
+    ///
+    /// let boxed: Box<dyn FnMut(&mut String, &String) + Send + 'static> = Box::new(move |_, _| {
+    ///     let captured_variable = &string;
+    /// });
+    ///
+    /// let patch = Patch::from(boxed);
+    /// assert!(patch.is_box());
+    /// ```
+    fn from(patch: Box<dyn FnMut(&mut T, &T) + Send + 'static>) -> Self {
+        Self::Box(patch)
+    }
 }
 
 impl<T: Clone> From<Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::sync::*;
-	/// let string = String::new();
-	///
-	/// let arc: Arc<dyn Fn(&mut String, &String) + Send + Sync + 'static> = Arc::new(move |_, _| {
-	///     let captured_variable = &string;
-	/// });
-	///
-	/// let patch = Patch::from(arc);
-	/// assert!(patch.is_arc());
-	/// ```
-	fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
-		Self::Arc(patch)
-	}
+    /// ```rust
+    /// # use someday::*;
+    /// # use std::sync::*;
+    /// let string = String::new();
+    ///
+    /// let arc: Arc<dyn Fn(&mut String, &String) + Send + Sync + 'static> = Arc::new(move |_, _| {
+    ///     let captured_variable = &string;
+    /// });
+    ///
+    /// let patch = Patch::from(arc);
+    /// assert!(patch.is_arc());
+    /// ```
+    fn from(patch: Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
+        Self::Arc(patch)
+    }
 }
 
 impl<T: Clone> From<&Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>> for Patch<T> {
-	/// ```rust
-	/// # use someday::*;
-	/// # use std::sync::*;
-	/// let string = String::new();
-	///
-	/// let arc: Arc<dyn Fn(&mut String, &String) + Send + Sync + 'static> = Arc::new(move |_, _| {
-	///     let captured_variable = &string;
-	/// });
-	///
-	/// let patch = Patch::from(&arc);
-	/// assert!(patch.is_arc());
-	/// ```
-	fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
-		Self::Arc(Arc::clone(patch))
-	}
+    /// ```rust
+    /// # use someday::*;
+    /// # use std::sync::*;
+    /// let string = String::new();
+    ///
+    /// let arc: Arc<dyn Fn(&mut String, &String) + Send + Sync + 'static> = Arc::new(move |_, _| {
+    ///     let captured_variable = &string;
+    /// });
+    ///
+    /// let patch = Patch::from(&arc);
+    /// assert!(patch.is_arc());
+    /// ```
+    fn from(patch: &Arc<dyn Fn(&mut T, &T) + Send + Sync + 'static>) -> Self {
+        Self::Arc(Arc::clone(patch))
+    }
 }
 
 impl<T: Clone> From<fn(&mut T, &T)> for Patch<T> {
-	/// ```rust
-	/// # use someday::*;
-	/// let ptr: fn(&mut String, &String) = |w, _| {
-	///     w.push_str("hello");
-	/// };
-	///
-	/// let patch = Patch::from(ptr);
-	/// assert!(patch.is_ptr());
-	/// ```
-	fn from(patch: fn(&mut T, &T)) -> Self {
-		Self::Ptr(patch)
-	}
+    /// ```rust
+    /// # use someday::*;
+    /// let ptr: fn(&mut String, &String) = |w, _| {
+    ///     w.push_str("hello");
+    /// };
+    ///
+    /// let patch = Patch::from(ptr);
+    /// assert!(patch.is_ptr());
+    /// ```
+    fn from(patch: fn(&mut T, &T)) -> Self {
+        Self::Ptr(patch)
+    }
 }
 
 impl<T: Clone> std::fmt::Debug for Patch<T> {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Self::Box(ptr) => f.write_fmt(format_args!("Patch::Box({:?})", std::ptr::addr_of!(**ptr))),
-			Self::Arc(ptr) => f.write_fmt(format_args!("Patch::Arc({:?})", std::ptr::addr_of!(**ptr))),
-			Self::Ptr(ptr) => f.write_fmt(format_args!("Patch::Ptr({ptr:?})")),
-		}
-	}
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Box(ptr) => {
+                f.write_fmt(format_args!("Patch::Box({:?})", std::ptr::addr_of!(**ptr)))
+            }
+            Self::Arc(ptr) => {
+                f.write_fmt(format_args!("Patch::Arc({:?})", std::ptr::addr_of!(**ptr)))
+            }
+            Self::Ptr(ptr) => f.write_fmt(format_args!("Patch::Ptr({ptr:?})")),
+        }
+    }
 }

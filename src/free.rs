@@ -1,16 +1,12 @@
 //! Free functions.
 
 //---------------------------------------------------------------------------------------------------- Use
-use crate::{
-	reader::Reader,
-	writer::Writer,
-	commit::Commit,
-};
+use crate::{commit::Commit, reader::Reader, writer::Writer};
 use arc_swap::ArcSwapAny;
-use std::sync::{Arc,atomic::AtomicBool};
+use std::sync::{atomic::AtomicBool, Arc};
 
 #[allow(unused_imports)] // docs
-use crate::{Timestamp,CommitRef};
+use crate::{CommitRef, Timestamp};
 
 //---------------------------------------------------------------------------------------------------- Free functions
 /// The default `Vec` capacity for the
@@ -32,8 +28,8 @@ pub(crate) const INIT_VEC_CAP: usize = 16;
 /// assert_eq!(writer.data_remote(), "hello world!");
 /// ```
 pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(Commit { data, timestamp: 0 });
-	(writer.reader(), writer)
+    let writer = new_inner(Commit { data, timestamp: 0 });
+    (writer.reader(), writer)
 }
 
 #[inline]
@@ -48,8 +44,11 @@ pub fn new<T: Clone>(data: T) -> (Reader<T>, Writer<T>) {
 /// assert_eq!(*writer.data_remote(), 0);
 /// ```
 pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(Commit { data: T::default(), timestamp: 0 });
-	(writer.reader(), writer)
+    let writer = new_inner(Commit {
+        data: T::default(),
+        timestamp: 0,
+    });
+    (writer.reader(), writer)
 }
 
 #[inline]
@@ -88,21 +87,21 @@ pub fn default<T: Clone + Default>() -> (Reader<T>, Writer<T>) {
 ///
 /// It should not be set to an extremely high value.
 pub fn from_commit<T: Clone>(commit: Commit<T>) -> (Reader<T>, Writer<T>) {
-	let writer = new_inner(commit);
-	(writer.reader(), writer)
+    let writer = new_inner(commit);
+    (writer.reader(), writer)
 }
 
 /// Inner function for constructors.
 pub(crate) fn new_inner<T: Clone>(local: Commit<T>) -> Writer<T> {
-	let remote = Arc::new(local.clone());
-	let arc    = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
+    let remote = Arc::new(local.clone());
+    let arc = Arc::new(ArcSwapAny::new(Arc::clone(&remote)));
 
-	Writer {
-		token: Arc::new(AtomicBool::new(false)).into(),
-		local: Some(local),
-		remote,
-		arc,
-		patches: Vec::with_capacity(INIT_VEC_CAP),
-		patches_old: Vec::with_capacity(INIT_VEC_CAP),
-	}
+    Writer {
+        token: Arc::new(AtomicBool::new(false)).into(),
+        local: Some(local),
+        remote,
+        arc,
+        patches: Vec::with_capacity(INIT_VEC_CAP),
+        patches_old: Vec::with_capacity(INIT_VEC_CAP),
+    }
 }

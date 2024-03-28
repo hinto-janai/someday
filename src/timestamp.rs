@@ -2,11 +2,7 @@
 
 //---------------------------------------------------------------------------------------------------- Use
 #[allow(unused_imports)] // docs
-use crate::{
-	Writer,
-	Reader,
-	Commit,
-};
+use crate::{Commit, Reader, Writer};
 
 //---------------------------------------------------------------------------------------------------- Timestamp
 /// An incrementing [`usize`] representing a new versions of data.
